@@ -185,7 +185,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                 String sql = statements[i];
                 String trimmed = sql.trim();
                 // Skip empty statements and comments-only statements
-                if (trimmed.isEmpty() || trimmed.startsWith("--") || trimmed.matches("^--.*$")) {
+                if (trimmed.isEmpty() || trimmed.startsWith("--")) {
                     continue;
                 }
                 
@@ -195,7 +195,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                 for (String line : lines) {
                     String cleanLine = line.trim();
                     if (!cleanLine.startsWith("--") && !cleanLine.isEmpty()) {
-                        cleanSql.append(line).append("\n");
+                        cleanSql.append(cleanLine).append(" ");
                     }
                 }
                 String finalSql = cleanSql.toString().trim();
