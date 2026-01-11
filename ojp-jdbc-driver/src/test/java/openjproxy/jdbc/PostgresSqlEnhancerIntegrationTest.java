@@ -293,7 +293,11 @@ public class PostgresSqlEnhancerIntegrationTest {
             if (!server1Ready) {
                 errorMsg.append("  Server 1 (port ").append(port1).append("): ");
                 if (ojpServer1 != null && !ojpServer1.isAlive()) {
-                    errorMsg.append("Process died. Exit code: ").append(ojpServer1.exitValue()).append("\n");
+                    try {
+                        errorMsg.append("Process died. Exit code: ").append(ojpServer1.exitValue()).append("\n");
+                    } catch (IllegalThreadStateException e) {
+                        errorMsg.append("Process state unknown\n");
+                    }
                 } else {
                     errorMsg.append("Not responding. ");
                     if (lastServer1Error != null) {
@@ -304,7 +308,11 @@ public class PostgresSqlEnhancerIntegrationTest {
             if (!server2Ready) {
                 errorMsg.append("  Server 2 (port ").append(port2).append("): ");
                 if (ojpServer2 != null && !ojpServer2.isAlive()) {
-                    errorMsg.append("Process died. Exit code: ").append(ojpServer2.exitValue()).append("\n");
+                    try {
+                        errorMsg.append("Process died. Exit code: ").append(ojpServer2.exitValue()).append("\n");
+                    } catch (IllegalThreadStateException e) {
+                        errorMsg.append("Process state unknown\n");
+                    }
                 } else {
                     errorMsg.append("Not responding. ");
                     if (lastServer2Error != null) {
