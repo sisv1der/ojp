@@ -12,6 +12,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -148,7 +149,14 @@ public class PostgresSqlEnhancerIntegrationTest {
         
         String pgUrl = String.format("jdbc:postgresql://%s:%s/%s", PG_HOST, PG_PORT, PG_DB);
         
-        try (Connection conn = DriverManager.getConnection(pgUrl, PG_USER, PG_PASSWORD);
+        // Create a Properties object for connection
+        Properties props = new Properties();
+        props.setProperty("user", PG_USER);
+        props.setProperty("password", PG_PASSWORD);
+        
+        // Use PostgreSQL driver directly to avoid OJP driver interception
+        org.postgresql.Driver pgDriver = new org.postgresql.Driver();
+        try (Connection conn = pgDriver.connect(pgUrl, props);
              Statement stmt = conn.createStatement()) {
             
             // Read SQL script
