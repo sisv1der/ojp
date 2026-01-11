@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.postgresql.Driver;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -155,7 +156,7 @@ public class PostgresSqlEnhancerIntegrationTest {
         props.setProperty("password", PG_PASSWORD);
         
         // Use PostgreSQL driver directly to avoid OJP driver interception
-        org.postgresql.Driver pgDriver = new org.postgresql.Driver();
+        Driver pgDriver = new Driver();
         try (Connection conn = pgDriver.connect(pgUrl, props);
              Statement stmt = conn.createStatement()) {
             
