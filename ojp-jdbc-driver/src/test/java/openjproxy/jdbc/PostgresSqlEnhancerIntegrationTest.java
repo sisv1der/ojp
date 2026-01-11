@@ -55,6 +55,9 @@ public class PostgresSqlEnhancerIntegrationTest {
     private static final String PG_USER = System.getProperty("postgres.user", "testuser");
     private static final String PG_PASSWORD = System.getProperty("postgres.password", "testpassword");
     
+    // SQL error logging configuration
+    private static final int SQL_PREVIEW_LENGTH = 200;
+    
     // Test query - intentionally inefficient for SQL enhancer to optimize
     private static final String TEST_QUERY = 
         "SELECT\n" +
@@ -173,7 +176,8 @@ public class PostgresSqlEnhancerIntegrationTest {
             // Note: This simple parsing splits by semicolon at line endings.
             // Limitation: Won't handle semicolons within string literals or comments correctly.
             // However, our SQL script is controlled and doesn't have such edge cases.
-            String[] statements = setupSql.split(";\\s*(?=\\n|$)");
+            // Pattern matches: semicolon + optional whitespace + newline OR semicolon + optional whitespace + end of string
+            String[] statements = setupSql.split(";\\s*\\n|;\\s*$");
             for (String sql : statements) {
                 String trimmed = sql.trim();
                 // Skip empty statements and comments
@@ -181,9 +185,11 @@ public class PostgresSqlEnhancerIntegrationTest {
                     try {
                         stmt.execute(trimmed);
                     } catch (Exception e) {
-                        // Log first 200 chars of failed SQL and exception message for debugging
+                        // Log SQL preview and exception message for debugging
                         log.error("Failed to execute SQL statement: {}", 
-                            trimmed.length() > 200 ? trimmed.substring(0, 200) + "..." : trimmed);
+                            trimmed.length() > SQL_PREVIEW_LENGTH 
+                                ? trimmed.substring(0, SQL_PREVIEW_LENGTH) + "..." 
+                                : trimmed);
                         log.error("Error: {}", e.getMessage());
                         throw e;
                     }
