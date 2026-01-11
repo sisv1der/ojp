@@ -412,6 +412,11 @@ public class PostgresSqlEnhancerIntegrationTest {
         });
         loggingThread2.setDaemon(true);
         loggingThread2.start();
+        
+        // Give servers initial time to start up before health checks
+        // OJP servers need a few seconds to initialize gRPC services
+        log.info("Giving servers 5 seconds to initialize...");
+        Thread.sleep(5000);
     }
     
     @Test
