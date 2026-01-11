@@ -169,12 +169,19 @@ public class PostgresSqlEnhancerIntegrationTest {
                 .lines()
                 .collect(Collectors.joining("\n"));
             
-            // Split and execute statements individually to handle multi-statement scripts
-            String[] statements = setupSql.split(";");
+            // Parse and execute SQL statements properly
+            // Split by semicolon but only when it's at the end of a line (not in the middle of a statement)
+            String[] statements = setupSql.split(";\\s*(?=\\n|$)");
             for (String sql : statements) {
                 String trimmed = sql.trim();
+                // Skip empty statements and comments
                 if (!trimmed.isEmpty() && !trimmed.startsWith("--")) {
-                    stmt.execute(trimmed);
+                    try {
+                        stmt.execute(trimmed);
+                    } catch (Exception e) {
+                        log.error("Failed to execute SQL: {}", trimmed.substring(0, Math.min(100, trimmed.length())));
+                        throw e;
+                    }
                 }
             }
             
