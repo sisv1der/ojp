@@ -178,23 +178,50 @@ public class PostgresSqlEnhancerIntegrationTest {
             // However, our SQL script is controlled and doesn't have such edge cases.
             // Pattern uses lookahead to match semicolon followed by whitespace and newline/end without consuming them
             String[] statements = setupSql.split(";(?=\\s*(?:\\n|$))");
-            for (String sql : statements) {
+            log.info("Parsed {} SQL statements from script", statements.length);
+            
+            int executedCount = 0;
+            for (int i = 0; i < statements.length; i++) {
+                String sql = statements[i];
                 String trimmed = sql.trim();
-                // Skip empty statements and comments
-                if (!trimmed.isEmpty() && !trimmed.startsWith("--")) {
-                    try {
-                        stmt.execute(trimmed);
-                    } catch (Exception e) {
-                        // Log SQL preview and exception message for debugging
-                        log.error("Failed to execute SQL statement: {}", 
-                            trimmed.length() > SQL_PREVIEW_LENGTH 
-                                ? trimmed.substring(0, SQL_PREVIEW_LENGTH) + "..." 
-                                : trimmed);
-                        log.error("Error: {}", e.getMessage());
-                        throw e;
+                // Skip empty statements and comments-only statements
+                if (trimmed.isEmpty() || trimmed.startsWith("--") || trimmed.matches("^--.*$")) {
+                    continue;
+                }
+                
+                // Remove leading comments from the statement
+                String[] lines = trimmed.split("\n");
+                StringBuilder cleanSql = new StringBuilder();
+                for (String line : lines) {
+                    String cleanLine = line.trim();
+                    if (!cleanLine.startsWith("--") && !cleanLine.isEmpty()) {
+                        cleanSql.append(line).append("\n");
                     }
                 }
+                String finalSql = cleanSql.toString().trim();
+                
+                if (finalSql.isEmpty()) {
+                    continue;
+                }
+                
+                try {
+                    log.debug("Executing statement {}: {}", i + 1, 
+                        finalSql.length() > 80 ? finalSql.substring(0, 80) + "..." : finalSql);
+                    stmt.execute(finalSql);
+                    executedCount++;
+                } catch (Exception e) {
+                    // Log SQL preview and exception message for debugging
+                    log.error("Failed to execute SQL statement {} of {}: {}", 
+                        i + 1, statements.length,
+                        finalSql.length() > SQL_PREVIEW_LENGTH 
+                            ? finalSql.substring(0, SQL_PREVIEW_LENGTH) + "..." 
+                            : finalSql);
+                    log.error("Error: {}", e.getMessage());
+                    throw e;
+                }
             }
+            
+            log.info("Successfully executed {} SQL statements", executedCount);
             
             log.info("Test data setup completed");
         }
