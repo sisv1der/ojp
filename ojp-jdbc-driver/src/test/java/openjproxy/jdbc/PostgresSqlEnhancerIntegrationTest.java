@@ -170,7 +170,9 @@ public class PostgresSqlEnhancerIntegrationTest {
                 .collect(Collectors.joining("\n"));
             
             // Parse and execute SQL statements properly
-            // Split by semicolon but only when it's at the end of a line (not in the middle of a statement)
+            // Note: This simple parsing splits by semicolon at line endings.
+            // Limitation: Won't handle semicolons within string literals or comments correctly.
+            // However, our SQL script is controlled and doesn't have such edge cases.
             String[] statements = setupSql.split(";\\s*(?=\\n|$)");
             for (String sql : statements) {
                 String trimmed = sql.trim();
@@ -179,7 +181,10 @@ public class PostgresSqlEnhancerIntegrationTest {
                     try {
                         stmt.execute(trimmed);
                     } catch (Exception e) {
-                        log.error("Failed to execute SQL: {}", trimmed.substring(0, Math.min(100, trimmed.length())));
+                        // Log first 200 chars of failed SQL and exception message for debugging
+                        log.error("Failed to execute SQL statement: {}", 
+                            trimmed.length() > 200 ? trimmed.substring(0, 200) + "..." : trimmed);
+                        log.error("Error: {}", e.getMessage());
                         throw e;
                     }
                 }
