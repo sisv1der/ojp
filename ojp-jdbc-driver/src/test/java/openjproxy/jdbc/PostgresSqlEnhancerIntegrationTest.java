@@ -201,7 +201,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                     String cleanLine = (commentIdx >= 0) ? line.substring(0, commentIdx).trim() : line.trim();
                     
                     if (!cleanLine.isEmpty()) {
-                        if (!cleanSql.isEmpty()) {
+                        if (cleanSql.length() > 0) {
                             cleanSql.append(" ");
                         }
                         cleanSql.append(cleanLine);
