@@ -176,8 +176,8 @@ public class PostgresSqlEnhancerIntegrationTest {
             // Note: This simple parsing splits by semicolon at line endings.
             // Limitation: Won't handle semicolons within string literals or comments correctly.
             // However, our SQL script is controlled and doesn't have such edge cases.
-            // Pattern matches: semicolon + optional whitespace + newline OR semicolon + optional whitespace + end of string
-            String[] statements = setupSql.split(";\\s*\\n|;\\s*$");
+            // Pattern uses lookahead to match semicolon followed by whitespace and newline/end without consuming them
+            String[] statements = setupSql.split(";(?=\\s*(?:\\n|$))");
             for (String sql : statements) {
                 String trimmed = sql.trim();
                 // Skip empty statements and comments
