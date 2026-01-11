@@ -329,8 +329,9 @@ public class PostgresSqlEnhancerIntegrationTest {
      */
     private static void startOjpServers() throws Exception {
         // Allow jar path to be configured via system property for flexibility
+        // Default path is relative to repository root (one level up from ojp-jdbc-driver)
         String jarPath = System.getProperty("ojp.server.jar.path", 
-            "ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar");
+            "../ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar");
         
         // Validate JAR file exists
         java.io.File jarFile = new java.io.File(jarPath);
