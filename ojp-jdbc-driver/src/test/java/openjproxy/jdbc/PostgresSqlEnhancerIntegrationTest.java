@@ -349,6 +349,7 @@ public class PostgresSqlEnhancerIntegrationTest {
             "-Dojp.server.port=" + port1,
             "-Dojp.prometheus.port=" + (9200 + port1 % 100),
             "-Dojp.sql.enhancer.enabled=true",
+            "-Dojp.libs.path=../ojp-libs",
             "-jar", jarPath
         );
         pb1.redirectErrorStream(true);
@@ -386,6 +387,7 @@ public class PostgresSqlEnhancerIntegrationTest {
             "-Dojp.server.port=" + port2,
             "-Dojp.prometheus.port=" + (9200 + port2 % 100),
             "-Dojp.sql.enhancer.enabled=false",
+            "-Dojp.libs.path=../ojp-libs",
             "-jar", jarPath
         );
         pb2.redirectErrorStream(true);
