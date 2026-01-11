@@ -45,6 +45,9 @@ public class PostgresSqlEnhancerIntegrationTest {
     private static int port1; // Random port for server 1
     private static int port2; // Random port for server 2
     
+    // PostgreSQL driver instance for direct connections
+    private static final Driver PG_DRIVER = new Driver();
+    
     // PostgreSQL connection details (from environment or defaults)
     private static final String PG_HOST = System.getProperty("postgres.host", "localhost");
     private static final String PG_PORT = System.getProperty("postgres.port", "5432");
@@ -156,8 +159,7 @@ public class PostgresSqlEnhancerIntegrationTest {
         props.setProperty("password", PG_PASSWORD);
         
         // Use PostgreSQL driver directly to avoid OJP driver interception
-        Driver pgDriver = new Driver();
-        try (Connection conn = pgDriver.connect(pgUrl, props);
+        try (Connection conn = PG_DRIVER.connect(pgUrl, props);
              Statement stmt = conn.createStatement()) {
             
             // Read SQL script
