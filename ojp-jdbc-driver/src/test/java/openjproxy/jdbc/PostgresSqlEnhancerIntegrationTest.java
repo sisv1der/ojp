@@ -90,8 +90,8 @@ public class PostgresSqlEnhancerIntegrationTest {
         // Start OJP servers
         startOjpServers();
         
-        // Wait for servers to be ready
-        Thread.sleep(15000);
+        // Wait for servers to be ready with health check
+        waitForServersReady();
         
         log.info("Both OJP servers started successfully");
     }
@@ -127,11 +127,16 @@ public class PostgresSqlEnhancerIntegrationTest {
     
     /**
      * Find an available port for OJP server
+     * Note: There's still a small race condition between finding the port and using it,
+     * but this is minimized by checking them sequentially and starting servers immediately.
      */
     private static int findAvailablePort() throws Exception {
         try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
             socket.setReuseAddress(true);
-            return socket.getLocalPort();
+            int port = socket.getLocalPort();
+            // Small delay to help prevent immediate reuse
+            Thread.sleep(100);
+            return port;
         }
     }
     
@@ -146,16 +151,75 @@ public class PostgresSqlEnhancerIntegrationTest {
         try (Connection conn = DriverManager.getConnection(pgUrl, PG_USER, PG_PASSWORD);
              Statement stmt = conn.createStatement()) {
             
-            // Read and execute setup SQL script
+            // Read SQL script
             String setupSql = new BufferedReader(new InputStreamReader(
                 Objects.requireNonNull(PostgresSqlEnhancerIntegrationTest.class
                     .getResourceAsStream("/sql_enhancer_postgres_test_data.sql"))))
                 .lines()
                 .collect(Collectors.joining("\n"));
             
-            stmt.execute(setupSql);
+            // Split and execute statements individually to handle multi-statement scripts
+            String[] statements = setupSql.split(";");
+            for (String sql : statements) {
+                String trimmed = sql.trim();
+                if (!trimmed.isEmpty() && !trimmed.startsWith("--")) {
+                    stmt.execute(trimmed);
+                }
+            }
             
             log.info("Test data setup completed");
+        }
+    }
+    
+    /**
+     * Wait for both OJP servers to be ready by attempting connections
+     */
+    private static void waitForServersReady() throws Exception {
+        log.info("Waiting for OJP servers to be ready...");
+        
+        int maxAttempts = 30; // 30 attempts with 1 second delay = 30 seconds max
+        int attempt = 0;
+        boolean server1Ready = false;
+        boolean server2Ready = false;
+        
+        String url1 = String.format("jdbc:ojp[localhost:%d]_postgresql://%s:%s/%s", 
+            port1, PG_HOST, PG_PORT, PG_DB);
+        String url2 = String.format("jdbc:ojp[localhost:%d]_postgresql://%s:%s/%s", 
+            port2, PG_HOST, PG_PORT, PG_DB);
+        
+        // Load OJP driver
+        Class.forName("org.openjproxy.jdbc.Driver");
+        
+        while (attempt < maxAttempts && (!server1Ready || !server2Ready)) {
+            attempt++;
+            
+            // Check server 1
+            if (!server1Ready) {
+                try (Connection conn = DriverManager.getConnection(url1, PG_USER, PG_PASSWORD)) {
+                    server1Ready = true;
+                    log.info("Server 1 (port {}) is ready after {} attempts", port1, attempt);
+                } catch (Exception e) {
+                    // Server not ready yet
+                }
+            }
+            
+            // Check server 2
+            if (!server2Ready) {
+                try (Connection conn = DriverManager.getConnection(url2, PG_USER, PG_PASSWORD)) {
+                    server2Ready = true;
+                    log.info("Server 2 (port {}) is ready after {} attempts", port2, attempt);
+                } catch (Exception e) {
+                    // Server not ready yet
+                }
+            }
+            
+            if (!server1Ready || !server2Ready) {
+                Thread.sleep(1000); // Wait 1 second before next attempt
+            }
+        }
+        
+        if (!server1Ready || !server2Ready) {
+            throw new RuntimeException("OJP servers failed to start within timeout period");
         }
     }
     
@@ -163,7 +227,9 @@ public class PostgresSqlEnhancerIntegrationTest {
      * Start two OJP servers with different configurations
      */
     private static void startOjpServers() throws Exception {
-        String jarPath = "ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar";
+        // Allow jar path to be configured via system property for flexibility
+        String jarPath = System.getProperty("ojp.server.jar.path", 
+            "ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar");
         
         // Start server 1 with SQL enhancer enabled
         log.info("Starting OJP Server 1 with SQL enhancer enabled on port {}", port1);
@@ -258,9 +324,14 @@ public class PostgresSqlEnhancerIntegrationTest {
             "Query results should be identical between SQL enhancer enabled and disabled servers");
         
         // Log performance comparison
-        double percentDiff = ((double) (duration1 - duration2) / duration2) * 100;
-        log.info("Performance comparison: Server 1 = {} ms, Server 2 = {} ms, Difference = {:.2f}%", 
-            duration1, duration2, percentDiff);
+        if (duration2 > 0) {
+            double percentDiff = ((double) (duration1 - duration2) / duration2) * 100;
+            log.info("Performance comparison: Server 1 = {} ms, Server 2 = {} ms, Difference = {:.2f}%", 
+                duration1, duration2, percentDiff);
+        } else {
+            log.info("Performance comparison: Server 1 = {} ms, Server 2 = {} ms (too fast to measure difference)", 
+                duration1, duration2);
+        }
         
         // Verify both servers processed the query successfully
         assertFalse(results1.isEmpty(), "Server 1 should return results");
