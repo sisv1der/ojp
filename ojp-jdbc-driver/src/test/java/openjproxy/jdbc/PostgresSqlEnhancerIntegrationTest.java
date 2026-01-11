@@ -190,6 +190,9 @@ public class PostgresSqlEnhancerIntegrationTest {
                 }
                 
                 // Remove leading and inline comments from the statement
+                // Note: This simple approach treats '--' anywhere as a comment marker.
+                // Limitation: Won't handle '--' within string literals correctly.
+                // However, our controlled SQL script doesn't have such cases.
                 String[] lines = trimmed.split("\n");
                 StringBuilder cleanSql = new StringBuilder();
                 for (String line : lines) {
@@ -198,7 +201,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                     String cleanLine = (commentIdx >= 0) ? line.substring(0, commentIdx).trim() : line.trim();
                     
                     if (!cleanLine.isEmpty()) {
-                        if (cleanSql.length() > 0) {
+                        if (!cleanSql.isEmpty()) {
                             cleanSql.append(" ");
                         }
                         cleanSql.append(cleanLine);
