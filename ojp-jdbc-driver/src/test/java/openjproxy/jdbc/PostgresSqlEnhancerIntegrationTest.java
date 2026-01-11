@@ -247,6 +247,8 @@ public class PostgresSqlEnhancerIntegrationTest {
         int attempt = 0;
         boolean server1Ready = false;
         boolean server2Ready = false;
+        Exception lastServer1Error = null;
+        Exception lastServer2Error = null;
         
         String url1 = String.format("jdbc:ojp[localhost:%d]_postgresql://%s:%s/%s", 
             port1, PG_HOST, PG_PORT, PG_DB);
@@ -265,6 +267,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                     server1Ready = true;
                     log.info("Server 1 (port {}) is ready after {} attempts", port1, attempt);
                 } catch (Exception e) {
+                    lastServer1Error = e;
                     // Server not ready yet
                 }
             }
@@ -275,6 +278,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                     server2Ready = true;
                     log.info("Server 2 (port {}) is ready after {} attempts", port2, attempt);
                 } catch (Exception e) {
+                    lastServer2Error = e;
                     // Server not ready yet
                 }
             }
@@ -285,7 +289,30 @@ public class PostgresSqlEnhancerIntegrationTest {
         }
         
         if (!server1Ready || !server2Ready) {
-            throw new RuntimeException("OJP servers failed to start within timeout period");
+            StringBuilder errorMsg = new StringBuilder("OJP servers failed to start within timeout period:\n");
+            if (!server1Ready) {
+                errorMsg.append("  Server 1 (port ").append(port1).append("): ");
+                if (ojpServer1 != null && !ojpServer1.isAlive()) {
+                    errorMsg.append("Process died. Exit code: ").append(ojpServer1.exitValue()).append("\n");
+                } else {
+                    errorMsg.append("Not responding. ");
+                    if (lastServer1Error != null) {
+                        errorMsg.append("Last error: ").append(lastServer1Error.getMessage()).append("\n");
+                    }
+                }
+            }
+            if (!server2Ready) {
+                errorMsg.append("  Server 2 (port ").append(port2).append("): ");
+                if (ojpServer2 != null && !ojpServer2.isAlive()) {
+                    errorMsg.append("Process died. Exit code: ").append(ojpServer2.exitValue()).append("\n");
+                } else {
+                    errorMsg.append("Not responding. ");
+                    if (lastServer2Error != null) {
+                        errorMsg.append("Last error: ").append(lastServer2Error.getMessage()).append("\n");
+                    }
+                }
+            }
+            throw new RuntimeException(errorMsg.toString());
         }
     }
     
@@ -296,6 +323,15 @@ public class PostgresSqlEnhancerIntegrationTest {
         // Allow jar path to be configured via system property for flexibility
         String jarPath = System.getProperty("ojp.server.jar.path", 
             "ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar");
+        
+        // Validate JAR file exists
+        java.io.File jarFile = new java.io.File(jarPath);
+        if (!jarFile.exists()) {
+            throw new RuntimeException("OJP server JAR not found at: " + jarFile.getAbsolutePath() + 
+                ". Please build the server first or specify correct path with -Dojp.server.jar.path=<path>");
+        }
+        
+        log.info("Using OJP server JAR: {}", jarFile.getAbsolutePath());
         
         // Start server 1 with SQL enhancer enabled
         log.info("Starting OJP Server 1 with SQL enhancer enabled on port {}", port1);
@@ -309,13 +345,20 @@ public class PostgresSqlEnhancerIntegrationTest {
         pb1.redirectErrorStream(true);
         ojpServer1 = pb1.start();
         
-        // Start logging thread for server 1
+        // Start logging thread for server 1 (use INFO for first 50 lines to catch startup errors)
         Thread loggingThread1 = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(ojpServer1.getInputStream()))) {
                 String line;
+                int lineCount = 0;
                 while ((line = reader.readLine()) != null) {
-                    log.debug("[OJP-Server-1] {}", line);
+                    lineCount++;
+                    // Log first 50 lines at INFO level to capture startup, then DEBUG
+                    if (lineCount <= 50) {
+                        log.info("[OJP-Server-1] {}", line);
+                    } else {
+                        log.debug("[OJP-Server-1] {}", line);
+                    }
                 }
             } catch (Exception e) {
                 log.error("Error reading server 1 output", e);
@@ -339,13 +382,20 @@ public class PostgresSqlEnhancerIntegrationTest {
         pb2.redirectErrorStream(true);
         ojpServer2 = pb2.start();
         
-        // Start logging thread for server 2
+        // Start logging thread for server 2 (use INFO for first 50 lines to catch startup errors)
         Thread loggingThread2 = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(ojpServer2.getInputStream()))) {
                 String line;
+                int lineCount = 0;
                 while ((line = reader.readLine()) != null) {
-                    log.debug("[OJP-Server-2] {}", line);
+                    lineCount++;
+                    // Log first 50 lines at INFO level to capture startup, then DEBUG
+                    if (lineCount <= 50) {
+                        log.info("[OJP-Server-2] {}", line);
+                    } else {
+                        log.debug("[OJP-Server-2] {}", line);
+                    }
                 }
             } catch (Exception e) {
                 log.error("Error reading server 2 output", e);
