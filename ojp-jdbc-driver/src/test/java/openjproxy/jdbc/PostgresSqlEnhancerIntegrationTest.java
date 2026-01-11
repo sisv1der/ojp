@@ -189,13 +189,19 @@ public class PostgresSqlEnhancerIntegrationTest {
                     continue;
                 }
                 
-                // Remove leading comments from the statement
+                // Remove leading and inline comments from the statement
                 String[] lines = trimmed.split("\n");
                 StringBuilder cleanSql = new StringBuilder();
                 for (String line : lines) {
-                    String cleanLine = line.trim();
-                    if (!cleanLine.startsWith("--") && !cleanLine.isEmpty()) {
-                        cleanSql.append(cleanLine).append(" ");
+                    // Remove inline comments (everything after -- on the line)
+                    int commentIdx = line.indexOf("--");
+                    String cleanLine = (commentIdx >= 0) ? line.substring(0, commentIdx).trim() : line.trim();
+                    
+                    if (!cleanLine.isEmpty()) {
+                        if (cleanSql.length() > 0) {
+                            cleanSql.append(" ");
+                        }
+                        cleanSql.append(cleanLine);
                     }
                 }
                 String finalSql = cleanSql.toString().trim();
