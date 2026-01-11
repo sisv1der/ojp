@@ -184,8 +184,8 @@ public class PostgresSqlEnhancerIntegrationTest {
             for (int i = 0; i < statements.length; i++) {
                 String sql = statements[i];
                 String trimmed = sql.trim();
-                // Skip empty statements and comments-only statements
-                if (trimmed.isEmpty() || trimmed.startsWith("--")) {
+                // Skip empty statements
+                if (trimmed.isEmpty()) {
                     continue;
                 }
                 
@@ -209,6 +209,7 @@ public class PostgresSqlEnhancerIntegrationTest {
                 }
                 String finalSql = cleanSql.toString().trim();
                 
+                // Skip if no SQL remains after removing comments
                 if (finalSql.isEmpty()) {
                     continue;
                 }
