@@ -208,10 +208,11 @@ jobs:
       # SQL Enhancer Integration Test
       # ===================================================================
       # This test validates the SQL enhancer functionality by:
-      # 1. Starting two OJP servers on random ports (one with SQL enhancer enabled, one without)
-      # 2. Running a complex query on both servers
-      # 3. Verifying identical results and comparing performance
-      # 4. Stopping both test servers after completion
+      # 1. Setting up test data in PostgreSQL
+      # 2. Starting two OJP servers on random ports (one with SQL enhancer enabled, one without)
+      # 3. Running a complex query on both servers
+      # 4. Verifying identical results and comparing performance
+      # 5. Stopping both test servers after completion
       # ===================================================================
 
       - name: Run SQL Enhancer Integration Test
