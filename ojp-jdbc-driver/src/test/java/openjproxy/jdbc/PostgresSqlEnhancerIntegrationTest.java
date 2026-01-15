@@ -57,7 +57,6 @@ public class PostgresSqlEnhancerIntegrationTest {
     private static final int SQL_PREVIEW_LENGTH = 200;
     
     // Test query - intentionally inefficient for SQL enhancer to optimize
-    // Uses standard SQL functions that Calcite can parse and optimize
     private static final String TEST_QUERY = 
         "SELECT\n" +
         "  r.region_name,\n" +
@@ -69,7 +68,7 @@ public class PostgresSqlEnhancerIntegrationTest {
         "JOIN regions r\n" +
         "  ON r.region_id = c.region_id\n" +
         "WHERE\n" +
-        "  o.order_ts >= CURRENT_TIMESTAMP - INTERVAL '30' DAY\n" +
+        "  date_trunc('day', o.order_ts) >= date_trunc('day', now() - interval '30' day)\n" +
         "  AND c.status = 'ACTIVE'\n" +
         "GROUP BY r.region_name\n" +
         "ORDER BY total_amount DESC";
