@@ -31,6 +31,9 @@ public class SqlEnhancerEngine {
     private final ConcurrentHashMap<String, SqlEnhancementResult> cache;
     private final OjpSqlDialect dialect;
     private final org.apache.calcite.sql.SqlDialect calciteDialect;
+    private final OjpSqlDialect targetDialect; // Target dialect for translation
+    private final org.apache.calcite.sql.SqlDialect targetCalciteDialect; // Target Calcite dialect
+    private final boolean translationEnabled; // Whether automatic translation is enabled
     private final RelationalAlgebraConverter converter;
     private final boolean conversionEnabled;
     
@@ -58,7 +61,8 @@ public class SqlEnhancerEngine {
      * Creates a new SqlEnhancerEngine with full configuration options including schema refresh.
      * 
      * @param enabled Whether the SQL enhancer is enabled
-     * @param dialectName The SQL dialect to use
+     * @param dialectName The SQL dialect to use (source dialect)
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
      * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
      * @param optimizationEnabled Whether to enable query optimization
      * @param enabledRules List of rule names to enable (null = use safe rules)
@@ -69,7 +73,7 @@ public class SqlEnhancerEngine {
      * @param schemaName Schema name for schema refresh (can be null)
      * @param schemaRefreshIntervalHours Hours between schema refreshes (0 = disabled)
      */
-    public SqlEnhancerEngine(boolean enabled, String dialectName, boolean conversionEnabled,
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
                              boolean optimizationEnabled, List<String> enabledRules,
                              SchemaCache schemaCache, SchemaLoader schemaLoader,
                              javax.sql.DataSource dataSource, String catalogName, String schemaName,
@@ -80,6 +84,18 @@ public class SqlEnhancerEngine {
         this.cache = new ConcurrentHashMap<>();
         this.dialect = OjpSqlDialect.fromString(dialectName);
         this.calciteDialect = dialect.getCalciteDialect();
+        
+        // Configure target dialect for translation
+        if (targetDialectName != null && !targetDialectName.trim().isEmpty()) {
+            this.targetDialect = OjpSqlDialect.fromString(targetDialectName);
+            this.targetCalciteDialect = targetDialect.getCalciteDialect();
+            this.translationEnabled = true;
+        } else {
+            this.targetDialect = null;
+            this.targetCalciteDialect = null;
+            this.translationEnabled = false;
+        }
+        
         this.schemaCache = schemaCache;
         this.schemaLoader = schemaLoader;
         this.dataSource = dataSource;
@@ -113,8 +129,9 @@ public class SqlEnhancerEngine {
             String schemaStatus = schemaCache != null ? " and real schema support" : "";
             String refreshStatus = (schemaLoader != null && dataSource != null && schemaRefreshIntervalHours > 0) ? 
                 " with periodic refresh" : "";
-            log.info("SQL Enhancer Engine initialized and enabled with dialect: {}{}{}{}{}", 
-                    dialectName, conversionStatus, optimizationStatus, schemaStatus, refreshStatus);
+            String translationStatus = translationEnabled ? " and automatic translation to " + targetDialect : "";
+            log.info("SQL Enhancer Engine initialized and enabled with dialect: {}{}{}{}{}{}", 
+                    dialectName, conversionStatus, optimizationStatus, schemaStatus, refreshStatus, translationStatus);
         } else {
             log.info("SQL Enhancer Engine initialized but disabled");
         }
@@ -125,21 +142,38 @@ public class SqlEnhancerEngine {
      * 
      * @param enabled Whether the SQL enhancer is enabled
      * @param dialectName The SQL dialect to use
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
      * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
      * @param optimizationEnabled Whether to enable query optimization
      * @param enabledRules List of rule names to enable (null = use safe rules)
      * @param schemaCache Optional schema cache for real schema metadata (can be null)
      * @param schemaRefreshIntervalHours Hours between schema refreshes (0 = disabled)
      */
-    public SqlEnhancerEngine(boolean enabled, String dialectName, boolean conversionEnabled,
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
                              boolean optimizationEnabled, List<String> enabledRules,
                              SchemaCache schemaCache, long schemaRefreshIntervalHours) {
-        this(enabled, dialectName, conversionEnabled, optimizationEnabled, enabledRules,
+        this(enabled, dialectName, targetDialectName, conversionEnabled, optimizationEnabled, enabledRules,
              schemaCache, null, null, null, null, schemaRefreshIntervalHours);
     }
     
     /**
      * Creates a new SqlEnhancerEngine with full configuration options (no schema cache).
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     * @param optimizationEnabled Whether to enable query optimization
+     * @param enabledRules List of rule names to enable (null = use safe rules)
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
+                             boolean optimizationEnabled, List<String> enabledRules) {
+        this(enabled, dialectName, targetDialectName, conversionEnabled, optimizationEnabled, enabledRules, null, 0);
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with full configuration options (no target dialect).
+     * Legacy constructor for backward compatibility.
      * 
      * @param enabled Whether the SQL enhancer is enabled
      * @param dialectName The SQL dialect to use
@@ -149,7 +183,7 @@ public class SqlEnhancerEngine {
      */
     public SqlEnhancerEngine(boolean enabled, String dialectName, boolean conversionEnabled,
                              boolean optimizationEnabled, List<String> enabledRules) {
-        this(enabled, dialectName, conversionEnabled, optimizationEnabled, enabledRules, null, 0);
+        this(enabled, dialectName, "", conversionEnabled, optimizationEnabled, enabledRules, null, 0);
     }
     
     /**
@@ -400,6 +434,33 @@ public class SqlEnhancerEngine {
             result = SqlEnhancementResult.passthrough(sql);
         }
         
+        // Apply automatic dialect translation if enabled
+        if (translationEnabled && !result.isHasErrors()) {
+            try {
+                String sqlToTranslate = result.getEnhancedSql();
+                String translatedSql = applyTranslation(sqlToTranslate);
+                
+                // Check if translation actually changed the SQL
+                boolean wasTranslated = !sqlToTranslate.equals(translatedSql);
+                if (wasTranslated) {
+                    // Create new result with translated SQL, preserving optimization metadata
+                    if (result.isOptimized()) {
+                        result = SqlEnhancementResult.optimized(translatedSql, true, 
+                                                               result.getAppliedRules(), 
+                                                               result.getOptimizationTimeMs());
+                    } else {
+                        result = SqlEnhancementResult.success(translatedSql, true);
+                    }
+                    log.info("SQL automatically translated from {} to {}: {} chars -> {} chars", 
+                            dialect, targetDialect, sqlToTranslate.length(), translatedSql.length());
+                }
+            } catch (Exception e) {
+                log.warn("Automatic translation failed from {} to {}: {}, using untranslated SQL", 
+                        dialect, targetDialect, e.getMessage());
+                // Keep the untranslated result
+            }
+        }
+        
         long endTime = System.currentTimeMillis();
         long duration = endTime - startTime;
         
@@ -416,6 +477,25 @@ public class SqlEnhancerEngine {
         triggerSchemaRefreshIfNeeded();
         
         return result;
+    }
+    
+    /**
+     * Applies dialect translation to SQL.
+     * Internal method used by automatic translation.
+     * 
+     * @param sql The SQL to translate
+     * @return Translated SQL
+     * @throws Exception if translation fails
+     */
+    private String applyTranslation(String sql) throws Exception {
+        // Parse with current dialect
+        SqlParser parser = SqlParser.create(sql, parserConfig);
+        SqlNode sqlNode = parser.parseQuery();
+        
+        // Convert to target dialect
+        String translated = sqlNode.toSqlString(targetCalciteDialect).getSql();
+        
+        return translated;
     }
     
     /**

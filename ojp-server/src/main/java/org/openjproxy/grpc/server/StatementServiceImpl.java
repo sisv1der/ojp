@@ -22,12 +22,10 @@ import com.openjproxy.grpc.StatementServiceGrpc;
 import com.openjproxy.grpc.TransactionInfo;
 import com.openjproxy.grpc.TransactionStatus;
 import com.zaxxer.hikari.HikariDataSource;
-import io.grpc.Status;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -35,9 +33,6 @@ import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.openjproxy.constants.CommonConstants;
 import org.openjproxy.database.DatabaseUtils;
-import org.openjproxy.datasource.ConnectionPoolProvider;
-import org.openjproxy.datasource.ConnectionPoolProviderRegistry;
-import org.openjproxy.datasource.PoolConfig;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
@@ -47,7 +42,6 @@ import org.openjproxy.grpc.server.pool.DataSourceConfigurationManager;
 import org.openjproxy.grpc.server.resultset.ResultSetWrapper;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
-import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
 import org.openjproxy.grpc.server.utils.DateTimeUtils;
 import org.openjproxy.grpc.server.utils.DriverUtils;
 import org.openjproxy.grpc.server.utils.MethodNameGenerator;
@@ -61,7 +55,6 @@ import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.XidKey;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
-import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
@@ -105,6 +98,8 @@ import static org.openjproxy.constants.CommonConstants.MAX_LOB_DATA_BLOCK_SIZE;
 import static org.openjproxy.grpc.server.Constants.EMPTY_LIST;
 import static org.openjproxy.grpc.server.Constants.EMPTY_MAP;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
+import static org.openjproxy.grpc.server.action.transaction.XidHelper.convertXid;
+import static org.openjproxy.grpc.server.action.transaction.XidHelper.convertXidToProto;
 
 @Slf4j
 public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
@@ -142,10 +137,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     private final static String RESULT_SET_METADATA_ATTR_PREFIX = "rsMetadata|";
 
-    static {
-        DriverUtils.registerDrivers();
-    }
-
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
     
@@ -153,7 +144,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         this.sessionManager = sessionManager;
         this.circuitBreaker = circuitBreaker;
         this.serverConfiguration = serverConfiguration;
-        this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(serverConfiguration.isSqlEnhancerEnabled());
+        
+        // Initialize SQL enhancer with full configuration
+        this.sqlEnhancerEngine = createSqlEnhancerEngine(serverConfiguration);
+        
         initializeXAPoolProvider();
         
         // Initialize ActionContext with all shared state
@@ -170,6 +164,39 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             sessionManager,
             circuitBreaker,
             serverConfiguration
+        );
+    }
+
+    /**
+     * Creates and configures the SQL enhancer engine based on server configuration.
+     * Parses mode to determine conversion and optimization settings.
+     * 
+     * @param config Server configuration
+     * @return Configured SqlEnhancerEngine instance
+     */
+    private org.openjproxy.grpc.server.sql.SqlEnhancerEngine createSqlEnhancerEngine(ServerConfiguration config) {
+        // Parse mode to determine conversion and optimization settings
+        org.openjproxy.grpc.server.sql.SqlEnhancerMode mode = 
+            org.openjproxy.grpc.server.sql.SqlEnhancerMode.fromString(config.getSqlEnhancerMode());
+        
+        // Parse rules if specified, otherwise use defaults
+        java.util.List<String> enabledRules = null;
+        if (config.getSqlEnhancerRules() != null && !config.getSqlEnhancerRules().trim().isEmpty()) {
+            enabledRules = java.util.Arrays.asList(config.getSqlEnhancerRules().split(","))
+                .stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        }
+        
+        // Create engine with full configuration including targetDialect
+        return new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
+            config.isSqlEnhancerEnabled(),
+            config.getSqlEnhancerDialect(),
+            config.getSqlEnhancerTargetDialect(),
+            mode.isConversionEnabled(),
+            mode.isOptimizationEnabled(),
+            enabledRules
         );
     }
 
@@ -2298,31 +2325,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void xaForget(com.openjproxy.grpc.XaForgetRequest request, StreamObserver<com.openjproxy.grpc.XaResponse> responseObserver) {
-        log.debug("xaForget: session={}, xid={}", 
-                request.getSession().getSessionUUID(), request.getXid());
-        
-        try {
-            Session session = sessionManager.getSession(request.getSession());
-            if (session == null || !session.isXA() || session.getXaResource() == null) {
-                throw new SQLException("Session is not an XA session");
-            }
-            
-            javax.transaction.xa.Xid xid = convertXid(request.getXid());
-            session.getXaResource().forget(xid);
-            
-            com.openjproxy.grpc.XaResponse response = com.openjproxy.grpc.XaResponse.newBuilder()
-                    .setSession(session.getSessionInfo())
-                    .setSuccess(true)
-                    .setMessage("XA forget successful")
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-
-        } catch (Exception e) {
-            log.error("Error in xaForget", e);
-            SQLException sqlException = (e instanceof SQLException) ? (SQLException) e : new SQLException(e);
-            sendSQLExceptionMetadata(sqlException, responseObserver);
-        }
+        new org.openjproxy.grpc.server.action.transaction.XaForgetAction(sessionManager)
+                .execute(request, responseObserver);
     }
 
     @Override
@@ -2415,27 +2419,5 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             SQLException sqlException = (e instanceof SQLException) ? (SQLException) e : new SQLException(e);
             sendSQLExceptionMetadata(sqlException, responseObserver);
         }
-    }
-
-    /**
-     * Convert protobuf Xid to javax.transaction.xa.Xid.
-     */
-    private javax.transaction.xa.Xid convertXid(com.openjproxy.grpc.XidProto xidProto) {
-        return new XidImpl(
-                xidProto.getFormatId(),
-                xidProto.getGlobalTransactionId().toByteArray(),
-                xidProto.getBranchQualifier().toByteArray()
-        );
-    }
-
-    /**
-     * Convert javax.transaction.xa.Xid to protobuf Xid.
-     */
-    private com.openjproxy.grpc.XidProto convertXidToProto(javax.transaction.xa.Xid xid) {
-        return com.openjproxy.grpc.XidProto.newBuilder()
-                .setFormatId(xid.getFormatId())
-                .setGlobalTransactionId(com.google.protobuf.ByteString.copyFrom(xid.getGlobalTransactionId()))
-                .setBranchQualifier(com.google.protobuf.ByteString.copyFrom(xid.getBranchQualifier()))
-                .build();
     }
 }

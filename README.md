@@ -1,12 +1,12 @@
 
 # Open J Proxy
 
-![Release](https://img.shields.io/github/v/release/Open-J-Proxy/ojp?include_prereleases)
+![Release](https://img.shields.io/github/v/release/Open-J-Proxy/ojp?include_prereleases) [![Main CI](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml) [![Spring Boot/Micronaut/Quarkus Integration](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml) [![License](https://img.shields.io/github/license/Open-J-Proxy/ojp.svg)](https://raw.githubusercontent.com/Open-J-Proxy/ojp/master/LICENSE)
 
-[![Main CI](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml)
-[![Spring Boot/Micronaut/Quarkus Integration](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml)
+[![security status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/security?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp) [![stability status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/stability?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp)
 
-[![License](https://img.shields.io/github/license/Open-J-Proxy/ojp.svg)](https://raw.githubusercontent.com/Open-J-Proxy/ojp/master/LICENSE)
+[openjproxy.com](https://openjproxy.com) 
+---
 
 A type 3 JDBC Driver and Layer 7 Proxy Server to decouple applications from relational database connection management.
 
@@ -137,25 +137,12 @@ Welcome to OJP! We appreciate your interest in contributing. This guide will hel
 ---
 
 ## Partners
-<a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener">
-<img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://github.com/switcherapi" target="_blank" rel="noopener">
-<img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.meterian.io/" target="_blank" rel="noopener">
-<img width="180px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener">
-<img width="180px" src="/documents/images/cyber_jar_logo.png" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener">
-<img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" />
-</a>
-<a href="https://omnifish.ee/piranha/" target="_blank" rel="noopener">
-<img width="150px" src="/documents/images/omnifish-logo.png" alt="OmniFish" />
-</a>
+
+| Logo                                                                                                                                                                                                                        | Description                                                                                                                                | Website |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| <a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener"><img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" /></a>                       | Brazilian Java User Group connecting developers for knowledge sharing and professional networking.                                         | [linkedin.com/in/devsjava](https://www.linkedin.com/in/devsjava/) |
+| <a href="https://github.com/switcherapi" target="_blank" rel="noopener"><img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Switcher API" /></a> | Feature management platform for managing features at scale with performance focus.                                                         | [github.com/switcherapi](https://github.com/switcherapi) |
+| <a href="https://www.meterian.io/" target="_blank" rel="noopener"><img width="240px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Meterian"  /></a>                                               | Application security platform that identifies vulnerabilities across open-source dependencies and application code.                        | [meterian.io](https://www.meterian.io/) |
+| <a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener"><img width="600px" src="/documents/images/cyberjar_logo.png" alt="CyberJAR"  /></a>                                                                | YouTube channel for Java developers covering frameworks, containers, and modern JVM topics.                                                | [youtube.com/@cbrjar](https://www.youtube.com/@cbrjar) |
+| <a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener"><img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" /></a>                                   | Helps developers go beyond coding, mastering Java fundamentals, building career confidence, and preparing for international opportunities. | [javachallengers.com](https://javachallengers.com/career-diagnosis) |
+| <a href="https://omnifish.ee" target="_blank" rel="noopener"><img width="130px" src="/documents/images/omnifish_logo.png" alt="OmniFish" /></a>                                                                             | The team behind Eclipse GlassFish, delivering reliable opensource solutions with enterprise support.                                       | [omnifish.ee](https://omnifish.ee/) |

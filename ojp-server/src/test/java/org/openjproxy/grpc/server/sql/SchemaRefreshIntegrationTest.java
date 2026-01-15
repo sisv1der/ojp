@@ -91,7 +91,7 @@ class SchemaRefreshIntegrationTest {
         
         // Create engine with periodic refresh (very short interval for testing)
         SqlEnhancerEngine engine = new SqlEnhancerEngine(
-            true, "GENERIC", true, true, null,
+            true, "GENERIC", "", true, true, null,
             schemaCache, schemaLoader, dataSource, null, null,
             0 // 0 hours = will use milliseconds directly
         );

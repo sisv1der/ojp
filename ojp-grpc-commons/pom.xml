@@ -16,17 +16,38 @@
     </parent>
 
     <properties>
-        <grpc.version>1.73.0</grpc.version>
+        <grpc.version>1.78.0</grpc.version>
+        <netty.version>4.1.130.Final</netty.version>
         <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
         <slf4j.version>2.0.17</slf4j.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Force Netty version to fix CVE-2025-67735, CVE-2025-58057, CVE-2025-58056, CVE-2025-55163, CVE-2025-25193, CVE-2024-47535, CVE-2025-24970 -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            
+            <!-- Override commons-lang3 to fix CVE-2025-48924 -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- JUnit 5 API -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>5.10.0</version>
+            <version>5.14.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -34,7 +55,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.10.0</version>
+            <version>5.14.2</version>
             <scope>test</scope>
         </dependency> 
 
@@ -75,7 +96,7 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.25.5</version>
+            <version>${protobuf.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/kr.motd.maven/os-maven-plugin -->
@@ -101,7 +122,7 @@
                 <version>0.6.1</version>
                 <configuration>
                     <protocArtifact>
-                        com.google.protobuf:protoc:3.25.8:exe:${os.detected.classifier}
+                        com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
                     </protocArtifact>
                     <pluginId>grpc-java</pluginId>
                     <pluginArtifact>
