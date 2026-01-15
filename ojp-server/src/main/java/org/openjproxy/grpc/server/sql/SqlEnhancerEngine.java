@@ -302,6 +302,58 @@ public class SqlEnhancerEngine {
     }
     
     /**
+     * Ensures schema is loaded from the provided DataSource.
+     * This is called before enhance() to populate the schema cache on-demand.
+     * Thread-safe and idempotent - multiple calls will only load once.
+     * 
+     * @param dataSource DataSource to load schema from
+     * @param catalogName Catalog name (may be null)
+     * @param schemaName Schema name (may be null)
+     */
+    public void ensureSchemaLoaded(javax.sql.DataSource dataSource, String catalogName, String schemaName) {
+        // Only load if we have a schema cache and loader
+        if (schemaCache == null || schemaLoader == null || dataSource == null) {
+            return;
+        }
+        
+        // Check if schema is already loaded
+        if (schemaCache.getSchema(false) != null) {
+            log.debug("Schema already loaded in cache");
+            return;
+        }
+        
+        // Try to acquire lock for loading
+        if (!schemaCache.tryAcquireRefreshLock()) {
+            log.debug("Schema load already in progress by another thread");
+            return;
+        }
+        
+        try {
+            // Double-check after acquiring lock
+            if (schemaCache.getSchema(false) != null) {
+                log.debug("Schema loaded by another thread while waiting for lock");
+                return;
+            }
+            
+            log.info("Loading schema metadata from DataSource (catalog: {}, schema: {})", 
+                     catalogName, schemaName);
+            
+            // Load schema synchronously
+            try (java.sql.Connection connection = dataSource.getConnection()) {
+                SchemaMetadata schema = schemaLoader.loadSchema(connection, catalogName, schemaName);
+                schemaCache.updateSchema(schema);
+                log.info("Successfully loaded schema with {} tables", schema.getTables().size());
+            } catch (java.sql.SQLException e) {
+                log.error("Failed to load schema metadata", e);
+                // Don't throw - allow query to proceed without schema (will fall back to generic schema)
+            }
+            
+        } finally {
+            schemaCache.releaseRefreshLock();
+        }
+    }
+    
+    /**
      * Parses, validates, and optionally optimizes SQL.
      * Phase 3: Adds database-specific dialect support.
      * 
