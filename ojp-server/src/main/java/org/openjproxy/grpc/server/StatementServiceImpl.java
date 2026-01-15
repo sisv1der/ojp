@@ -1011,6 +1011,14 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                     String catalogName = connection.getCatalog();
                     String schemaName = connection.getSchema();
                     
+                    // PostgreSQL: Use "public" schema if schema name is null or empty
+                    // This ensures tables created in the default schema are visible to Calcite
+                    if ((schemaName == null || schemaName.isEmpty()) && 
+                        connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("PostgreSQL")) {
+                        schemaName = "public";
+                        log.debug("Using default PostgreSQL 'public' schema for schema loading");
+                    }
+                    
                     // Ensure schema is loaded (thread-safe, idempotent)
                     sqlEnhancerEngine.ensureSchemaLoaded(dataSource, catalogName, schemaName);
                 } else {
