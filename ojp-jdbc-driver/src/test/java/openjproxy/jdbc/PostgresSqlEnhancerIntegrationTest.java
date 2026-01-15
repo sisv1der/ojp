@@ -68,7 +68,7 @@ public class PostgresSqlEnhancerIntegrationTest {
         "JOIN regions r\n" +
         "  ON r.region_id = c.region_id\n" +
         "WHERE\n" +
-        "  date_trunc('day', o.order_ts) >= date_trunc('day', now() - interval '30 days')\n" +
+        "  date_trunc('day', o.order_ts) >= date_trunc('day', now() - interval '30' day)\n" +
         "  AND c.status = 'ACTIVE'\n" +
         "GROUP BY r.region_name\n" +
         "ORDER BY total_amount DESC";
@@ -189,7 +189,12 @@ public class PostgresSqlEnhancerIntegrationTest {
         
         // Load OJP driver
         Class.forName("org.openjproxy.jdbc.Driver");
-        
+
+        // Execute query on enhanced server
+        log.info("Executing query on enhanced server for generating enhanced query (port {}, SQL enhancer enabled)...", PORT_ENHANCED);
+        executeAndCollectResults(urlEnhanced);
+        log.info("Enhanced server warmup completed.");
+
         // Execute query on baseline server
         log.info("Executing query on baseline server (port {}, SQL enhancer disabled)...", PORT_BASELINE);
         long startBaseline = System.currentTimeMillis();
@@ -198,6 +203,7 @@ public class PostgresSqlEnhancerIntegrationTest {
         log.info("Baseline server completed in {} ms", timeBaseline);
         
         // Execute query on enhanced server
+        Thread.sleep(500);//Give time to enhancement to happen
         log.info("Executing query on enhanced server (port {}, SQL enhancer enabled)...", PORT_ENHANCED);
         long startEnhanced = System.currentTimeMillis();
         String resultEnhanced = executeAndCollectResults(urlEnhanced);

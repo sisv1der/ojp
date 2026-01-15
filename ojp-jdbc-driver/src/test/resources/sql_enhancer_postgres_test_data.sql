@@ -1,19 +1,19 @@
 -- SQL Enhancer Integration Test Data Setup
 -- Creates schema and loads test data for comparing SQL enhancer performance
 
--- Drop tables if they exist
+-- Drop tables if they exist;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
 
--- Create regions table (100 rows)
+-- Create regions table (100 rows);
 CREATE TABLE regions (
     region_id SERIAL PRIMARY KEY,
     region_name VARCHAR(100) NOT NULL,
     country VARCHAR(100) NOT NULL
 );
 
--- Create customers table (5000 rows)
+-- Create customers table (5000 rows);
 CREATE TABLE customers (
     customer_id SERIAL PRIMARY KEY,
     customer_name VARCHAR(100) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE customers (
     created_at TIMESTAMP DEFAULT now()
 );
 
--- Create orders table (10000 rows)
+-- Create orders table (10000 rows);
 CREATE TABLE orders (
     order_id SERIAL PRIMARY KEY,
     customer_id INT NOT NULL REFERENCES customers(customer_id),
@@ -32,7 +32,7 @@ CREATE TABLE orders (
     order_status VARCHAR(20) NOT NULL
 );
 
--- Insert 100 regions
+-- Insert 500 regions;
 INSERT INTO regions (region_name, country)
 SELECT 
     'Region ' || i,
@@ -48,9 +48,9 @@ SELECT
         WHEN 8 THEN 'Japan'
         ELSE 'Brazil'
     END
-FROM generate_series(1, 100) AS i;
+FROM generate_series(1, 500) AS i;
 
--- Insert 5000 customers
+-- Insert 25000 customers;
 INSERT INTO customers (customer_name, email, region_id, status, created_at)
 SELECT 
     'Customer ' || i,
@@ -64,9 +64,9 @@ SELECT
         ELSE 'PENDING'
     END,
     now() - interval '1 day' * ((i % 365))
-FROM generate_series(1, 5000) AS i;
+FROM generate_series(1, 25000) AS i;
 
--- Insert 10000 orders
+-- Insert 50000 orders;
 INSERT INTO orders (customer_id, amount, order_ts, order_status)
 SELECT 
     ((i - 1) % 5000) + 1, -- Distribute across all customers
@@ -78,15 +78,15 @@ SELECT
         WHEN 2 THEN 'PENDING'
         ELSE 'CANCELLED'
     END
-FROM generate_series(1, 10000) AS i;
+FROM generate_series(1, 50000) AS i;
 
--- Create indexes for better performance (realistic scenario)
+-- Create indexes for better performance (realistic scenario);
 CREATE INDEX idx_customers_region_id ON customers(region_id);
 CREATE INDEX idx_customers_status ON customers(status);
 CREATE INDEX idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX idx_orders_order_ts ON orders(order_ts);
 
--- Analyze tables for better query planning
+-- Analyze tables for better query planning;
 ANALYZE regions;
 ANALYZE customers;
 ANALYZE orders;

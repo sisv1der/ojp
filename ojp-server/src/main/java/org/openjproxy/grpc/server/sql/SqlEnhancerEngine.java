@@ -407,7 +407,7 @@ public class SqlEnhancerEngine {
                     }
                     
                 } catch (RelationalAlgebraConverter.ConversionException e) {
-                    log.debug("Conversion failed, falling back to original SQL: {}", e.getMessage());
+                    log.info("Conversion failed, falling back to original SQL: {}", e.getMessage(), e);
                     result = SqlEnhancementResult.success(sql, false);
                 } catch (Exception e) {
                     log.warn("Unexpected error during conversion/optimization, falling back to original SQL: {}", 
@@ -421,8 +421,8 @@ public class SqlEnhancerEngine {
             
         } catch (SqlParseException e) {
             // Log parse errors with dialect info
-            log.debug("SQL parse error with {} dialect: {} for SQL: {}", 
-                     dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)));
+            log.info("SQL parse error with {} dialect: {} for SQL: {}",
+                     dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)), e);
             
             // On parse error, return original SQL (pass-through mode)
             result = SqlEnhancementResult.passthrough(sql);
