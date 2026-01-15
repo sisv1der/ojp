@@ -144,7 +144,12 @@ public class RelationalAlgebraConverter {
                 if (metadata != null && !metadata.getTables().isEmpty()) {
                     log.debug("Using real schema with {} tables", metadata.getTables().size());
                     org.apache.calcite.schema.Schema realSchema = schemaFactory.createSchema(metadata);
-                    defaultSchema = rootSchema.add("default", realSchema);
+                    // Use the actual schema name from metadata (e.g., "public" for PostgreSQL)
+                    // Fall back to "default" if schema name is not available
+                    String schemaName = (metadata.getSchemaName() != null && !metadata.getSchemaName().isEmpty()) 
+                                        ? metadata.getSchemaName() : "default";
+                    defaultSchema = rootSchema.add(schemaName, realSchema);
+                    log.debug("Added schema '{}' to Calcite root schema", schemaName);
                 } else {
                     log.debug("Real schema not available, using dynamic schema");
                     defaultSchema = rootSchema.add("default", new DynamicSchema());
