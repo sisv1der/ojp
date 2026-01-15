@@ -195,12 +195,14 @@ jobs:
           nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
           echo $! > /tmp/ojp-server.pid
 
-      # Start second OJP server WITH SQL enhancer enabled
+      # Start second OJP server WITH SQL enhancer enabled in OPTIMIZE mode
       # Tests will run against this server via postgres_connection.csv (port 10593)
+      # OPTIMIZE mode enables conversion and optimization with schema loading support
+      # PostgreSQL dialect ensures proper SQL parsing and validation
       # This ensures all PostgreSQL tests validate both configurations
       - name: Test and Run (ojp-server-enhancer on port 10593)
         run: |
-          nohup java -Dojp.server.port=10593 -Dojp.prometheus.port=9163 -Dojp.sql.enhancer.enabled=true -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server-enhancer.log 2>&1 &
+          nohup java -Dojp.server.port=10593 -Dojp.prometheus.port=9163 -Dojp.sql.enhancer.enabled=true -Dojp.sql.enhancer.mode=OPTIMIZE -Dojp.sql.enhancer.dialect=POSTGRESQL -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server-enhancer.log 2>&1 &
           echo $! > /tmp/ojp-server-enhancer.pid
 
       - name: Wait for ojp-server to start
