@@ -141,6 +141,8 @@ public class SqlEnhancerEngine {
         
         // Initialize async executor if needed
         if (optimizationEnabled && this.optimizationMode == OptimizationMode.ASYNC) {
+            // Use 2 threads: one for immediate processing and one for queued work
+            // This balances responsiveness with resource usage
             this.optimizationExecutor = Executors.newFixedThreadPool(2, r -> {
                 Thread t = new Thread(r, "sql-optimizer");
                 t.setDaemon(true);
