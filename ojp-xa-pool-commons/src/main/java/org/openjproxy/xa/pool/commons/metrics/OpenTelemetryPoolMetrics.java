@@ -125,7 +125,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                     int max = currentMaxTotal.get();
                     int active = currentActive.get();
                     double utilization = max > 0 ? (active * 100.0 / max) : 0.0;
-                    measurement.record((long) utilization, attributes);
+                    measurement.record(Math.round(utilization), attributes);
                 });
         
         meter.gaugeBuilder("ojp.xa.pool.connections.created")
