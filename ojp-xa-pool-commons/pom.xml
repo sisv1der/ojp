@@ -19,8 +19,7 @@
     <properties>
         <slf4j.version>2.0.17</slf4j.version>
         <commons-pool2.version>2.13.1</commons-pool2.version>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <opentelemetry.version>1.58.0</opentelemetry.version>
     </properties>
 
     <dependencies>
@@ -37,6 +36,14 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- OpenTelemetry API for metrics -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+            <version>${opentelemetry.version}</version>
             <scope>provided</scope>
         </dependency>
 

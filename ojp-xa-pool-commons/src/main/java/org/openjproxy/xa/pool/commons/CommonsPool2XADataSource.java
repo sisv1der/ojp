@@ -9,6 +9,8 @@ import org.openjproxy.xa.pool.commons.housekeeping.HousekeepingConfig;
 import org.openjproxy.xa.pool.commons.housekeeping.HousekeepingListener;
 import org.openjproxy.xa.pool.commons.housekeeping.LeakDetectionTask;
 import org.openjproxy.xa.pool.commons.housekeeping.LoggingHousekeepingListener;
+import org.openjproxy.xa.pool.commons.metrics.PoolMetrics;
+import org.openjproxy.xa.pool.commons.metrics.PoolMetricsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +69,8 @@ public class CommonsPool2XADataSource implements XADataSource {
     private final Map<String, String> config;
     private final HousekeepingConfig housekeepingConfig;
     private final HousekeepingListener housekeepingListener;
+    private final PoolMetrics poolMetrics;
+    private final String poolName;
     
     // Leak detection state
     private final ConcurrentHashMap<XABackendSession, BorrowInfo> borrowedSessions;
@@ -88,12 +92,18 @@ public class CommonsPool2XADataSource implements XADataSource {
         
         this.vendorXADataSource = vendorXADataSource;
         this.config = config;
+        this.poolName = config.getOrDefault("xa.poolName", "ojp-xa-pool");
+        
+        // Initialize metrics (will be no-op if OpenTelemetry not available)
+        this.poolMetrics = PoolMetricsFactory.create(config, null);
         
         // Parse housekeeping configuration
         this.housekeepingConfig = HousekeepingConfig.parseFromProperties(config);
         
-        // Create housekeeping listener
-        this.housekeepingListener = new LoggingHousekeepingListener();
+        // Create housekeeping listener with metrics support
+        HousekeepingListener baseListener = new LoggingHousekeepingListener();
+        this.housekeepingListener = new org.openjproxy.xa.pool.commons.housekeeping.MetricsAwareHousekeepingListener(
+            baseListener, poolMetrics, poolName);
         
         // Initialize leak detection tracking
         this.borrowedSessions = new ConcurrentHashMap<>();
@@ -139,6 +149,8 @@ public class CommonsPool2XADataSource implements XADataSource {
         log.info("[XA-POOL-BORROW] Attempting to borrow session (state BEFORE: active={}, idle={}, maxTotal={}, maxIdle={}, minIdle={})",
                 pool.getNumActive(), pool.getNumIdle(), pool.getMaxTotal(), pool.getMaxIdle(), pool.getMinIdle());
         
+        long startTime = System.currentTimeMillis();
+        
         try {
             XABackendSession session = pool.borrowObject();
             
@@ -155,6 +167,13 @@ public class CommonsPool2XADataSource implements XADataSource {
                 ));
             }
             
+            // Record acquisition time
+            long duration = System.currentTimeMillis() - startTime;
+            poolMetrics.recordConnectionAcquisitionTime(poolName, duration);
+            
+            // Update pool state metrics
+            updatePoolMetrics();
+            
             log.info("[XA-POOL-BORROW] Session borrowed successfully (state AFTER: active={}, idle={}, maxTotal={})",
                     pool.getNumActive(), pool.getNumIdle(), pool.getMaxTotal());
             
@@ -167,6 +186,10 @@ public class CommonsPool2XADataSource implements XADataSource {
                 "[XA-POOL-BORROW] POOL EXHAUSTED: maxTotal=%d, active=%d, idle=%d, timeout=%dms. " +
                 "Increase pool size or reduce concurrent XA transactions.",
                 pool.getMaxTotal(), pool.getNumActive(), pool.getNumIdle(), maxWaitMs);
+            
+            // Record pool exhaustion event
+            poolMetrics.recordPoolExhaustion(poolName);
+            updatePoolMetrics();
             
             log.error(errorMsg);
             throw new SQLException(errorMsg, "08001", e);
@@ -210,6 +233,9 @@ public class CommonsPool2XADataSource implements XADataSource {
             log.debug("[XA-POOL-RETURN] Session returned successfully (state AFTER: active={}, idle={}, maxTotal={})",
                     pool.getNumActive(), pool.getNumIdle(), pool.getMaxTotal());
             
+            // Update pool metrics after return
+            updatePoolMetrics();
+            
         } catch (Exception e) {
             log.error("[XA-POOL-RETURN] Failed to return session to pool (active={}, idle={}, maxTotal={})",
                     pool.getNumActive(), pool.getNumIdle(), pool.getMaxTotal(), e);
@@ -238,6 +264,10 @@ public class CommonsPool2XADataSource implements XADataSource {
         
         try {
             pool.invalidateObject(session);
+            
+            // Record validation failure metric
+            poolMetrics.recordValidationFailure(poolName);
+            updatePoolMetrics();
             
             log.info("[XA-POOL-INVALIDATE] Session invalidated (after: active={}, idle={}, maxTotal={})",
                     pool.getNumActive(), pool.getNumIdle(), pool.getMaxTotal());
@@ -536,14 +566,39 @@ public class CommonsPool2XADataSource implements XADataSource {
      * This method sets up scheduled tasks for leak detection if enabled.
      * </p>
      */
+    /**
+     * Updates the pool metrics with current pool state.
+     * This method collects and records pool statistics to OpenTelemetry.
+     */
+    private void updatePoolMetrics() {
+        try {
+            poolMetrics.recordPoolState(
+                poolName,
+                pool.getNumActive(),
+                pool.getNumIdle(),
+                pool.getNumWaiters(),
+                pool.getMaxTotal(),
+                pool.getMinIdle(),
+                pool.getCreatedCount(),
+                pool.getDestroyedCount(),
+                pool.getBorrowedCount(),
+                pool.getReturnedCount()
+            );
+        } catch (Exception e) {
+            log.warn("Failed to update pool metrics: {}", e.getMessage());
+        }
+    }
+    
     private void initializeHousekeeping() {
         boolean needsExecutor = housekeepingConfig.isLeakDetectionEnabled() || housekeepingConfig.isDiagnosticsEnabled();
         
         if (needsExecutor) {
-            // Create virtual thread executor for housekeeping tasks (Java 21+)
-            housekeepingExecutor = Executors.newSingleThreadScheduledExecutor(
-                Thread.ofVirtual().name("ojp-xa-housekeeping-", 0).factory()
-            );
+            // Create executor for housekeeping tasks
+            housekeepingExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "ojp-xa-housekeeping");
+                t.setDaemon(true);
+                return t;
+            });
         }
         
         // Initialize leak detection if enabled
@@ -620,6 +675,13 @@ public class CommonsPool2XADataSource implements XADataSource {
         }
         
         pool.close();
+        
+        // Close metrics
+        try {
+            poolMetrics.close();
+        } catch (Exception e) {
+            log.warn("Failed to close pool metrics: {}", e.getMessage());
+        }
         
         log.info("CommonsPool2XADataSource closed");
     }
