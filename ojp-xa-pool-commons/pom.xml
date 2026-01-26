@@ -71,6 +71,22 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- OpenTelemetry SDK for testing -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+            <version>${opentelemetry.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- OpenTelemetry SDK testing utilities -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>${opentelemetry.version}</version>
+            <scope>test</scope>
+        </dependency>
+
         <!-- SLF4J Simple for test logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
