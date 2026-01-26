@@ -59,23 +59,27 @@ public class PostgresSqlEnhancerIntegrationTest {
     // Test query - intentionally inefficient for SQL enhancer to optimize
     private static final String TEST_QUERY = 
         "SELECT\n" +
-        "  r.region_name,\n" +
-        "  count(*) AS order_cnt,\n" +
-        "  sum(o.amount) AS total_amount\n" +
-        "FROM orders o\n" +
-        "JOIN customers c\n" +
-        "  ON c.customer_id = o.customer_id\n" +
-        "JOIN regions r\n" +
-        "  ON r.region_id = c.region_id\n" +
-        "WHERE\n" +
-        "  o.order_ts >= CURRENT_TIMESTAMP - INTERVAL '30' DAY\n" +
-        "  AND c.status = 'ACTIVE'\n" +
-        "GROUP BY r.region_name\n" +
-        "ORDER BY total_amount DESC";
+                "  r.region_name,\n" +
+                "  (SELECT COUNT(*)\n" +
+                "   FROM orders o\n" +
+                "   JOIN customers c2 ON c2.customer_id = o.customer_id\n" +
+                "   WHERE c2.region_id = r.region_id\n" +
+                "     AND c2.status = 'ACTIVE'\n" +
+                "     AND o.order_ts >= CURRENT_TIMESTAMP - INTERVAL '30' DAY\n" +
+                "  ) AS order_cnt,\n" +
+                "  (SELECT COALESCE(SUM(o.amount), 0)\n" +
+                "   FROM orders o\n" +
+                "   JOIN customers c2 ON c2.customer_id = o.customer_id\n" +
+                "   WHERE c2.region_id = r.region_id\n" +
+                "     AND c2.status = 'ACTIVE'\n" +
+                "     AND o.order_ts >= CURRENT_TIMESTAMP - INTERVAL '30' DAY\n" +
+                "  ) AS total_amount\n" +
+                "FROM regions r\n" +
+                "ORDER BY total_amount DESC\n";
 
     @BeforeAll
     public static void setup() throws Exception {
-        isTestEnabled = Boolean.parseBoolean(System.getProperty("enableSqlEnhancerIntegrationTest", "false"));
+        isTestEnabled = Boolean.parseBoolean(System.getProperty("enableSqlEnhancerIntegrationTest", "true"));
         
         if (!isTestEnabled) {
             log.info("PostgreSQL SQL Enhancer Integration Test is disabled. Enable with -DenableSqlEnhancerIntegrationTest=true");
@@ -190,10 +194,22 @@ public class PostgresSqlEnhancerIntegrationTest {
         // Load OJP driver
         Class.forName("org.openjproxy.jdbc.Driver");
 
-        // Execute query on enhanced server
-        log.info("Executing query on enhanced server for generating enhanced query (port {}, SQL enhancer enabled)...", PORT_ENHANCED);
+        // Execute both baseline query and enhanced query once.
+        log.info("Warming up queries...");
+        // The first call will actually execute the original query as per no cache exists.
         executeAndCollectResults(urlEnhanced);
-        log.info("Enhanced server warmup completed.");
+        Thread.sleep(5000);//Give time to enhancement to happen
+        // The call after waiting should execute a cached enhanced SQL.
+        log.info("Warmup completed.");
+
+
+
+        // Execute query on enhanced server
+        log.info("Executing query on enhanced server (port {}, SQL enhancer enabled)...", PORT_ENHANCED);
+        long startEnhanced = System.currentTimeMillis();
+        String resultEnhanced = executeAndCollectResults(urlEnhanced);
+        long timeEnhanced = System.currentTimeMillis() - startEnhanced;
+        log.info("Enhanced server completed in {} ms", timeEnhanced);
 
         // Execute query on baseline server
         log.info("Executing query on baseline server (port {}, SQL enhancer disabled)...", PORT_BASELINE);
@@ -201,22 +217,14 @@ public class PostgresSqlEnhancerIntegrationTest {
         String resultBaseline = executeAndCollectResults(urlBaseline);
         long timeBaseline = System.currentTimeMillis() - startBaseline;
         log.info("Baseline server completed in {} ms", timeBaseline);
-        
-        // Execute query on enhanced server
-        Thread.sleep(500);//Give time to enhancement to happen
-        log.info("Executing query on enhanced server (port {}, SQL enhancer enabled)...", PORT_ENHANCED);
-        long startEnhanced = System.currentTimeMillis();
-        String resultEnhanced = executeAndCollectResults(urlEnhanced);
-        long timeEnhanced = System.currentTimeMillis() - startEnhanced;
-        log.info("Enhanced server completed in {} ms", timeEnhanced);
-        
+
         // Verify results are identical
         assertEquals(resultBaseline, resultEnhanced, 
             "Results from both servers should be identical");
         
         // Calculate performance difference
         double percentDiff = ((double)(timeBaseline - timeEnhanced) / timeBaseline) * 100;
-        log.info("Performance comparison: Baseline = {} ms, Enhanced = {} ms, Difference = {:.1f}%",
+        log.info("Performance comparison: Baseline = {} ms, Enhanced = {} ms, Difference = {}%",
             timeBaseline, timeEnhanced, percentDiff);
         
         if (timeEnhanced < timeBaseline) {
