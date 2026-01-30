@@ -419,8 +419,8 @@ public class SqlEnhancerEngine {
                                 long optimizationEndTime = System.currentTimeMillis();
                                 long optimizationTime = optimizationEndTime - optimizationStartTime;
                                 
-                                // Check if SQL was actually modified
-                                boolean wasModified = !sql.trim().equalsIgnoreCase(optimizedSql.trim());
+                                // Check if SQL was actually modified (case-sensitive to detect quoted identifiers and schema qualifiers)
+                                boolean wasModified = !sql.trim().equals(optimizedSql.trim());
                                 
                                 // Track metrics
                                 totalQueriesOptimized.incrementAndGet();
