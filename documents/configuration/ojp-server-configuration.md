@@ -8,26 +8,26 @@ The server supports configuration through both JVM system properties and environ
 
 ### Core Server Settings
 
-| Property                             | Environment Variable                 | Type    | Default   | Description                                            |
-|--------------------------------------|--------------------------------------|---------|-----------|--------------------------------------------------------|
-| `ojp.server.port`                    | `OJP_SERVER_PORT`                    | int     | 1059      | gRPC server port                                       |
-| `ojp.prometheus.port`                | `OJP_PROMETHEUS_PORT`                | int     | 9159      | Prometheus metrics HTTP server port                    |
-| `ojp.server.threadPoolSize`          | `OJP_SERVER_THREADPOOLSIZE`          | int     | 200       | gRPC server thread pool size                           |
-| `ojp.server.maxRequestSize`          | `OJP_SERVER_MAXREQUESTSIZE`          | int     | 4194304   | Maximum request size in bytes (4MB)                    |
-| `ojp.server.connectionIdleTimeout`   | `OJP_SERVER_CONNECTIONIDLETIMEOUT`   | long    | 30000     | Connection idle timeout in milliseconds                |
+| Property                             | Environment Variable                 | Type    | Default   | Description                                            | Since   |
+|--------------------------------------|--------------------------------------|---------|-----------|--------------------------------------------------------|---------|
+| `ojp.server.port`                    | `OJP_SERVER_PORT`                    | int     | 1059      | gRPC server port                                       | 0.2.0-beta |
+| `ojp.prometheus.port`                | `OJP_PROMETHEUS_PORT`                | int     | 9159      | Prometheus metrics HTTP server port                    | 0.2.0-beta |
+| `ojp.server.threadPoolSize`          | `OJP_SERVER_THREADPOOLSIZE`          | int     | 200       | gRPC server thread pool size                           | 0.2.0-beta |
+| `ojp.server.maxRequestSize`          | `OJP_SERVER_MAXREQUESTSIZE`          | int     | 4194304   | Maximum request size in bytes (4MB)                    | 0.2.0-beta |
+| `ojp.server.connectionIdleTimeout`   | `OJP_SERVER_CONNECTIONIDLETIMEOUT`   | long    | 30000     | Connection idle timeout in milliseconds                | 0.2.0-beta |
 
 ### Logging Settings
 
 OJP Server uses Logback for logging with fully configurable options. All logging properties can be set via system properties or environment variables.
 
-| Property                           | Environment Variable               | Type    | Default                            | Description                                   |
-|------------------------------------|------------------------------------|---------|------------------------------------|-----------------------------------------------|
-| `ojp.server.logLevel`              | `OJP_SERVER_LOGLEVEL`              | string  | INFO                               | Root log level (TRACE, DEBUG, INFO, WARN, ERROR) |
-| `ojp.server.log.file`              | `OJP_SERVER_LOG_FILE`              | string  | logs/ojp-server.log                | Log file location                            |
-| `ojp.server.log.fileNamePattern`   | `OJP_SERVER_LOG_FILENAMEPATTERN`   | string  | logs/ojp-server.%d{yyyy-MM-dd}.log | Rolling file pattern (daily rollover)       |
-| `ojp.server.log.maxHistory`        | `OJP_SERVER_LOG_MAXHISTORY`        | int     | 30                                 | Number of days to keep log files            |
-| `ojp.server.log.totalSizeCap`      | `OJP_SERVER_LOG_TOTALSIZECAP`      | string  | 1GB                                | Total size cap for all log files            |
-| `ojp.server.log.pattern`           | `OJP_SERVER_LOG_PATTERN`           | string  | %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n | Log message pattern |
+| Property                           | Environment Variable               | Type    | Default                            | Description                                   | Since      |
+|------------------------------------|------------------------------------|---------|------------------------------------|-----------------------------------------------|------------|
+| `ojp.server.logLevel`              | `OJP_SERVER_LOGLEVEL`              | string  | INFO                               | Root log level (TRACE, DEBUG, INFO, WARN, ERROR) | 0.2.0-beta    |
+| `ojp.server.log.file`              | `OJP_SERVER_LOG_FILE`              | string  | logs/ojp-server.log                | Log file location                            | 0.4.0-beta |
+| `ojp.server.log.fileNamePattern`   | `OJP_SERVER_LOG_FILENAMEPATTERN`   | string  | logs/ojp-server.%d{yyyy-MM-dd}.log | Rolling file pattern (daily rollover)       | 0.4.0-beta |
+| `ojp.server.log.maxHistory`        | `OJP_SERVER_LOG_MAXHISTORY`        | int     | 30                                 | Number of days to keep log files            | 0.4.0-beta |
+| `ojp.server.log.totalSizeCap`      | `OJP_SERVER_LOG_TOTALSIZECAP`      | string  | 1GB                                | Total size cap for all log files            | 0.4.0-beta |
+| `ojp.server.log.pattern`           | `OJP_SERVER_LOG_PATTERN`           | string  | %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n | Log message pattern | 0.4.0-beta |
 
 #### Logging Configuration Examples
 
@@ -57,10 +57,10 @@ java -Dojp.server.logLevel=INFO \
 
 ### Security Settings
 
-| Property                      | Environment Variable          | Type    | Default   | Description                                              |
-|-------------------------------|-------------------------------|---------|-----------|----------------------------------------------------------|
-| `ojp.server.allowedIps`       | `OJP_SERVER_ALLOWEDIPS`       | string  | 0.0.0.0/0 | IP whitelist for gRPC server (comma-separated)          |
-| `ojp.prometheus.allowedIps`   | `OJP_PROMETHEUS_ALLOWEDIPS`   | string  | 0.0.0.0/0 | IP whitelist for Prometheus endpoint (comma-separated)  |
+| Property                      | Environment Variable          | Type    | Default   | Description                                              | Since |
+|-------------------------------|-------------------------------|---------|-----------|----------------------------------------------------------|-------|
+| `ojp.server.allowedIps`       | `OJP_SERVER_ALLOWEDIPS`       | string  | 0.0.0.0/0 | IP whitelist for gRPC server (comma-separated)          | 0.2.0-beta |
+| `ojp.prometheus.allowedIps`   | `OJP_PROMETHEUS_ALLOWEDIPS`   | string  | 0.0.0.0/0 | IP whitelist for Prometheus endpoint (comma-separated)  | 0.2.0-beta |
 
 #### SSL/TLS Certificate Path Placeholders
 
@@ -98,39 +98,39 @@ For detailed configuration examples for each database, see [SSL/TLS Certificate 
 
 ### OpenTelemetry Settings
 
-| Property                      | Environment Variable          | Type    | Default | Description                                    |
-|-------------------------------|-------------------------------|---------|---------|------------------------------------------------|
-| `ojp.opentelemetry.enabled`   | `OJP_OPENTELEMETRY_ENABLED`   | boolean | true    | Enable/disable OpenTelemetry instrumentation  |
-| `ojp.opentelemetry.endpoint`  | `OJP_OPENTELEMETRY_ENDPOINT`  | string  | ""      | OpenTelemetry exporter endpoint (empty = default) |
+| Property                      | Environment Variable          | Type    | Default | Description                                    | Since |
+|-------------------------------|-------------------------------|---------|---------|------------------------------------------------|-------|
+| `ojp.opentelemetry.enabled`   | `OJP_OPENTELEMETRY_ENABLED`   | boolean | true    | Enable/disable OpenTelemetry instrumentation  | 0.2.0-beta |
+| `ojp.opentelemetry.endpoint`  | `OJP_OPENTELEMETRY_ENDPOINT`  | string  | ""      | OpenTelemetry exporter endpoint (empty = default) | 0.2.0-beta |
 
 ### Circuit Breaker Settings
 
-| Property                             | Environment Variable                 | Type | Default | Description                                       |
-|--------------------------------------|--------------------------------------|------|---------|---------------------------------------------------|
-| `ojp.server.circuitBreakerTimeout`   | `OJP_SERVER_CIRCUITBREAKERTIMEOUT`   | long | 60000   | Circuit breaker timeout once open in milliseconds |
-| `ojp.server.circuitBreakerThreshold` | `OJP_SERVER_CIRCUITBREAKERTHRESHOLD` | int  | 3       | Circuit breaker failure threshold                 |
+| Property                             | Environment Variable                 | Type | Default | Description                                       | Since |
+|--------------------------------------|--------------------------------------|------|---------|---------------------------------------------------|-------|
+| `ojp.server.circuitBreakerTimeout`   | `OJP_SERVER_CIRCUITBREAKERTIMEOUT`   | long | 60000   | Circuit breaker timeout once open in milliseconds | 0.2.0-beta |
+| `ojp.server.circuitBreakerThreshold` | `OJP_SERVER_CIRCUITBREAKERTHRESHOLD` | int  | 3       | Circuit breaker failure threshold                 | 0.2.0-beta |
 
 ### Slow Query Segregation Settings
 
-| Property                                           | Environment Variable                               | Type    | Default  | Description                                      |
-|----------------------------------------------------|----------------------------------------------------|---------|----------|--------------------------------------------------|
-| `ojp.server.slowQuerySegregation.enabled`         | `OJP_SERVER_SLOWQUERYSEGREGATION_ENABLED`         | boolean | true     | Enable/disable slow query segregation feature   |
-| `ojp.server.slowQuerySegregation.slowSlotPercentage` | `OJP_SERVER_SLOWQUERYSEGREGATION_SLOWSLOTPERCENTAGE` | int     | 20       | Percentage of slots for slow operations (0-100) |
-| `ojp.server.slowQuerySegregation.idleTimeout`     | `OJP_SERVER_SLOWQUERYSEGREGATION_IDLETIMEOUT`     | long    | 10000    | Idle timeout for slot borrowing (milliseconds)  |
-| `ojp.server.slowQuerySegregation.slowSlotTimeout` | `OJP_SERVER_SLOWQUERYSEGREGATION_SLOWSLOTTIMEOUT` | long    | 120000   | Timeout for acquiring slow operation slots (ms) |
-| `ojp.server.slowQuerySegregation.fastSlotTimeout` | `OJP_SERVER_SLOWQUERYSEGREGATION_FASTSLOTTIMEOUT` | long    | 60000    | Timeout for acquiring fast operation slots (ms) |
+| Property                                           | Environment Variable                               | Type    | Default  | Description                                      | Since |
+|----------------------------------------------------|----------------------------------------------------|---------|----------|--------------------------------------------------|-------|
+| `ojp.server.slowQuerySegregation.enabled`         | `OJP_SERVER_SLOWQUERYSEGREGATION_ENABLED`         | boolean | true     | Enable/disable slow query segregation feature   | 0.2.0-beta |
+| `ojp.server.slowQuerySegregation.slowSlotPercentage` | `OJP_SERVER_SLOWQUERYSEGREGATION_SLOWSLOTPERCENTAGE` | int     | 20       | Percentage of slots for slow operations (0-100) | 0.2.0-beta |
+| `ojp.server.slowQuerySegregation.idleTimeout`     | `OJP_SERVER_SLOWQUERYSEGREGATION_IDLETIMEOUT`     | long    | 10000    | Idle timeout for slot borrowing (milliseconds)  | 0.2.0-beta |
+| `ojp.server.slowQuerySegregation.slowSlotTimeout` | `OJP_SERVER_SLOWQUERYSEGREGATION_SLOWSLOTTIMEOUT` | long    | 120000   | Timeout for acquiring slow operation slots (ms) | 0.2.0-beta |
+| `ojp.server.slowQuerySegregation.fastSlotTimeout` | `OJP_SERVER_SLOWQUERYSEGREGATION_FASTSLOTTIMEOUT` | long    | 60000    | Timeout for acquiring fast operation slots (ms) | 0.2.0-beta |
 
 ### SQL Enhancer and Schema Loader Settings
 
 The SQL Enhancer provides query optimization using Apache Calcite with real database schema metadata for accurate query analysis.
 
-| Property                                           | Environment Variable                               | Type    | Default  | Description                                      |
-|----------------------------------------------------|----------------------------------------------------|---------|----------|--------------------------------------------------|
-| `ojp.sql.enhancer.enabled`                        | `OJP_SQL_ENHANCER_ENABLED`                        | boolean | false    | Enable/disable SQL query enhancement            |
-| `ojp.sql.enhancer.schema.refresh.enabled`         | `OJP_SQL_ENHANCER_SCHEMA_REFRESH_ENABLED`         | boolean | true     | Enable automatic schema metadata refresh        |
-| `ojp.sql.enhancer.schema.refresh.interval.hours`  | `OJP_SQL_ENHANCER_SCHEMA_REFRESH_INTERVAL_HOURS`  | long    | 24       | Hours between automatic schema refreshes         |
-| `ojp.sql.enhancer.schema.load.timeout.seconds`    | `OJP_SQL_ENHANCER_SCHEMA_LOAD_TIMEOUT_SECONDS`    | long    | 30       | Timeout for schema loading operations (seconds) |
-| `ojp.sql.enhancer.schema.fallback.enabled`        | `OJP_SQL_ENHANCER_SCHEMA_FALLBACK_ENABLED`        | boolean | true     | Fall back to generic schema if loading fails    |
+| Property                                           | Environment Variable                               | Type    | Default  | Description                                      | Since |
+|----------------------------------------------------|----------------------------------------------------|---------|----------|--------------------------------------------------|-------|
+| `ojp.sql.enhancer.enabled`                        | `OJP_SQL_ENHANCER_ENABLED`                        | boolean | false    | Enable/disable SQL query enhancement            | 0.4.0-beta |
+| `ojp.sql.enhancer.schema.refresh.enabled`         | `OJP_SQL_ENHANCER_SCHEMA_REFRESH_ENABLED`         | boolean | true     | Enable automatic schema metadata refresh        | 0.4.0-beta |
+| `ojp.sql.enhancer.schema.refresh.interval.hours`  | `OJP_SQL_ENHANCER_SCHEMA_REFRESH_INTERVAL_HOURS`  | long    | 24       | Hours between automatic schema refreshes         | 0.4.0-beta |
+| `ojp.sql.enhancer.schema.load.timeout.seconds`    | `OJP_SQL_ENHANCER_SCHEMA_LOAD_TIMEOUT_SECONDS`    | long    | 30       | Timeout for schema loading operations (seconds) | 0.4.0-beta |
+| `ojp.sql.enhancer.schema.fallback.enabled`        | `OJP_SQL_ENHANCER_SCHEMA_FALLBACK_ENABLED`        | boolean | true     | Fall back to generic schema if loading fails    | 0.4.0-beta |
 
 #### SQL Enhancer Configuration Examples
 

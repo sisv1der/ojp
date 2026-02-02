@@ -267,25 +267,17 @@ Complete example configuration files for different environments are available:
 
 These examples demonstrate recommended settings for each environment and can be used as starting templates.
 
-| Property                              | Type | Default | Description                                              |
-|---------------------------------------|------|---------|----------------------------------------------------------|
-| `ojp.connection.pool.maximumPoolSize` | int  | 20      | Maximum number of connections in the pool                |
-| `ojp.connection.pool.minimumIdle`     | int  | 5       | Minimum number of idle connections maintained            |
-| `ojp.connection.pool.idleTimeout`     | long | 600000  | Maximum time (ms) a connection can sit idle (10 minutes) |
-| `ojp.connection.pool.maxLifetime`     | long | 1800000 | Maximum lifetime (ms) of a connection (30 minutes)       |
-| `ojp.connection.pool.connectionTimeout` | long | 10000   | Maximum time (ms) to wait for a connection (10 seconds)  |
-
 ### Connection Pool Properties
 
-| Property                              | Type | Default | Description                                              |
-|---------------------------------------|------|---------|----------------------------------------------------------|
-| `ojp.connection.pool.enabled`         | boolean | true | Enable/disable connection pooling |
-| `ojp.connection.pool.maximumPoolSize` | int  | 20      | Maximum number of connections in the pool                |
-| `ojp.connection.pool.minimumIdle`     | int  | 5       | Minimum number of idle connections maintained            |
-| `ojp.connection.pool.idleTimeout`     | long | 600000  | Maximum time (ms) a connection can sit idle (10 minutes) |
-| `ojp.connection.pool.maxLifetime`     | long | 1800000 | Maximum lifetime (ms) of a connection (30 minutes)       |
-| `ojp.connection.pool.connectionTimeout` | long | 10000   | Maximum time (ms) to wait for a connection (10 seconds)  |
-| `ojp.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Default transaction isolation level (see below) |
+| Property                              | Type | Default | Description                                              | Since |
+|---------------------------------------|------|---------|----------------------------------------------------------|-------|
+| `ojp.connection.pool.enabled`         | boolean | true | Enable/disable connection pooling | 0.2.0-beta |
+| `ojp.connection.pool.maximumPoolSize` | int  | 20      | Maximum number of connections in the pool                | 0.2.0-beta |
+| `ojp.connection.pool.minimumIdle`     | int  | 5       | Minimum number of idle connections maintained            | 0.2.0-beta |
+| `ojp.connection.pool.idleTimeout`     | long | 600000  | Maximum time (ms) a connection can sit idle (10 minutes) | 0.2.0-beta |
+| `ojp.connection.pool.maxLifetime`     | long | 1800000 | Maximum lifetime (ms) of a connection (30 minutes)       | 0.2.0-beta |
+| `ojp.connection.pool.connectionTimeout` | long | 10000   | Maximum time (ms) to wait for a connection (10 seconds)  | 0.2.0-beta |
+| `ojp.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Default transaction isolation level (see below) | 0.2.0-beta |
 
 **Note**: These properties can be used with or without a datasource name prefix. For example:
 - `ojp.connection.pool.maximumPoolSize=20` (default datasource)
@@ -301,10 +293,10 @@ By default, OJP uses **READ_COMMITTED** as the default transaction isolation lev
 
 #### Configuration Property
 
-| Property                              | Type | Default | Description                                              |
-|---------------------------------------|------|---------|----------------------------------------------------------|
-| `ojp.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Transaction isolation level to reset connections to |
-| `ojp.xa.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Transaction isolation level for XA connections |
+| Property                              | Type | Default | Description                                              | Since |
+|---------------------------------------|------|---------|----------------------------------------------------------|-------|
+| `ojp.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Transaction isolation level to reset connections to | 0.2.0-beta |
+| `ojp.xa.connection.pool.defaultTransactionIsolation` | string/int | READ_COMMITTED | Transaction isolation level for XA connections | 0.2.0-beta |
 
 #### Valid Values
 
@@ -475,17 +467,17 @@ prod.ojp.xa.connection.pool.minIdle=10
 
 When using XA (distributed transaction) connections via `OjpXADataSource` **with pooling enabled**, OJP uses **server-side backend session pooling** with Apache Commons Pool 2. This is separate from the HikariCP pooling used for non-XA connections.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `ojp.xa.connection.pool.enabled` | boolean | true | Enable/disable XA connection pooling |
-| `ojp.xa.connection.pool.maxTotal` | int | 20 | Maximum XA backend sessions per server |
-| `ojp.xa.connection.pool.minIdle` | int | 5 | Minimum idle XA sessions (pre-warmed) |
-| `ojp.xa.connection.pool.connectionTimeout` | long | 20000 | Max wait time (ms) to borrow session (20 seconds) |
-| `ojp.xa.connection.pool.idleTimeout` | long | 600000 | Max idle time (ms) before eviction (10 minutes) |
-| `ojp.xa.connection.pool.maxLifetime` | long | 1800000 | Max lifetime (ms) of XA session (30 minutes) |
-| `ojp.xa.connection.pool.timeBetweenEvictionRuns` | long | 30000 | How often evictor runs (ms) to clean up excess idle connections (30 seconds) |
-| `ojp.xa.connection.pool.numTestsPerEvictionRun` | int | 10 | Number of idle connections checked per eviction run |
-| `ojp.xa.connection.pool.softMinEvictableIdleTime` | long | 60000 | Min idle time (ms) before soft eviction respecting minIdle (60 seconds) |
+| Property | Type | Default | Description | Since |
+|----------|------|---------|-------------|-------|
+| `ojp.xa.connection.pool.enabled` | boolean | true | Enable/disable XA connection pooling | 0.2.0-beta |
+| `ojp.xa.connection.pool.maxTotal` | int | 20 | Maximum XA backend sessions per server | 0.2.0-beta |
+| `ojp.xa.connection.pool.minIdle` | int | 5 | Minimum idle XA sessions (pre-warmed) | 0.2.0-beta |
+| `ojp.xa.connection.pool.connectionTimeout` | long | 20000 | Max wait time (ms) to borrow session (20 seconds) | 0.2.0-beta |
+| `ojp.xa.connection.pool.idleTimeout` | long | 600000 | Max idle time (ms) before eviction (10 minutes) | 0.2.0-beta |
+| `ojp.xa.connection.pool.maxLifetime` | long | 1800000 | Max lifetime (ms) of XA session (30 minutes) | 0.2.0-beta |
+| `ojp.xa.connection.pool.timeBetweenEvictionRuns` | long | 30000 | How often evictor runs (ms) to clean up excess idle connections (30 seconds) | 0.2.0-beta |
+| `ojp.xa.connection.pool.numTestsPerEvictionRun` | int | 10 | Number of idle connections checked per eviction run | 0.2.0-beta |
+| `ojp.xa.connection.pool.softMinEvictableIdleTime` | long | 60000 | Min idle time (ms) before soft eviction respecting minIdle (60 seconds) | 0.2.0-beta |
 
 #### XA Pool Architecture
 

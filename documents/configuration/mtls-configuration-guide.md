@@ -121,15 +121,15 @@ The client will use the JVM's default truststore (typically `$JAVA_HOME/lib/secu
 
 ### Client Configuration Properties
 
-| Property | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ojp.client.tls.enabled` | No | `false` | Enable/disable TLS |
-| `ojp.client.tls.keystore.path` | For mTLS | - | Path to client certificate keystore |
-| `ojp.client.tls.keystore.password` | For mTLS | - | Password for client keystore |
-| `ojp.client.tls.truststore.path` | No | JVM default | Path to truststore for server verification |
-| `ojp.client.tls.truststore.password` | No | - | Password for truststore |
-| `ojp.client.tls.keystore.type` | No | `JKS` | Keystore type (JKS, PKCS12, etc.) |
-| `ojp.client.tls.truststore.type` | No | `JKS` | Truststore type |
+| Property | Required | Default | Description | Since |
+|----------|----------|---------|-------------|-------|
+| `ojp.client.tls.enabled` | No | `false` | Enable/disable TLS | 0.4.0-beta |
+| `ojp.client.tls.keystore.path` | For mTLS | - | Path to client certificate keystore | 0.4.0-beta |
+| `ojp.client.tls.keystore.password` | For mTLS | - | Password for client keystore | 0.4.0-beta |
+| `ojp.client.tls.truststore.path` | No | JVM default | Path to truststore for server verification | 0.4.0-beta |
+| `ojp.client.tls.truststore.password` | No | - | Password for truststore | 0.4.0-beta |
+| `ojp.client.tls.keystore.type` | No | `JKS` | Keystore type (JKS, PKCS12, etc.) | 0.4.0-beta |
+| `ojp.client.tls.truststore.type` | No | `JKS` | Truststore type | 0.4.0-beta |
 
 ## Server Configuration
 
@@ -170,16 +170,16 @@ java -Dojp.server.tls.enabled=true \
 
 ### Server Configuration Properties
 
-| Property | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ojp.server.tls.enabled` | No | `false` | Enable/disable TLS |
-| `ojp.server.tls.keystore.path` | Yes (if TLS enabled) | - | Path to server certificate keystore |
-| `ojp.server.tls.keystore.password` | Yes | - | Password for server keystore |
-| `ojp.server.tls.truststore.path` | For mTLS | JVM default | Path to truststore for client verification |
-| `ojp.server.tls.truststore.password` | No | - | Password for truststore |
-| `ojp.server.tls.keystore.type` | No | `JKS` | Keystore type |
-| `ojp.server.tls.truststore.type` | No | `JKS` | Truststore type |
-| `ojp.server.tls.clientAuthRequired` | No | `false` | Require client certificates (mTLS) |
+| Property | Required | Default | Description | Since |
+|----------|----------|---------|-------------|-------|
+| `ojp.server.tls.enabled` | No | `false` | Enable/disable TLS | 0.4.0-beta |
+| `ojp.server.tls.keystore.path` | Yes (if TLS enabled) | - | Path to server certificate keystore | 0.4.0-beta |
+| `ojp.server.tls.keystore.password` | Yes | - | Password for server keystore | 0.4.0-beta |
+| `ojp.server.tls.truststore.path` | For mTLS | JVM default | Path to truststore for client verification | 0.4.0-beta |
+| `ojp.server.tls.truststore.password` | No | - | Password for truststore | 0.4.0-beta |
+| `ojp.server.tls.keystore.type` | No | `JKS` | Keystore type | 0.4.0-beta |
+| `ojp.server.tls.truststore.type` | No | `JKS` | Truststore type | 0.4.0-beta |
+| `ojp.server.tls.clientAuthRequired` | No | `false` | Require client certificates (mTLS) | 0.4.0-beta |
 
 ## Certificate Management
 
