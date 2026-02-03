@@ -28,7 +28,7 @@ public class OptimizationRuleRegistry {
         // Register subquery removal rules (converts correlated subqueries to joins)
         // SubQueryRemoveRule works with RexSubQuery nodes to convert them to joins
         registerRule("SUB_QUERY_REMOVE", SubQueryRemoveRule.Config.PROJECT.toRule());
-        registerRule("SUB_QUERY_REMOVE_RULE", SubQueryRemoveRule.Config.PROJECT.toRule());  // Alias for user convenience
+        registerRule("SUB_QUERY_REMOVE_RULE", SubQueryRemoveRule.Config.PROJECT.toRule());  // Backward compatibility alias
         registerRule("SUB_QUERY_REMOVE_FILTER", SubQueryRemoveRule.Config.FILTER.toRule());
         registerRule("SUB_QUERY_REMOVE_JOIN", SubQueryRemoveRule.Config.JOIN.toRule());
         
