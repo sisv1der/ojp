@@ -10,6 +10,19 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class MultinodeXaCoordinatorTest {
+    private static final int THIRTY = 30;
+    private static final int FIFTEEN = 15;
+    private static final int SEVENTEEN = 17;
+    private static final int THREE = 3;
+    private static final int TEN = 10;
+    private static final int FIFTY = 50;
+    private static final int FORTY = 40;
+    private static final int SIXTY = 60;
+    private static final int TWENTY = 20;
+    private static final int FIVE = 5;
+    private static final int ONE = 1;
+    private static final int TWO = 2;
+    private static final int FOUR = 4;
 
     @Test
     void testSingleNodeConfiguration() {
@@ -17,11 +30,11 @@ class MultinodeXaCoordinatorTest {
 
         // Single node (empty server list)
         MultinodeXaCoordinator.XaAllocation allocation =
-                coordinator.calculateXaLimits("conn1", 30, null);
+                coordinator.calculateXaLimits("conn1", THIRTY, null);
 
-        assertEquals(30, allocation.getCurrentMaxTransactions());
-        assertEquals(1, allocation.getTotalServers());
-        assertEquals(1, allocation.getHealthyServers());
+        assertEquals(THIRTY, allocation.getCurrentMaxTransactions());
+        assertEquals(ONE, allocation.getTotalServers());
+        assertEquals(ONE, allocation.getHealthyServers());
     }
 
     @Test
@@ -33,9 +46,9 @@ class MultinodeXaCoordinatorTest {
         MultinodeXaCoordinator.XaAllocation allocation =
                 coordinator.calculateXaLimits("conn1", 30, servers);
 
-        assertEquals(15, allocation.getCurrentMaxTransactions()); // 30 / 2 = 15
-        assertEquals(2, allocation.getTotalServers());
-        assertEquals(2, allocation.getHealthyServers());
+        assertEquals(FIFTEEN, allocation.getCurrentMaxTransactions()); // 30 / 2 = 15
+        assertEquals(TWO, allocation.getTotalServers());
+        assertEquals(TWO, allocation.getHealthyServers());
     }
 
     @Test
@@ -47,8 +60,8 @@ class MultinodeXaCoordinatorTest {
         MultinodeXaCoordinator.XaAllocation allocation =
                 coordinator.calculateXaLimits("conn1", 50, servers);
 
-        assertEquals(17, allocation.getCurrentMaxTransactions()); // ceil(50 / 3) = 17
-        assertEquals(3, allocation.getTotalServers());
+        assertEquals(SEVENTEEN, allocation.getCurrentMaxTransactions()); // ceil(50 / 3) = 17
+        assertEquals(THREE, allocation.getTotalServers());
     }
 
     @Test
@@ -60,21 +73,21 @@ class MultinodeXaCoordinatorTest {
                 coordinator.calculateXaLimits("conn1", 30, servers);
 
         // Initially 3 servers, each gets 10 max transactions
-        assertEquals(10, allocation.getCurrentMaxTransactions());
+        assertEquals(TEN, allocation.getCurrentMaxTransactions());
 
         // One server goes down, remaining 2 should split the load
         coordinator.updateHealthyServers("conn1", 2);
         allocation = coordinator.getXaAllocation("conn1");
 
-        assertEquals(15, allocation.getCurrentMaxTransactions()); // ceil(30 / 2) = 15
-        assertEquals(2, allocation.getHealthyServers());
+        assertEquals(FIFTEEN, allocation.getCurrentMaxTransactions()); // ceil(30 / 2) = 15
+        assertEquals(TWO, allocation.getHealthyServers());
 
         // Server recovers, back to 3 servers
         coordinator.updateHealthyServers("conn1", 3);
         allocation = coordinator.getXaAllocation("conn1");
 
-        assertEquals(10, allocation.getCurrentMaxTransactions());
-        assertEquals(3, allocation.getHealthyServers());
+        assertEquals(TEN, allocation.getCurrentMaxTransactions());
+        assertEquals(THREE, allocation.getHealthyServers());
     }
 
     @Test
@@ -90,7 +103,7 @@ class MultinodeXaCoordinatorTest {
         allocation = coordinator.getXaAllocation("conn1");
 
         // Should fall back to original with at least 1 healthy server
-        assertEquals(40, allocation.getCurrentMaxTransactions());
+        assertEquals(FORTY, allocation.getCurrentMaxTransactions());
         assertEquals(1, allocation.getHealthyServers()); // Min 1
     }
 
@@ -107,8 +120,8 @@ class MultinodeXaCoordinatorTest {
         MultinodeXaCoordinator.XaAllocation alloc1 = coordinator.getXaAllocation("conn1");
         MultinodeXaCoordinator.XaAllocation alloc2 = coordinator.getXaAllocation("conn2");
 
-        assertEquals(20, alloc1.getCurrentMaxTransactions());
-        assertEquals(20, alloc2.getCurrentMaxTransactions());
+        assertEquals(TWENTY, alloc1.getCurrentMaxTransactions());
+        assertEquals(TWENTY, alloc2.getCurrentMaxTransactions());
 
         // Update health for conn1 only
         coordinator.updateHealthyServers("conn1", 1);
@@ -116,8 +129,8 @@ class MultinodeXaCoordinatorTest {
         alloc1 = coordinator.getXaAllocation("conn1");
         alloc2 = coordinator.getXaAllocation("conn2");
 
-        assertEquals(40, alloc1.getCurrentMaxTransactions()); // All load on 1 server
-        assertEquals(20, alloc2.getCurrentMaxTransactions()); // Unchanged
+        assertEquals(FORTY, alloc1.getCurrentMaxTransactions()); // All load on 1 server
+        assertEquals(TWENTY, alloc2.getCurrentMaxTransactions()); // Unchanged
     }
 
     @Test
@@ -146,7 +159,7 @@ class MultinodeXaCoordinatorTest {
         coordinator.updateHealthyServers("conn1", 5);
         allocation = coordinator.getXaAllocation("conn1");
 
-        assertEquals(2, allocation.getHealthyServers()); // Capped at total
+        assertEquals(TWO, allocation.getHealthyServers()); // Capped at total
 
         // Try to set negative healthy servers
         coordinator.updateHealthyServers("conn1", -1);
@@ -165,21 +178,21 @@ class MultinodeXaCoordinatorTest {
                 coordinator.calculateXaLimits("prod-db", 30, servers);
 
         // Normal operation: 10 transactions per server
-        assertEquals(10, allocation.getCurrentMaxTransactions());
-        assertEquals(30, allocation.getOriginalMaxTransactions());
+        assertEquals(TEN, allocation.getCurrentMaxTransactions());
+        assertEquals(THIRTY, allocation.getOriginalMaxTransactions());
 
         // Node 1 goes down
         coordinator.updateHealthyServers("prod-db", 2);
         allocation = coordinator.getXaAllocation("prod-db");
 
         // Remaining nodes handle 15 each
-        assertEquals(15, allocation.getCurrentMaxTransactions());
+        assertEquals(FIFTEEN, allocation.getCurrentMaxTransactions());
 
         // Node 1 recovers
         coordinator.updateHealthyServers("prod-db", 3);
         allocation = coordinator.getXaAllocation("prod-db");
 
         // Back to normal: 10 each
-        assertEquals(10, allocation.getCurrentMaxTransactions());
+        assertEquals(TEN, allocation.getCurrentMaxTransactions());
     }
 }

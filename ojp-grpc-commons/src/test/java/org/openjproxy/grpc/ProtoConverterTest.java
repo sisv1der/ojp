@@ -13,6 +13,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests for ProtoConverter to verify correct handling of null vs empty byte arrays.
  */
 public class ProtoConverterTest {
+    private static final int PARAM_INDEX_3 = 3;
+    private static final int PARAM_INDEX_4 = 4;
+    private static final int PARAM_INDEX_5 = 5;
+    private static final int TEST_INT_VALUE = 42;
 
     @Test
     void testNullValueSerialization() {
@@ -67,7 +71,7 @@ public class ProtoConverterTest {
         
         // Verify bytes_value is set
         assertEquals(ParameterValue.ValueCase.BYTES_VALUE, pv.getValueCase());
-        assertEquals(5, pv.getBytesValue().size());
+        assertEquals(PARAM_INDEX_5, pv.getBytesValue().size());
         
         // Convert back to Object
         Object result = ProtoConverter.fromParameterValue(pv, ParameterType.BYTES);

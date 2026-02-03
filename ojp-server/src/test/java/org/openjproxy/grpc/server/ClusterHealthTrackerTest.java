@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClusterHealthTrackerTest {
+    private static final int THREE = 3;
+    private static final int TWO = 2;
 
     private ClusterHealthTracker tracker;
 
@@ -26,7 +28,7 @@ class ClusterHealthTrackerTest {
 
         Map<String, String> healthMap = tracker.parseClusterHealth(clusterHealth);
 
-        assertEquals(3, healthMap.size());
+        assertEquals(THREE, healthMap.size());
         assertEquals("UP", healthMap.get("192.168.1.1:1059"));
         assertEquals("DOWN", healthMap.get("192.168.1.2:1059"));
         assertEquals("UP", healthMap.get("192.168.1.3:1059"));
@@ -57,7 +59,7 @@ class ClusterHealthTrackerTest {
 
         int healthyCount = tracker.countHealthyServers(clusterHealth);
 
-        assertEquals(2, healthyCount);
+        assertEquals(TWO, healthyCount);
     }
 
     @Test
@@ -75,7 +77,7 @@ class ClusterHealthTrackerTest {
 
         int healthyCount = tracker.countHealthyServers(clusterHealth);
 
-        assertEquals(3, healthyCount);
+        assertEquals(THREE, healthyCount);
     }
 
     @Test
@@ -177,6 +179,6 @@ class ClusterHealthTrackerTest {
         // Count should work case-insensitively
         int healthyCount = tracker.countHealthyServers(clusterHealth);
 
-        assertEquals(2, healthyCount);
+        assertEquals(TWO, healthyCount);
     }
 }

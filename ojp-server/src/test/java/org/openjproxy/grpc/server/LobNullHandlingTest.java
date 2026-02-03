@@ -18,6 +18,7 @@ import static org.mockito.Mockito.*;
  * This test specifically validates the fix for issue #23.
  */
  class LobNullHandlingTest {
+    private static final int TEN = 10;
 
     @Mock
     private SessionManager sessionManager;
@@ -35,7 +36,7 @@ import static org.mockito.Mockito.*;
     }
 
     @Test
-     void testGetLobReturnsNull_ShouldNotCauseNullPointerException() {
+     void testGetLobReturnsNullShouldNotCauseNullPointerException() {
         // Arrange: Mock sessionManager.getLob to return null (the problematic scenario)
         when(sessionManager.getLob(sessionInfo, testLobUUID)).thenReturn(null);
         
@@ -48,7 +49,7 @@ import static org.mockito.Mockito.*;
     }
 
     @Test
-     void testLobOperationWithNullBlob_ShouldHandleGracefully() {
+     void testLobOperationWithNullBlobShouldHandleGracefully() {
         // This test validates that our fix will handle null Blob gracefully
         // instead of causing NPE that leads to hanging
         
@@ -70,7 +71,7 @@ import static org.mockito.Mockito.*;
     }
 
     @Test 
-     void testConcurrentLobAccess_ShouldNotCauseConcurrencyIssues() {
+     void testConcurrentLobAccessShouldNotCauseConcurrencyIssues() {
         // This test simulates concurrent access that might cause race conditions
         
         // Arrange
@@ -81,7 +82,7 @@ import static org.mockito.Mockito.*;
         // This test verifies that concurrent access to getLob is handled safely
         assertDoesNotThrow(() -> {
             // Simulate multiple threads trying to access the same LOB
-            for (int i = 0; i < 10; i++) {
+            for (int i = 0; i < TEN; i++) {
                 Object lob = mockSession.getLob(testLobUUID);
                 // Should not throw even if lob is null
             }

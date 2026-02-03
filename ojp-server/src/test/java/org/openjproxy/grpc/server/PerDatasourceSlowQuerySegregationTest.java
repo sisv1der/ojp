@@ -73,8 +73,8 @@ class PerDatasourceSlowQuerySegregationTest {
                 .addAllProperties(ProtoConverter.propertiesToProto(propertiesMap2))
                 .build();
 
-        StreamObserver<SessionInfo> responseObserver1 = mock(StreamObserver.class);
-        StreamObserver<SessionInfo> responseObserver2 = mock(StreamObserver.class);
+        StreamObserver<SessionInfo> responseObserver1 = newNoopObserver();
+        StreamObserver<SessionInfo> responseObserver2 = newNoopObserver();
 
         // Connect with first datasource
         statementService.connect(connectionDetails1, responseObserver1);
@@ -86,9 +86,10 @@ class PerDatasourceSlowQuerySegregationTest {
         Field managersField = StatementServiceImpl.class.getDeclaredField("slowQuerySegregationManagers");
         managersField.setAccessible(true);
 
-        @SuppressWarnings("unchecked")
-        Map<String, SlowQuerySegregationManager> managers =
-                (Map<String, SlowQuerySegregationManager>) managersField.get(statementService);
+        Object managersValue = managersField.get(statementService);
+        assertNotNull(managersValue);
+        assertInstanceOf(Map.class, managersValue);
+        Map<?, ?> managers = (Map<?, ?>) managersValue;
 
         // Verify that we have two separate managers
         assertEquals(2, managers.size(), "Should have created separate managers for each datasource");
@@ -97,8 +98,13 @@ class PerDatasourceSlowQuerySegregationTest {
         String connHash1 = ConnectionHashGenerator.hashConnectionDetails(connectionDetails1);
         String connHash2 = ConnectionHashGenerator.hashConnectionDetails(connectionDetails2);
 
-        SlowQuerySegregationManager manager1 = managers.get(connHash1);
-        SlowQuerySegregationManager manager2 = managers.get(connHash2);
+        Object managerValue1 = managers.get(connHash1);
+        Object managerValue2 = managers.get(connHash2);
+        assertInstanceOf(SlowQuerySegregationManager.class, managerValue1);
+        assertInstanceOf(SlowQuerySegregationManager.class, managerValue2);
+
+        SlowQuerySegregationManager manager1 = (SlowQuerySegregationManager) managerValue1;
+        SlowQuerySegregationManager manager2 = (SlowQuerySegregationManager) managerValue2;
 
         assertNotNull(manager1, "Manager for first datasource should exist");
         assertNotNull(manager2, "Manager for second datasource should exist");
@@ -150,7 +156,7 @@ class PerDatasourceSlowQuerySegregationTest {
                 .addAllProperties(ProtoConverter.propertiesToProto(propertiesMap))
                 .build();
 
-        StreamObserver<SessionInfo> responseObserver = mock(StreamObserver.class);
+        StreamObserver<SessionInfo> responseObserver = newNoopObserver();
         statementService.connect(connectionDetails, responseObserver);
 
         // Use reflection to call the private method to get manager
@@ -181,5 +187,21 @@ class PerDatasourceSlowQuerySegregationTest {
 
         assertNotNull(manager, "Should return fallback manager for non-existent connection hash");
         assertFalse(manager.isEnabled(), "Fallback manager should be disabled");
+    }
+
+    private static StreamObserver<SessionInfo> newNoopObserver() {
+        return new StreamObserver<>() {
+            @Override
+            public void onNext(SessionInfo value) {
+            }
+
+            @Override
+            public void onError(Throwable t) {
+            }
+
+            @Override
+            public void onCompleted() {
+            }
+        };
     }
 }

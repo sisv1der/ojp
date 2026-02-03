@@ -25,6 +25,8 @@ import static org.openjproxy.grpc.server.OjpHealthManager.Services;
  */
 class GrpcServerHealthTest {
     private static final Logger logger = LoggerFactory.getLogger(GrpcServerHealthTest.class);
+    private static final int TEN = 10;
+    private static final int ONE_THOUSAND = 1000;
 
     private static ExecutorService virtualThreadExecutor;
     private ManagedChannel channel;
@@ -107,7 +109,7 @@ class GrpcServerHealthTest {
     }
 
     private void startServer() {
-		virtualThreadExecutor = Executors.newFixedThreadPool(10);
+		virtualThreadExecutor = Executors.newFixedThreadPool(TEN);
         virtualThreadExecutor.submit(() -> {
             try {
                 String[] args = {};
@@ -118,7 +120,7 @@ class GrpcServerHealthTest {
         });
 
         try {
-            Thread.sleep(1000); // Wait for server to start
+            Thread.sleep(ONE_THOUSAND); // Wait for server to start
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

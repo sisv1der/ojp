@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ProtoConverterTemporalTest {
 
     @Test
-    void testTimestamp_withoutCalendar_usesSystemDefault() {
+    void testTimestampWithoutCalendarUsesSystemDefault() {
         // When no Calendar is provided, system default timezone should be used
         Timestamp timestamp = Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         
@@ -61,7 +61,7 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testTimestamp_withCalendar() {
+    void testTimestampWithCalendar() {
         // When Calendar is provided, its timezone should be used
         Timestamp timestamp = Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("America/New_York"));
@@ -88,7 +88,7 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testTimestamp_withOffsetTimezone() {
+    void testTimestampWithOffsetTimezone() {
         Timestamp timestamp = Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("GMT+02:00"));
         
@@ -102,8 +102,8 @@ class ProtoConverterTemporalTest {
         TimestampWithZone tsWithZone = proto.getValues(0).getTimestampValue();
         
         // Should accept offset timezone
-        assertTrue(tsWithZone.getTimezone().contains("02:00") || 
-                   tsWithZone.getTimezone().equals("GMT+02:00"));
+        assertTrue(tsWithZone.getTimezone().contains("02:00") 
+                   || tsWithZone.getTimezone().equals("GMT+02:00"));
         
         // Should convert back successfully
         Parameter result = ProtoConverter.fromProto(proto);
@@ -112,11 +112,11 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testTimestamp_null() {
+    void testTimestampNull() {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIMESTAMP)
-            .values(Collections.singletonList((Object) null))
+            .values(Collections.singletonList(null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -127,7 +127,7 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testDate_roundTrip() {
+    void testDateRoundTrip() {
         Date date = Date.valueOf("2024-11-02");
         
         Parameter param = Parameter.builder()
@@ -156,11 +156,11 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testDate_null() {
+    void testDateNull() {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.DATE)
-            .values(Collections.singletonList((Object) null))
+            .values(Collections.singletonList(null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -169,7 +169,7 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testTime_roundTrip() {
+    void testTimeRoundTrip() {
         Time time = Time.valueOf("14:30:45");
         
         Parameter param = Parameter.builder()
@@ -198,11 +198,11 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testTime_null() {
+    void testTimeNull() {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIME)
-            .values(Collections.singletonList((Object) null))
+            .values(Collections.singletonList(null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -211,7 +211,7 @@ class ProtoConverterTemporalTest {
     }
     
     @Test
-    void testMultipleParameters_mixedTypes() {
+    void testMultipleParametersMixedTypes() {
         // Test multiple parameters including temporal types
         Timestamp timestamp = Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         Date date = Date.valueOf("2024-11-02");

@@ -8,8 +8,6 @@ import com.openjproxy.grpc.TemporalType;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Time;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -23,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TemporalConverterTest {
 
     @Test
-    void testTimestampWithZone_roundTrip() {
+    void testTimestampWithZoneRoundTrip() {
         // Test with a timestamp and UTC timezone
         java.sql.Timestamp timestamp = java.sql.Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         ZoneId zoneId = ZoneId.of("UTC");
@@ -39,7 +37,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_withOffset() {
+    void testTimestampWithZoneWithOffset() {
         // Test with an offset timezone
         java.sql.Timestamp timestamp = java.sql.Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         ZoneId zoneId = ZoneId.of("+02:00");
@@ -54,7 +52,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_withIANAZone() {
+    void testTimestampWithZoneWithIanaZone() {
         // Test with IANA timezone
         java.sql.Timestamp timestamp = java.sql.Timestamp.valueOf("2024-11-02 14:30:45.123456789");
         ZoneId zoneId = ZoneId.of("Europe/Rome");
@@ -69,7 +67,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_preservesNanos() {
+    void testTimestampWithZonePreservesNanos() {
         // Test that nanoseconds are preserved
         java.sql.Timestamp timestamp = new java.sql.Timestamp(System.currentTimeMillis());
         timestamp.setNanos(123456789);
@@ -83,7 +81,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_nullTimestamp() {
+    void testTimestampWithZoneNullTimestamp() {
         TimestampWithZone proto = TemporalConverter.toTimestampWithZone(null, ZoneId.of("UTC"));
         assertNull(proto);
         
@@ -92,7 +90,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_nullZoneId_throwsException() {
+    void testTimestampWithZoneNullZoneIdThrowsException() {
         java.sql.Timestamp timestamp = new java.sql.Timestamp(System.currentTimeMillis());
         
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
@@ -103,7 +101,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_missingTimezone_throwsException() {
+    void testTimestampWithZoneMissingTimezoneThrowsException() {
         // Create a TimestampWithZone with empty timezone
         TimestampWithZone proto = TimestampWithZone.newBuilder()
             .setInstant(Timestamp.newBuilder().setSeconds(1000).setNanos(0).build())
@@ -118,7 +116,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_invalidTimezone_throwsException() {
+    void testTimestampWithZoneInvalidTimezoneThrowsException() {
         // Create a TimestampWithZone with invalid timezone
         TimestampWithZone proto = TimestampWithZone.newBuilder()
             .setInstant(Timestamp.newBuilder().setSeconds(1000).setNanos(0).build())
@@ -157,7 +155,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testDate_roundTrip() {
+    void testDateRoundTrip() {
         // Test date conversion
         java.sql.Date date = java.sql.Date.valueOf("2024-11-02");
         
@@ -173,7 +171,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testDate_null() {
+    void testDateNull() {
         Date proto = TemporalConverter.toProtoDate(null);
         assertNull(proto);
         
@@ -182,7 +180,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTime_roundTrip() {
+    void testTimeRoundTrip() {
         // Test time conversion
         Time time = Time.valueOf("14:30:45");
         
@@ -198,7 +196,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTime_preservesNanos() {
+    void testTimePreservesNanos() {
         // Test that nanoseconds are preserved through proto format
         // Note: java.sql.Time has millisecond precision only, but the proto format supports nanos
         // We test that nanos are preserved in the proto and can be reconstructed in LocalTime
@@ -230,7 +228,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTime_null() {
+    void testTimeNull() {
         TimeOfDay proto = TemporalConverter.toProtoTimeOfDay(null);
         assertNull(proto);
         
@@ -239,7 +237,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_epochBoundaries() {
+    void testTimestampWithZoneEpochBoundaries() {
         // Test edge cases around epoch
         java.sql.Timestamp epoch = new java.sql.Timestamp(0);
         ZoneId zoneId = ZoneId.of("UTC");
@@ -251,7 +249,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testTimestampWithZone_systemDefaultZone() {
+    void testTimestampWithZoneSystemDefaultZone() {
         // Test with system default zone
         java.sql.Timestamp timestamp = new java.sql.Timestamp(System.currentTimeMillis());
         ZoneId systemDefault = ZoneId.systemDefault();
@@ -264,7 +262,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testOffsetDateTimeToTimestampWithZone_roundTrip() {
+    void testOffsetDateTimeToTimestampWithZoneRoundTrip() {
         // Test with OffsetDateTime and UTC offset
         java.time.OffsetDateTime offsetDateTime = java.time.OffsetDateTime.parse("2024-11-02T14:30:45.123456789Z");
         
@@ -279,7 +277,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testOffsetDateTimeToTimestampWithZone_withOffset() {
+    void testOffsetDateTimeToTimestampWithZoneWithOffset() {
         // Test with a specific offset
         java.time.OffsetDateTime offsetDateTime = java.time.OffsetDateTime.parse("2024-11-02T14:30:45.123+02:00");
         
@@ -294,7 +292,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testOffsetDateTimeToTimestampWithZone_null() {
+    void testOffsetDateTimeToTimestampWithZoneNull() {
         TimestampWithZone proto = TemporalConverter.offsetDateTimeToTimestampWithZone(null);
         assertNull(proto);
         
@@ -303,7 +301,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testOffsetDateTimeToTimestampWithZone_preservesNanos() {
+    void testOffsetDateTimeToTimestampWithZonePreservesNanos() {
         // Test that nanoseconds are preserved
         java.time.OffsetDateTime offsetDateTime = java.time.OffsetDateTime.parse("2024-11-02T14:30:45.123456789+05:30");
         
@@ -315,7 +313,7 @@ class TemporalConverterTest {
     }
     
     @Test
-    void testFromTimestampWithZoneToObject_withOffsetDateTime() {
+    void testFromTimestampWithZoneToObjectWithOffsetDateTime() {
         // Test that fromTimestampWithZoneToObject correctly returns OffsetDateTime
         // when original_type is TEMPORAL_TYPE_OFFSET_DATE_TIME
         java.time.OffsetDateTime offsetDateTime = java.time.OffsetDateTime.parse("2024-11-02T14:30:45.123+02:00");

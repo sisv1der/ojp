@@ -18,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Tests that client properties are correctly parsed and applied to pool configuration.
  */
 class ConnectionPoolServerConfigurationTest {
+    private static final int TWENTY_FIVE = 25;
+    private static final int SEVEN = 7;
 
     @Test
     void testHikariConfigurationWithClientProperties() throws Exception {
@@ -47,8 +49,8 @@ class ConnectionPoolServerConfigurationTest {
                 DataSourceConfigurationManager.getConfiguration(extractedProperties);
 
         // Verify that client properties were applied
-        assertEquals(25, dsConfig.getMaximumPoolSize());
-        assertEquals(7, dsConfig.getMinimumIdle());
+        assertEquals(TWENTY_FIVE, dsConfig.getMaximumPoolSize());
+        assertEquals(SEVEN, dsConfig.getMinimumIdle());
 
         // Verify that properties not provided use defaults
         assertEquals(CommonConstants.DEFAULT_IDLE_TIMEOUT, dsConfig.getIdleTimeout());

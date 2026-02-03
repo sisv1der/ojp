@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * This test validates that our fix prevents the original NPE scenario.
  */
 class LobRaceConditionReproducerTest {
+    private static final int TEN = 10;
 
     private SessionManagerImpl sessionManager;
     private SessionInfo sessionInfo;
@@ -32,7 +33,7 @@ class LobRaceConditionReproducerTest {
     }
 
     @Test
-    void testOriginalIssueScenario_NowFixedWithNullCheck() {
+    void testOriginalIssueScenarioNowFixedWithNullCheck() {
         // This test demonstrates the scenario that would cause the original issue
 
         // Scenario: Try to get a LOB that was never registered or was lost due to race condition
@@ -47,8 +48,8 @@ class LobRaceConditionReproducerTest {
         // Simulate what our StatementServiceImpl fix does now:
         if (blob == null) {
             SQLException expectedException = assertThrows(SQLException.class, () -> {
-                throw new SQLException("Unable to write LOB: Blob object is null for UUID " + nonExistentLobUUID +
-                        ". This may indicate a race condition or session management issue.");
+                throw new SQLException("Unable to write LOB: Blob object is null for UUID " + nonExistentLobUUID
+                        + ". This may indicate a race condition or session management issue.");
             });
 
             // Verify the error message is descriptive and mentions race condition
@@ -70,7 +71,7 @@ class LobRaceConditionReproducerTest {
 
         // Multiple threads trying to access LOBs from a session that doesn't exist
         assertDoesNotThrow(() -> {
-            for (int i = 0; i < 10; i++) {
+            for (int i = 0; i < TEN; i++) {
                 Blob result = concurrentSessionManager.getLob(sessionInfo, "lob-" + i);
                 // Should not throw, even with null session - should just return null
                 assertNull(result);
