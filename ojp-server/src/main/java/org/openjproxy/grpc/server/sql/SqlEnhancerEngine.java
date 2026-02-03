@@ -122,6 +122,7 @@ public class SqlEnhancerEngine {
         this.ruleRegistry = new OptimizationRuleRegistry();
         this.enabledRules = enabledRules != null ? enabledRules : 
             Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE",
+                         "SUB_QUERY_REMOVE", "SUB_QUERY_REMOVE_FILTER", "SUB_QUERY_REMOVE_JOIN",
                          "PROJECT_SUB_QUERY_TO_CORRELATE", "FILTER_SUB_QUERY_TO_CORRELATE", "JOIN_SUB_QUERY_TO_CORRELATE");
         
         if (enabled) {

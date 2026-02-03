@@ -2,6 +2,7 @@ package org.openjproxy.grpc.server.sql;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.SubQueryRemoveRule;
 
 import java.util.*;
 
@@ -24,7 +25,14 @@ public class OptimizationRuleRegistry {
         registerRule("PROJECT_MERGE", CoreRules.PROJECT_MERGE);
         registerRule("PROJECT_REMOVE", CoreRules.PROJECT_REMOVE);
         
-        // Register subquery optimization rules
+        // Register subquery removal rules (converts correlated subqueries to joins)
+        // SubQueryRemoveRule works with RexSubQuery nodes to convert them to joins
+        registerRule("SUB_QUERY_REMOVE", SubQueryRemoveRule.Config.PROJECT.toRule());
+        registerRule("SUB_QUERY_REMOVE_RULE", SubQueryRemoveRule.Config.PROJECT.toRule());  // Alias for user convenience
+        registerRule("SUB_QUERY_REMOVE_FILTER", SubQueryRemoveRule.Config.FILTER.toRule());
+        registerRule("SUB_QUERY_REMOVE_JOIN", SubQueryRemoveRule.Config.JOIN.toRule());
+        
+        // Register subquery to correlate rules (intermediate step for subquery removal)
         registerRule("PROJECT_SUB_QUERY_TO_CORRELATE", CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE);
         registerRule("FILTER_SUB_QUERY_TO_CORRELATE", CoreRules.FILTER_SUB_QUERY_TO_CORRELATE);
         registerRule("JOIN_SUB_QUERY_TO_CORRELATE", CoreRules.JOIN_SUB_QUERY_TO_CORRELATE);
@@ -74,6 +82,9 @@ public class OptimizationRuleRegistry {
             "FILTER_MERGE",
             "PROJECT_MERGE",
             "PROJECT_REMOVE",
+            "SUB_QUERY_REMOVE",
+            "SUB_QUERY_REMOVE_FILTER",
+            "SUB_QUERY_REMOVE_JOIN",
             "PROJECT_SUB_QUERY_TO_CORRELATE",
             "FILTER_SUB_QUERY_TO_CORRELATE",
             "JOIN_SUB_QUERY_TO_CORRELATE"
