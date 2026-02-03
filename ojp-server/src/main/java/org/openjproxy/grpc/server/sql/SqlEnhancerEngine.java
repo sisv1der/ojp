@@ -121,7 +121,8 @@ public class SqlEnhancerEngine {
         // Initialize optimization components
         this.ruleRegistry = new OptimizationRuleRegistry();
         this.enabledRules = enabledRules != null ? enabledRules : 
-            Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE");
+            Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE",
+                         "PROJECT_SUB_QUERY_TO_CORRELATE", "FILTER_SUB_QUERY_TO_CORRELATE", "JOIN_SUB_QUERY_TO_CORRELATE");
         
         if (enabled) {
             String conversionStatus = conversionEnabled ? " with relational algebra conversion" : "";

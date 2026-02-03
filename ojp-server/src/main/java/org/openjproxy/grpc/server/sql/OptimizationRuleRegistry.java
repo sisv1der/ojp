@@ -24,6 +24,11 @@ public class OptimizationRuleRegistry {
         registerRule("PROJECT_MERGE", CoreRules.PROJECT_MERGE);
         registerRule("PROJECT_REMOVE", CoreRules.PROJECT_REMOVE);
         
+        // Register subquery optimization rules
+        registerRule("PROJECT_SUB_QUERY_TO_CORRELATE", CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE);
+        registerRule("FILTER_SUB_QUERY_TO_CORRELATE", CoreRules.FILTER_SUB_QUERY_TO_CORRELATE);
+        registerRule("JOIN_SUB_QUERY_TO_CORRELATE", CoreRules.JOIN_SUB_QUERY_TO_CORRELATE);
+        
         // Register aggressive optimization rules
         registerRule("FILTER_INTO_JOIN", CoreRules.FILTER_INTO_JOIN);
         registerRule("JOIN_COMMUTE", CoreRules.JOIN_COMMUTE);
@@ -68,7 +73,10 @@ public class OptimizationRuleRegistry {
             "PROJECT_REDUCE",
             "FILTER_MERGE",
             "PROJECT_MERGE",
-            "PROJECT_REMOVE"
+            "PROJECT_REMOVE",
+            "PROJECT_SUB_QUERY_TO_CORRELATE",
+            "FILTER_SUB_QUERY_TO_CORRELATE",
+            "JOIN_SUB_QUERY_TO_CORRELATE"
         ));
     }
     
