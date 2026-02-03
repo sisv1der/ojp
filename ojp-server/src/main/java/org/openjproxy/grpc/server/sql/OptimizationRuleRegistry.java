@@ -37,18 +37,15 @@ public class OptimizationRuleRegistry {
         registerRule("FILTER_SUB_QUERY_TO_CORRELATE", CoreRules.FILTER_SUB_QUERY_TO_CORRELATE);
         registerRule("JOIN_SUB_QUERY_TO_CORRELATE", CoreRules.JOIN_SUB_QUERY_TO_CORRELATE);
         
-        // Register join optimization rules
+        // Register safe join optimization rules
         registerRule("JOIN_REDUCE_EXPRESSIONS", CoreRules.JOIN_REDUCE_EXPRESSIONS);
         registerRule("JOIN_EXTRACT_FILTER", CoreRules.JOIN_EXTRACT_FILTER);
         registerRule("JOIN_PUSH_EXPRESSIONS", CoreRules.JOIN_PUSH_EXPRESSIONS);
-        registerRule("JOIN_PUSH_TRANSITIVE_PREDICATES", CoreRules.JOIN_PUSH_TRANSITIVE_PREDICATES);
-        registerRule("JOIN_CONDITION_PUSH", CoreRules.JOIN_CONDITION_PUSH);
         
         // Register aggregate optimization rules
         registerRule("AGGREGATE_REDUCE_FUNCTIONS", CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
         registerRule("AGGREGATE_REMOVE", CoreRules.AGGREGATE_REMOVE);
         registerRule("AGGREGATE_PROJECT_MERGE", CoreRules.AGGREGATE_PROJECT_MERGE);
-        registerRule("AGGREGATE_JOIN_TRANSPOSE", CoreRules.AGGREGATE_JOIN_TRANSPOSE);
         registerRule("AGGREGATE_PROJECT_PULL_UP_CONSTANTS", CoreRules.AGGREGATE_PROJECT_PULL_UP_CONSTANTS);
         
         // Register union optimization rules
@@ -56,21 +53,24 @@ public class OptimizationRuleRegistry {
         registerRule("UNION_MERGE", CoreRules.UNION_MERGE);
         registerRule("UNION_TO_DISTINCT", CoreRules.UNION_TO_DISTINCT);
         
-        // Register sort optimization rules
+        // Register sort optimization rules (safe ones)
         registerRule("SORT_REMOVE", CoreRules.SORT_REMOVE);
         registerRule("SORT_REMOVE_CONSTANT_KEYS", CoreRules.SORT_REMOVE_CONSTANT_KEYS);
-        registerRule("SORT_JOIN_TRANSPOSE", CoreRules.SORT_JOIN_TRANSPOSE);
-        registerRule("SORT_PROJECT_TRANSPOSE", CoreRules.SORT_PROJECT_TRANSPOSE);
         registerRule("SORT_UNION_TRANSPOSE", CoreRules.SORT_UNION_TRANSPOSE);
         
         // Register calc optimization rules
         registerRule("CALC_MERGE", CoreRules.CALC_MERGE);
         registerRule("CALC_REMOVE", CoreRules.CALC_REMOVE);
         
-        // Register aggressive optimization rules
+        // Register aggressive optimization rules (require opt-in via configuration)
         registerRule("FILTER_INTO_JOIN", CoreRules.FILTER_INTO_JOIN);
         registerRule("JOIN_COMMUTE", CoreRules.JOIN_COMMUTE);
         registerRule("JOIN_ASSOCIATE", CoreRules.JOIN_ASSOCIATE);
+        registerRule("JOIN_PUSH_TRANSITIVE_PREDICATES", CoreRules.JOIN_PUSH_TRANSITIVE_PREDICATES);
+        registerRule("JOIN_CONDITION_PUSH", CoreRules.JOIN_CONDITION_PUSH);
+        registerRule("AGGREGATE_JOIN_TRANSPOSE", CoreRules.AGGREGATE_JOIN_TRANSPOSE);
+        registerRule("SORT_JOIN_TRANSPOSE", CoreRules.SORT_JOIN_TRANSPOSE);
+        registerRule("SORT_PROJECT_TRANSPOSE", CoreRules.SORT_PROJECT_TRANSPOSE);
     }
     
     /**
