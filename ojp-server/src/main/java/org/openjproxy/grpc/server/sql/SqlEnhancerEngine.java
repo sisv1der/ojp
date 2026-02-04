@@ -114,9 +114,9 @@ public class SqlEnhancerEngine {
             .withCaseSensitive(false); // Most SQL is case-insensitive
         
         // Initialize converter if conversion is enabled
-        // Pass SqlDialect for SQL generation and SchemaCache for real schema
+        // Pass SqlDialect for SQL generation, SqlLibrary for operators, and SchemaCache for real schema
         this.converter = conversionEnabled ? 
-            new RelationalAlgebraConverter(parserConfig, calciteDialect, schemaCache) : null;
+            new RelationalAlgebraConverter(parserConfig, calciteDialect, dialect.getSqlLibrary(), schemaCache) : null;
         
         // Initialize optimization components
         this.ruleRegistry = new OptimizationRuleRegistry();
