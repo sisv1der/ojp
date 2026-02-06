@@ -146,12 +146,14 @@ This script downloads drivers for H2, PostgreSQL, MySQL, and MariaDB into `./ojp
 
 ### Why Not Maven Dependencies?
 
-You might wonder why these aren't regular Maven dependencies. The answer is flexibility and licensing. By keeping drivers externalized (starting from v0.4.0-beta), you can:
+You might wonder why these aren't regular Maven dependencies. The answer is flexibility and licensing. By keeping drivers externalized, you can:
 
 1. Easily swap driver versions without rebuilding
 2. Add proprietary drivers (Oracle, DB2, SQL Server) that can't be in Maven Central
 3. Test with specific driver versions that your production environment uses
 4. Reduce the base JAR size significantly (from 70MB to 20MB)
+
+> **📌 This change was implemented in v0.4.0-beta.**
 
 ### Proprietary Database Drivers
 

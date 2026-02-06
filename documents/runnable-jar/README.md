@@ -65,8 +65,6 @@ The runnable JAR size is approximately **20MB** (without drivers). Open-source J
 
 ## Downloading Open Source JDBC Drivers
 
-> **⚠️ Required for v0.4.0-beta and later:** The OJP Server requires JDBC drivers to connect to databases. Starting from version 0.4.0-beta, drivers are no longer included in the JAR and must be downloaded separately.
-
 The OJP Server requires JDBC drivers to connect to databases. For convenience, a script is provided to download open-source drivers.
 
 ### 1. Download Drivers Using the Script
