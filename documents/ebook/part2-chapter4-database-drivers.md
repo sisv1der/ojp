@@ -2,6 +2,12 @@
 
 > **Chapter Overview**: Learn how to configure database drivers for OJP Server, from open-source databases included by default to adding proprietary database drivers. This chapter covers the flexible "drop-in" driver mechanism and provides practical examples for all major databases.
 
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR when running from the runnable JAR. You **MUST** download the JDBC driver(s) you want to use and place them in the `ojp-libs` folder.
+>
+> - **Docker images** continue to include H2, PostgreSQL, MySQL, and MariaDB drivers by default ("batteries included")
+> - **Runnable JAR** deployments require you to download drivers using the `download-drivers.sh` script (for open-source databases) or manually (for proprietary databases)
+
 ---
 
 ## 4.1 Open Source Drivers
@@ -165,6 +171,8 @@ Files appearing in ojp-libs directory
 Success confirmation with checksums
 Use terminal screenshot style with clear file operations
 Professional script execution guide
+
+> **⚠️ Required for v0.4.0-beta and later:** When running ojp-server from the JAR (not Docker), you must download JDBC drivers before starting the server.
 
 For runnable JAR deployments, OJP provides a convenient script:
 

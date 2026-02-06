@@ -1,5 +1,8 @@
 # OJP Server Runnable JAR Guide
 
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR. You **MUST** download the JDBC driver(s) you want to use and place them in the `ojp-libs` folder before running ojp-server. Use the `download-drivers.sh` script for open-source drivers (H2, PostgreSQL, MySQL, MariaDB), or manually download proprietary drivers from vendors (Oracle, SQL Server, DB2).
+
 This guide explains how to build and run the OJP Server as a standalone runnable JAR (executable JAR with all dependencies included) for environments where Docker or containers are not available.
 
 ## Prerequisites
@@ -58,7 +61,11 @@ For example: `ojp-server/target/ojp-server-0.3.1-beta-shaded.jar`
 
 The runnable JAR size is approximately **20MB** (without drivers). Open-source JDBC drivers are downloaded separately to reduce JAR size and provide flexibility.
 
+> **📌 Version 0.4.0-beta and Later:** Starting from v0.4.0-beta, JDBC drivers are **not included** in the runnable JAR. You must download them separately using the provided script or manually for proprietary databases.
+
 ## Downloading Open Source JDBC Drivers
+
+> **⚠️ Required for v0.4.0-beta and later:** The OJP Server requires JDBC drivers to connect to databases. Starting from version 0.4.0-beta, drivers are no longer included in the JAR and must be downloaded separately.
 
 The OJP Server requires JDBC drivers to connect to databases. For convenience, a script is provided to download open-source drivers.
 

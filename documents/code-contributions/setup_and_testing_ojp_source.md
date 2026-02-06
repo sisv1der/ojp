@@ -21,6 +21,8 @@
 
 3. **Download JDBC drivers** (required before starting the OJP server)
    
+   > **⚠️ Required for v0.4.0-beta and later:** Starting from version 0.4.0-beta, JDBC drivers are no longer included in the OJP Server JAR and must be downloaded separately.
+   
    OJP Server requires JDBC drivers to connect to databases. The open source drivers (H2, PostgreSQL, MySQL, MariaDB) are not packaged with OJP by default and must be downloaded separately.
    
    Run the download script from the project root:
@@ -57,6 +59,8 @@
    ```
 **Note:** By default, all database tests (including H2) are disabled. To run specific database tests locally, use the appropriate enable flags (e.g., `-DenableH2Tests=true`, `-DenablePostgresTests=true`). To run the full set of integration tests, you have to run all the databases locally. Follow the instructions at [Run Local Databases](../../documents/environment-setup/run-local-databases.md)
 
+> **📌 Version 0.4.0-beta:** The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers are included in Docker images by default, but when running ojp-server from source or the JAR, the drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above).
+
 ### Databases with integration tests
 We have comprehensive JDBC integration tests with OJP for the following databases:
 - Postgres
@@ -68,7 +72,11 @@ We have comprehensive JDBC integration tests with OJP for the following database
 - DB2
 - H2
 
-The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers are included in Docker images by default, but when running from source, the drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above). All database tests are disabled by default and must be explicitly enabled using their respective flags (e.g., `-DenableH2Tests=true`). In CI pipelines, only H2 tests run in the Main CI workflow as a fast fail-fast mechanism. For proprietary databases like Oracle and SQL Server, see specific sections below.
+The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers are included in Docker images by default, but when running from source, the drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above). 
+
+> **📌 Version 0.4.0-beta and Later:** Starting from v0.4.0-beta, JDBC drivers are not included in the runnable JAR and must be downloaded before running ojp-server.
+
+All database tests are disabled by default and must be explicitly enabled using their respective flags (e.g., `-DenableH2Tests=true`). In CI pipelines, only H2 tests run in the Main CI workflow as a fast fail-fast mechanism. For proprietary databases like Oracle and SQL Server, see specific sections below.
 
 ### Oracle Database Setup (Optional)
 Oracle integration tests require the Oracle JDBC driver and due to licensing restrictions we do not pack it with OJP.

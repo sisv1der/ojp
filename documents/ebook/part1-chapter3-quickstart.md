@@ -150,6 +150,9 @@ Professional technical documentation style
 
 If Docker isn't available, use the standalone executable JAR.
 
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR. You **MUST** download the JDBC driver(s) you want to use and place them in the `ojp-libs` folder before running ojp-server.
+
 **Download or Build the JAR**:
 
 ```bash
@@ -165,6 +168,8 @@ mvn clean install -DskipTests
 ```
 
 **Download Database Drivers**:
+
+> **⚠️ Required for v0.4.0-beta and later:** You must download JDBC drivers before running the OJP Server.
 
 ```bash
 cd ojp-server
@@ -608,6 +613,9 @@ When you see "Connection refused: localhost/127.0.0.1:1059", work through these 
 **Solutions**:
 
 **For Open-Source Databases** (PostgreSQL, MySQL, MariaDB, H2):
+
+> **⚠️ Required for v0.4.0-beta and later:** Starting from v0.4.0-beta, you must download drivers using the script below.
+
 ```bash
 cd ojp-server
 bash download-drivers.sh

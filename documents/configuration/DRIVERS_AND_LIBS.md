@@ -1,5 +1,11 @@
 # OJP External Libraries Support
 
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR. You **MUST** download the JDBC driver(s) you want to use and place them in the `ojp-libs` folder before running ojp-server.
+>
+> - **Docker images** continue to include H2, PostgreSQL, MySQL, and MariaDB drivers by default ("batteries included")
+> - **Runnable JAR** deployments require you to download drivers using the `download-drivers.sh` script (for open-source databases) or manually (for proprietary databases)
+
 OJP Server supports loading JDBC drivers from an external directory. While open-source drivers (H2, PostgreSQL, MySQL, MariaDB) are included in Docker images by default, you can also provide your own versions or add proprietary database drivers without recompiling OJP.
 
 ## Overview
@@ -65,6 +71,8 @@ docker run -d \
 ```
 
 ### Option 2: Runnable JAR (Local/VM Deployment)
+
+> **⚠️ Required for v0.4.0-beta and later:** You must download JDBC drivers before running the OJP Server JAR.
 
 For complete instructions on building and running OJP as a runnable JAR, see the [OJP Server Runnable JAR Guide](../runnable-jar/README.md).
 

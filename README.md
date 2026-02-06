@@ -48,10 +48,12 @@ docker run --rm -d --network host rrobetti/ojp:0.3.1-beta
 
 **Alternative: Runnable JAR (No Docker)**
 
+> **⚠️ Important for v0.4.0-beta and later:** Starting from version 0.4.0-beta, JDBC drivers are **no longer included** in the OJP Server JAR. You must download the JDBC drivers you need and place them in the `ojp-libs` folder before running the server.
+
 ```bash
 # Download OJP Server JAR and open source drivers
 cd ojp-server
-bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB
+bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
 java -jar ojp-server-0.3.2-snapshot-shaded.jar
 ```
 
@@ -87,6 +89,8 @@ Use the ojp driver: `org.openjproxy.jdbc.Driver`
 That's it! Your application now uses intelligent connection pooling through OJP.
 
 **Note**: Docker images include H2, PostgreSQL, MySQL, and MariaDB drivers by default. For proprietary databases (Oracle, SQL Server, DB2), see the [Drop-In Driver Documentation](documents/configuration/DRIVERS_AND_LIBS.md).
+
+> **📌 Version 0.4.0-beta Change:** Starting from version 0.4.0-beta, when running ojp-server from the JAR (not Docker), you **must** download the JDBC drivers you want to use and place them in the `ojp-libs` folder. Use the `download-drivers.sh` script for open-source drivers, or manually download proprietary drivers from vendors.
 
 ## Alternative Setup: Executable JAR (No Docker)
 
