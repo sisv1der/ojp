@@ -59,8 +59,6 @@
    ```
 **Note:** By default, all database tests (including H2) are disabled. To run specific database tests locally, use the appropriate enable flags (e.g., `-DenableH2Tests=true`, `-DenablePostgresTests=true`). To run the full set of integration tests, you have to run all the databases locally. Follow the instructions at [Run Local Databases](../../documents/environment-setup/run-local-databases.md)
 
-> **📌 Version 0.4.0-beta:** The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers are included in Docker images by default, but when running ojp-server from source or the JAR, the drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above).
-
 ### Databases with integration tests
 We have comprehensive JDBC integration tests with OJP for the following databases:
 - Postgres
