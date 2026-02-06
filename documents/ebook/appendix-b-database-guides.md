@@ -3,7 +3,7 @@
 Different databases have unique characteristics, configuration requirements, and quirks when used with OJP. This appendix provides database-specific guidance to help you get the best performance and reliability from each supported database system.
 
 > **🚨 Important for Version 0.4.0-beta and Later:**  
-> Starting from version **0.4.0-beta**, you **MUST** download the JDBC driver(s) you want to use and place them in the `ojp-libs` folder before running ojp-server. This applies to both runnable JAR and Docker deployments. Use the `download-drivers.sh` script for open-source drivers (H2, PostgreSQL, MySQL, MariaDB), or manually download proprietary drivers from vendors (Oracle, SQL Server, DB2).
+> JDBC drivers must be downloaded before running ojp-server. See [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md) for complete setup instructions for both JAR and Docker deployments.
 
 ## PostgreSQL
 
@@ -11,30 +11,7 @@ PostgreSQL is one of the most popular open-source databases and works exceptiona
 
 ### Driver Configuration
 
-> **⚠️ Required for v0.4.0-beta and later:** Download PostgreSQL driver before running OJP Server (both JAR and Docker).
-
-**For runnable JAR:**
-
-```bash
-cd ojp-server
-bash download-drivers.sh  # Downloads PostgreSQL driver to ojp-libs/
-```
-
-**For Docker:**
-
-```bash
-# Download drivers first
-mkdir -p ojp-libs
-cd ojp-server
-bash download-drivers.sh ../ojp-libs
-cd ..
-
-# Run with volume mount
-docker run -d \
-  -p 1059:1059 \
-  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
-```
+PostgreSQL driver setup is covered in [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md#using-docker-with-open-source-drivers).
 
 **JDBC URL Format:**
 ```

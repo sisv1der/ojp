@@ -40,15 +40,25 @@ OJP protects your databases from overwhelming connection storms by acting as a s
 
 Get OJP running in under 5 minutes:
 
-### 1. Start OJP Server (Docker - Batteries Included)
+### 1. Start OJP Server (Docker)
+
+> **⚠️ Important for v0.4.0-beta and later:** JDBC drivers must be downloaded and mounted. See [Chapter 4: Database Drivers](documents/ebook/part2-chapter4-database-drivers.md) for details.
+
 ```bash
-# Includes H2, PostgreSQL, MySQL, MariaDB drivers
-docker run --rm -d --network host rrobetti/ojp:0.3.1-beta
+# Download drivers first
+mkdir -p ojp-libs
+cd ojp-server
+bash download-drivers.sh ../ojp-libs
+cd ..
+
+# Run with drivers mounted
+docker run --rm -d \
+  --network host \
+  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  rrobetti/ojp:0.3.1-beta
 ```
 
 **Alternative: Runnable JAR (No Docker)**
-
-> **⚠️ Important for v0.4.0-beta and later:** Starting from version 0.4.0-beta, JDBC drivers are **no longer included** in the OJP Server JAR. You must download the JDBC drivers you need and place them in the `ojp-libs` folder before running the server.
 
 ```bash
 # Download OJP Server JAR and open source drivers
@@ -88,11 +98,7 @@ Use the ojp driver: `org.openjproxy.jdbc.Driver`
 
 That's it! Your application now uses intelligent connection pooling through OJP.
 
-**Note**: For proprietary databases (Oracle, SQL Server, DB2), see the [Drop-In Driver Documentation](documents/configuration/DRIVERS_AND_LIBS.md).
-
-> **📌 Version 0.4.0-beta Change:** Starting from version 0.4.0-beta, JDBC drivers are **no longer included** in the OJP Server. You **must** download the JDBC drivers you want to use and place them in the `ojp-libs` folder before running ojp-server:
-> - **For runnable JAR**: Use the `download-drivers.sh` script to download drivers, then run the JAR
-> - **For Docker**: Download drivers and mount the `ojp-libs` directory when running the container (see [Drop-In Driver Documentation](documents/configuration/DRIVERS_AND_LIBS.md))
+**Note**: For detailed driver setup including proprietary databases (Oracle, SQL Server, DB2), see [Chapter 4: Database Drivers](documents/ebook/part2-chapter4-database-drivers.md).
 
 ## Alternative Setup: Executable JAR (No Docker)
 

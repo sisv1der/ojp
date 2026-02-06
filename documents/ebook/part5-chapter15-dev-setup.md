@@ -126,13 +126,11 @@ graph LR
 ## 15.3 Downloading JDBC Drivers
 
 > **🚨 Important for Version 0.4.0-beta and Later:**  
-> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR. You **MUST** download the JDBC driver(s) you want to use before running ojp-server. This requirement applies to both runnable JAR deployments and development from source.
+> JDBC drivers must be downloaded before running ojp-server. See [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md) for comprehensive setup instructions.
 
 Here's where OJP's setup differs slightly from typical Java projects. Because JDBC drivers have varying licenses and some (like Oracle's) can't be redistributed, OJP doesn't bundle all drivers in its dependencies. Instead, you'll download them explicitly.
 
 ### The Download Script
-
-> **⚠️ Required for v0.4.0-beta and later:** You must run this script before building or running ojp-server.
 
 OJP provides a convenient script that fetches open-source JDBC drivers from Maven Central:
 
