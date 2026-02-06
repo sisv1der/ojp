@@ -97,6 +97,8 @@ For more details on recognition for these contributions, see our [Contributor Re
 
 ### Download JDBC Drivers
 
+> **⚠️ Required for v0.4.0-beta and later:** Starting from version 0.4.0-beta, JDBC drivers are no longer included in the OJP Server JAR and must be downloaded before building or running ojp-server.
+
 OJP requires JDBC drivers to connect to databases. Open source drivers (H2, PostgreSQL, MySQL, MariaDB) are not embedded in the JAR and must be downloaded:
 
 ```bash

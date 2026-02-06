@@ -125,9 +125,14 @@ graph LR
 
 ## 15.3 Downloading JDBC Drivers
 
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> Starting from version **0.4.0-beta**, JDBC drivers are **NO LONGER included** in the OJP Server JAR. You **MUST** download the JDBC driver(s) you want to use before running ojp-server. This requirement applies to both runnable JAR deployments and development from source.
+
 Here's where OJP's setup differs slightly from typical Java projects. Because JDBC drivers have varying licenses and some (like Oracle's) can't be redistributed, OJP doesn't bundle all drivers in its dependencies. Instead, you'll download them explicitly.
 
 ### The Download Script
+
+> **⚠️ Required for v0.4.0-beta and later:** You must run this script before building or running ojp-server.
 
 OJP provides a convenient script that fetches open-source JDBC drivers from Maven Central:
 
@@ -141,11 +146,12 @@ This script downloads drivers for H2, PostgreSQL, MySQL, and MariaDB into `./ojp
 
 ### Why Not Maven Dependencies?
 
-You might wonder why these aren't regular Maven dependencies. The answer is flexibility and licensing. By keeping drivers in `ojp-libs/`, you can:
+You might wonder why these aren't regular Maven dependencies. The answer is flexibility and licensing. Starting from v0.4.0-beta, drivers are externalized to:
 
 1. Easily swap driver versions without rebuilding
 2. Add proprietary drivers (Oracle, DB2, SQL Server) that can't be in Maven Central
 3. Test with specific driver versions that your production environment uses
+4. Reduce the base JAR size significantly (from 70MB to 20MB)
 
 ### Proprietary Database Drivers
 
