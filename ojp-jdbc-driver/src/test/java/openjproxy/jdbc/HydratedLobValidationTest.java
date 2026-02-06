@@ -72,9 +72,9 @@ class HydratedLobValidationTest {
                 "INSERT INTO " + tableName + " (id, small_blob, medium_blob, large_blob) VALUES (?, ?, ?, ?)"
         );
         psInsert.setInt(1, 1);
-        psInsert.setBinaryStream(2, new ByteArrayInputStream(smallData));
-        psInsert.setBinaryStream(3, new ByteArrayInputStream(mediumData));
-        psInsert.setBinaryStream(4, new ByteArrayInputStream(largeData));
+        psInsert.setBinaryStream(2, new ByteArrayInputStream(smallData), smallData.length);
+        psInsert.setBinaryStream(3, new ByteArrayInputStream(mediumData), mediumData.length);
+        psInsert.setBinaryStream(4, new ByteArrayInputStream(largeData), largeData.length);
         psInsert.executeUpdate();
 
         // Retrieve and verify all LOBs
@@ -149,7 +149,7 @@ class HydratedLobValidationTest {
                 "INSERT INTO " + tableName + " (id, small_blob) VALUES (?, ?)"
         );
         psInsert.setInt(1, 2);
-        psInsert.setBinaryStream(2, new ByteArrayInputStream(testData));
+        psInsert.setBinaryStream(2, new ByteArrayInputStream(testData), testData.length);
         psInsert.executeUpdate();
 
         PreparedStatement psSelect = conn.prepareStatement(
