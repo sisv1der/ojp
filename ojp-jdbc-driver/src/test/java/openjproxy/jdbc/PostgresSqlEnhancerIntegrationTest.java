@@ -21,18 +21,32 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  * 
  * This test leverages the two OJP servers started by the CI postgres-test job:
  * - Server on port 1059: SQL enhancer disabled (baseline)
- * - Server on port 10593: SQL enhancer enabled
+ * - Server on port 10593: SQL enhancer enabled with Calcite optimization
  * 
- * The test:
- * 1. Creates test database with realistic data (Regions: 100, Customers: 5000, Orders: 10000)
- * 2. Runs an inefficient query on both servers
- * 3. Verifies both servers return the same results
+ * The test validates the SQL enhancer's core functionality:
+ * 1. Creates test database with realistic data (Regions: 500, Customers: 25000, Orders: 50000)
+ * 2. Executes SQL queries through both servers
+ * 3. Verifies both servers return identical results (correctness)
  * 4. Compares performance metrics
  * 
- * The test validates that the SQL enhancer:
- * - Does not change query results
- * - Properly parses and validates complex queries
- * - Optimizes query execution (should be faster)
+ * The test demonstrates:
+ * - SQL is successfully PARSED by Calcite (syntax validation)
+ * - Schema metadata is loaded from PostgreSQL (3 tables: regions, customers, orders)
+ * - SQL enhancer attempts optimization using Calcite rules
+ * - System gracefully handles cases where optimization cannot complete
+ * - Query results are identical regardless of optimization
+ * 
+ * Note on Optimization:
+ * Full query optimization with Calcite requires precise type mapping between
+ * PostgreSQL and Calcite's type system. While Calcite successfully parses SQL
+ * and loads schema metadata, type system differences may prevent complete
+ * optimization of complex queries. The enhancer falls back to the original SQL
+ * in such cases, ensuring correct query execution.
+ * 
+ * For best results, use:
+ * - Simple SELECT queries with standard SQL operators
+ * - Queries that don't rely on database-specific type behavior
+ * - Explicit type casts where needed
  */
 @Slf4j
 public class PostgresSqlEnhancerIntegrationTest {
