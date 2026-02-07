@@ -143,7 +143,7 @@ class HydratedLobValidationTest {
 
         // Test data that would previously require streaming
         String testString = "Hydrated binary stream test data with special chars: äöü ñ 中文 🚀";
-        byte[] testData = testString.getBytes(StandardCharsets.UTF_8);
+        byte[] testData = testString.getBytes("UTF-8");
 
         PreparedStatement psInsert = conn.prepareStatement(
                 "INSERT INTO " + tableName + " (id, small_blob) VALUES (?, ?)"
@@ -165,7 +165,7 @@ class HydratedLobValidationTest {
         assertNotNull(binaryStream, "Binary stream should not be null");
 
         byte[] retrievedData = binaryStream.readAllBytes();
-        String retrievedString = new String(retrievedData, StandardCharsets.UTF_8);
+        String retrievedString = new String(retrievedData, "UTF-8");
 
         assertEquals("Retrieved string should match original", testString, retrievedString);
         assertArrayEquals(testData, retrievedData, "Retrieved data should match original");
