@@ -93,7 +93,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // management)
     private final Map<String, XATransactionRegistry> xaRegistries = new ConcurrentHashMap<>();
     private final SessionManager sessionManager;
-    private final CircuitBreaker circuitBreaker;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     // Per-datasource slow query segregation managers
     private final Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers = new ConcurrentHashMap<>();
@@ -119,10 +119,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
-    public StatementServiceImpl(SessionManager sessionManager, CircuitBreaker circuitBreaker,
+    public StatementServiceImpl(SessionManager sessionManager, CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
         this.sessionManager = sessionManager;
-        this.circuitBreaker = circuitBreaker;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
         // Server configuration for creating segregation managers
         this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
                 serverConfiguration.isSqlEnhancerEnabled());
@@ -140,7 +140,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 xaCoordinator,
                 clusterHealthTracker,
                 sessionManager,
-                circuitBreaker,
+                circuitBreakerRegistry,
                 serverConfiguration);
     }
 
@@ -225,48 +225,12 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void executeUpdate(StatementRequest request, StreamObserver<OpResult> responseObserver) {
         log.info("Executing update {}", request.getSql());
-        
-        // Update session activity
-        updateSessionActivity(request.getSession());
-        
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
-        // Process cluster health from the request
-        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
-
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Get the appropriate slow query segregation manager for this datasource
-            String connHash = request.getSession().getConnHash();
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
-
-            // Execute with slow query segregation
-            OpResult result = manager.executeWithSegregation(stmtHash, () -> executeUpdateInternal(request));
-
+        executeWithResilience(request, responseObserver, () -> {
+            OpResult result = executeUpdateInternal(request);
             responseObserver.onNext(result);
             responseObserver.onCompleted();
-            circuitBreaker.onSuccess(stmtHash);
-
-        } catch (SQLDataException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL data failure during update execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver, SqlErrorType.SQL_DATA_EXCEPTION);
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("Failure during update execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during update execution: " + e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        }
+        }, SqlErrorType.SQL_DATA_EXCEPTION, "update");
     }
 
     /**
@@ -370,44 +334,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void executeQuery(StatementRequest request, StreamObserver<OpResult> responseObserver) {
         log.info("Executing query for {}", request.getSql());
-        
-        // Update session activity
-        updateSessionActivity(request.getSession());
-        
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
-        // Process cluster health from the request
-        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
-
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Get the appropriate slow query segregation manager for this datasource
-            String connHash = request.getSession().getConnHash();
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
-
-            // Execute with slow query segregation
-            manager.executeWithSegregation(stmtHash, () -> {
-                executeQueryInternal(request, responseObserver);
-                return null; // Void return for query execution
-            });
-
-            circuitBreaker.onSuccess(stmtHash);
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("Failure during query execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during query execution: " + e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        }
+        executeWithResilience(request, responseObserver, () -> {
+            executeQueryInternal(request, responseObserver);
+        }, null, "query");
     }
 
     /**
@@ -432,21 +362,21 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Get the DataSource for this connection
                 String dsKey = dto.getSession().getConnHash();
                 DataSource dataSource = datasourceMap.get(dsKey);
-                
+
                 if (dataSource != null) {
                     // Get catalog and schema from the connection
                     Connection connection = dto.getConnection();
                     String catalogName = connection.getCatalog();
                     String schemaName = connection.getSchema();
-                    
+
                     // PostgreSQL: Use "public" schema if schema name is null or empty
                     // This ensures tables created in the default schema are visible to Calcite
-                    if ((schemaName == null || schemaName.isEmpty()) && 
+                    if ((schemaName == null || schemaName.isEmpty()) &&
                         connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("PostgreSQL")) {
                         schemaName = "public";
                         log.debug("Using default PostgreSQL 'public' schema for schema loading");
                     }
-                    
+
                     // Ensure schema is loaded (thread-safe, idempotent)
                     sqlEnhancerEngine.ensureSchemaLoaded(dataSource, catalogName, schemaName);
                 } else {
@@ -456,7 +386,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Log but don't fail - enhancement can proceed without schema
                 log.warn("Failed to ensure schema loaded: {}", e.getMessage());
             }
-            
+
             org.openjproxy.grpc.server.sql.SqlEnhancementResult result = sqlEnhancerEngine.enhance(sql);
             sql = result.getEnhancedSql();
 
@@ -837,6 +767,75 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 resultSetUUID, new HydratedResultSetMetadata(rs.getMetaData()));
     }
 
+    /**
+     * Helper method to centralize session validation, activity updates, cluster health processing,
+     * circuit breaker checks, and slow query segregation for statement execution.
+     * This resolves SonarQube duplication issues.
+     */
+    private void executeWithResilience(StatementRequest request, StreamObserver<OpResult> responseObserver,
+                                       StatementExecution executionLogic, SqlErrorType sqlDataExceptionType, String operationName) {
+
+        // Ensure session isn't null
+        if (request.getSession() == null || StringUtils.isBlank(request.getSession().getConnHash())) {
+            sendSQLExceptionMetadata(new SQLException("Invalid request: Session or ConnHash is missing"), responseObserver);
+            log.error("Invalid {} request: Session or ConnHash is missing", operationName);
+            return;
+        }
+
+        // Update session activity
+        updateSessionActivity(request.getSession());
+
+        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
+        // Process cluster health from the request
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
+
+
+        String connHash = request.getSession().getConnHash();
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.get(connHash);
+
+        try {
+            circuitBreaker.preCheck(stmtHash);
+
+            // Get the appropriate slow query segregation manager for this datasource
+            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
+
+            // Execute with slow query segregation
+            manager.executeWithSegregation(stmtHash, () -> {
+                executionLogic.execute();
+                return null;
+            });
+
+            circuitBreaker.onSuccess(stmtHash);
+
+        } catch(SQLDataException e) {
+            circuitBreaker.onFailure(stmtHash, e);
+            log.error("SQL data failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            SqlErrorType type = sqlDataExceptionType != null
+                    ? sqlDataExceptionType
+                    : SqlErrorType.SQL_EXCEPTION;
+
+            sendSQLExceptionMetadata(e, responseObserver, type);
+
+        } catch (SQLException e) {
+            circuitBreaker.onFailure(stmtHash, e);
+            log.error("SQL failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            sendSQLExceptionMetadata(e, responseObserver);
+        } catch (Exception e) {
+            log.error("Unexpected failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            if (e.getCause() instanceof SQLException sqlException) {
+                circuitBreaker.onFailure(stmtHash, sqlException);
+                sendSQLExceptionMetadata(sqlException, responseObserver);
+            } else {
+                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
+                circuitBreaker.onFailure(stmtHash, sqlException);
+                sendSQLExceptionMetadata(sqlException, responseObserver);
+            }
+        }
+    }
+
     // ===== XA Transaction Operations =====
 
     @Override
@@ -904,7 +903,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         org.openjproxy.grpc.server.action.transaction.XaIsSameRMAction.getInstance()
                 .execute(actionContext, request, responseObserver);
     }
-    
+
     /**
      * Shuts down the SQL enhancer engine and releases associated resources.
      * This method should be called during server shutdown to ensure proper cleanup.
@@ -914,5 +913,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             log.info("Shutting down SQL enhancer engine");
             sqlEnhancerEngine.shutdown();
         }
+    }
+
+    @FunctionalInterface
+    private interface StatementExecution {
+        void execute() throws Exception;
     }
 }
