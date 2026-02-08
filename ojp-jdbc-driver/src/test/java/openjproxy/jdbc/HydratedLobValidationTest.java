@@ -109,18 +109,17 @@ class HydratedLobValidationTest {
         assertArrayEquals(largeData, secondRead, "Second read of large BLOB should match");
 
         // Test BLOB length - should be available immediately (hydrated)
-        assertEquals(Float.parseFloat("Small BLOB length should be correct"), smallData.length, smallBlob.length());
-        assertEquals(Float.parseFloat("Medium BLOB length should be correct"), mediumData.length, mediumBlob.length());
-        assertEquals(Float.parseFloat("Large BLOB length should be correct"), largeData.length, largeBlob.length());
+        assertEquals(smallData.length, smallBlob.length(), "Small BLOB length should be correct");
+        assertEquals(mediumData.length, mediumBlob.length(), "Medium BLOB length should be correct");
+        assertEquals(largeData.length, largeBlob.length(), "Large BLOB length should be correct");
 
         // Test getBytes method - should work with hydrated data
         byte[] partialData = largeBlob.getBytes(1, 100);
-        assertEquals(Float.parseFloat("Partial data length should be 100"), 100, partialData.length);
+        assertEquals(100, partialData.length, "Partial data length should be 100");
 
         // Verify partial data matches the beginning of the original data
         for (int i = 0; i < 100; i++) {
-            assertEquals(Float.parseFloat("Partial data should match original at position " + i),
-                    largeData[i], partialData[i]);
+            assertEquals(largeData[i], partialData[i],"Partial data should match original at position " + i);
         }
 
         // Cleanup
@@ -143,7 +142,7 @@ class HydratedLobValidationTest {
 
         // Test data that would previously require streaming
         String testString = "Hydrated binary stream test data with special chars: äöü ñ 中文 🚀";
-        byte[] testData = testString.getBytes("UTF-8");
+        byte[] testData = testString.getBytes(StandardCharsets.UTF_8);
 
         PreparedStatement psInsert = conn.prepareStatement(
                 "INSERT INTO " + tableName + " (id, small_blob) VALUES (?, ?)"
@@ -165,9 +164,9 @@ class HydratedLobValidationTest {
         assertNotNull(binaryStream, "Binary stream should not be null");
 
         byte[] retrievedData = binaryStream.readAllBytes();
-        String retrievedString = new String(retrievedData, "UTF-8");
+        String retrievedString = new String(retrievedData, StandardCharsets.UTF_8);
 
-        assertEquals("Retrieved string should match original", testString, retrievedString);
+        assertEquals(testString, retrievedString, "Retrieved string should match original");
         assertArrayEquals(testData, retrievedData, "Retrieved data should match original");
 
         // Cleanup
