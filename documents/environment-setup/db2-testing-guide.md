@@ -14,7 +14,13 @@ This document explains how to set up and run IBM DB2 Database tests with OJP.
 Use the official IBM DB2 image for testing:
 
 ```bash
-docker run -d --name ojp-db2   --privileged   -p 50000:50000 -m 6g  -e LICENSE=accept   -e DB2INSTANCE=db2inst1   -e DB2INST1_PASSWORD=testpass   -e DBNAME=testdb   ibmcom/db2:11.5.8.0
+docker pull icr.io/db2_community/db2
+```
+
+After pulling:
+
+```bash
+docker run -d --name ojp-db2   --privileged   -p 50000:50000 -m 6g  -e LICENSE=accept   -e DB2INSTANCE=db2inst1   -e DB2INST1_PASSWORD=testpass   -e DBNAME=testdb   icr.io/db2_community/db2
 ```
 
 Wait for the database to fully start (may take several minutes). You can check the logs:
@@ -38,6 +44,7 @@ The IBM DB2 JDBC driver is not automatically included in the ojp-server dependen
 ### 3. Start OJP Server
 
 In a separate terminal:
+
 ```bash
 cd ojp
 mvn verify -pl ojp-server -Prun-ojp-server
@@ -87,6 +94,7 @@ jdbc:ojp[localhost:1059]_db2://db2host:50000/database
 ```
 
 Where:
+
 - `localhost:1059` - OJP server address and port
 - `db2://localhost:50000` - DB2 instance
 - `database` - Target database name
@@ -94,6 +102,7 @@ Where:
 ## Skipping DB2 Tests
 
 DB2 tests are skipped by default, use:
+
 ```bash
 mvn test
 ```

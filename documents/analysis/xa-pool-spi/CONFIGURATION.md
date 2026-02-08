@@ -12,7 +12,7 @@ These configuration properties are supported by all XA pool providers:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `ojp.xa.pooling.enabled` | boolean | `true` | Enable/disable XA connection pooling |
+| `ojp.xa.connection.pool.enabled` | boolean | `true` | Enable/disable XA connection pooling |
 | `ojp.xa.maxPoolSize` | int | `10` | Maximum number of connections in pool |
 | `ojp.xa.minIdle` | int | `2` | Minimum number of idle connections to maintain |
 | `ojp.xa.maxWaitMillis` | long | `30000` | Maximum time to wait for available connection (ms) |
@@ -84,7 +84,7 @@ The XA Pool SPI automatically detects and configures the appropriate XADataSourc
 Minimal configuration for PostgreSQL:
 
 ```properties
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 ojp.xa.maxPoolSize=10
 ojp.xa.minIdle=2
 ```
@@ -95,7 +95,7 @@ Recommended settings for production environments:
 
 ```properties
 # Enable XA pooling
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 
 # Pool sizing (adjust based on workload)
 ojp.xa.maxPoolSize=50
@@ -124,7 +124,7 @@ Configuration for Oracle RAC with Fast Connection Failover:
 
 ```properties
 # Enable XA pooling
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 
 # Pool sizing
 ojp.xa.maxPoolSize=20
@@ -144,7 +144,7 @@ ojp.xa.oracle.ucp.jmxEnabled=true
 Optimized for high-throughput OLTP workloads:
 
 ```properties
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 
 # Larger pool
 ojp.xa.maxPoolSize=100
@@ -167,7 +167,7 @@ ojp.xa.commonspool.fairness=true
 Simplified settings for development:
 
 ```properties
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 
 # Small pool
 ojp.xa.maxPoolSize=5
@@ -187,8 +187,8 @@ ojp.xa.commonspool.testWhileIdle=false
 All configuration properties can be set via environment variables using uppercase with underscores:
 
 ```bash
-# Property: ojp.xa.pooling.enabled
-export OJP_XA_POOLING_ENABLED=true
+# Property: ojp.xa.connection.pool.enabled
+export OJP_XA_CONNECTION_POOL_ENABLED=true
 
 # Property: ojp.xa.maxPoolSize
 export OJP_XA_MAXPOOLSIZE=20
@@ -197,9 +197,46 @@ export OJP_XA_MAXPOOLSIZE=20
 export OJP_XA_ORACLE_UCP_ENABLEFCF=true
 ```
 
-## Programmatic Configuration
+## Environment-Specific Configuration
 
-Configuration can also be set programmatically:
+**Recommended Approach (Since PR #298):** Use environment-specific properties files to configure XA pools for different environments without requiring custom code.
+
+Create environment-specific properties files:
+- `ojp-dev.properties` - Development environment configuration
+- `ojp-staging.properties` - Staging environment configuration
+- `ojp-prod.properties` - Production environment configuration
+
+Example `ojp-prod.properties`:
+```properties
+# XA Pool Configuration for Production
+ojp.xa.connection.pool.enabled=true
+ojp.xa.connection.pool.maxTotal=40
+ojp.xa.connection.pool.minIdle=10
+ojp.xa.connection.pool.maxWaitMillis=30000
+
+# Oracle UCP specific settings
+ojp.xa.oracle.ucp.enableFCF=true
+ojp.xa.oracle.ucp.statementCacheSize=100
+```
+
+Set the environment using:
+```bash
+# System property
+-Dojp.environment=prod
+
+# Or environment variable
+export OJP_ENVIRONMENT=prod
+```
+
+**For complete details, see:**
+- **[OJP JDBC Configuration](../../configuration/ojp-jdbc-configuration.md)** - Environment-specific configuration guide
+- **[Example Configuration Files](../../configuration/)** - Sample ojp-dev.properties, ojp-staging.properties, ojp-prod.properties
+
+## Programmatic Configuration (Advanced)
+
+**Note:** The programmatic API shown below is for advanced scenarios. For environment-specific configuration, use the properties file approach described above.
+
+Configuration can also be set programmatically when needed:
 
 ```java
 Map<String, String> config = new HashMap<>();
@@ -299,7 +336,7 @@ To migrate from pass-through XA to pooled XA:
 
 ### Step 1: Enable Pooling
 ```properties
-ojp.xa.pooling.enabled=true
+ojp.xa.connection.pool.enabled=true
 ```
 
 ### Step 2: Configure Pool
@@ -315,7 +352,7 @@ ojp.xa.minIdle=2
 
 ### Step 4: Rollback If Needed
 ```properties
-ojp.xa.pooling.enabled=false
+ojp.xa.connection.pool.enabled=false
 ```
 
 ## Troubleshooting Configuration Issues

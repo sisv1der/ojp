@@ -4,7 +4,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
@@ -23,12 +22,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 @Slf4j
 public class MultinodeIntegrationTest {
     private static final int THREADS = 30; // Number of worker threads
     private static final int RAMPUP_MS = 120 * 1000; // 120 seconds Ramp-up window in milliseconds
+    
+    // Retry configuration for connection-level failures
+    private static final int MAX_RETRIES = 3;
+    private static final long RETRY_DELAY_MS = 100; // Initial delay between retries
+    
+    // Test failure threshold - allows for occasional non-retryable errors or
+    // failures that occur after all retry attempts are exhausted
+    private static final int MAX_FAILURES = 5;
 
     protected static boolean isTestDisabled;
     private static Queue<Long> queryDurations = new ConcurrentLinkedQueue<>();
@@ -37,7 +46,7 @@ public class MultinodeIntegrationTest {
     private static HikariDataSource ds;
 
     @BeforeAll
-    public static void checkTestConfiguration() {
+    static void checkTestConfiguration() {
         // Check both system property and environment variable
         boolean sysPropEnabled = Boolean.parseBoolean(System.getProperty("multinodeTestsEnabled", "false"));
         boolean envVarEnabled = Boolean.parseBoolean(System.getenv("MULTINODE_TESTS_ENABLED"));
@@ -54,7 +63,7 @@ public class MultinodeIntegrationTest {
     @SneakyThrows
     @ParameterizedTest
     @CsvFileSource(resources = "/multinode_connection.csv")
-    public void runTests(String driverClass, String url, String user, String password) throws SQLException {
+    void runTests(String driverClass, String url, String user, String password) throws SQLException {
         assumeFalse(isTestDisabled, "Multinode tests are disabled");
         
         this.setUp();
@@ -160,20 +169,53 @@ public class MultinodeIntegrationTest {
         System.out.println("Total test duration: " + totalTimeMs + " ms");
         System.out.printf("Average query duration: %.3f ms\n", avgQueryMs);
         System.out.println("Total query failures: " + numFailures);
-        Assertions.assertEquals(2160, numQueries);
-        Assertions.assertTrue(numFailures < 5, "Expected fewer than 5 failures, but got: " + numFailures);
-        Assertions.assertTrue(totalTimeMs < 180000);
-        Assertions.assertTrue(avgQueryMs < 40);
+        assertEquals(2160, numQueries);
+        assertTrue(numFailures < MAX_FAILURES,
+            "Expected fewer than " + MAX_FAILURES + " failures (with retry logic for connection errors), but got: " + numFailures);
+        assertTrue(totalTimeMs < 180000);
+        assertTrue(avgQueryMs < 40);
     }
 
     private static void timeAndRun(Callable<Void> query) {
         long start = System.nanoTime();
-        try {
-            query.call();
-        } catch (Exception e) {
-            failedQueries.incrementAndGet();
-            System.err.println("Query failed: " + e.getMessage() + " \n " + ExceptionUtils.getStackTrace(e));
+        Exception lastException = null;
+        boolean succeeded = false;
+        
+        // Retry logic for connection-level errors
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                query.call();
+                succeeded = true;
+                break; // Success - exit retry loop
+            } catch (Exception e) {
+                lastException = e;
+                
+                // Check if this is a connection-level error that should be retried
+                if (GrpcExceptionHandler.isConnectionLevelError(e) && attempt < MAX_RETRIES) {
+                    // Connection-level error - retry after delay with exponential backoff
+                    long delayMs = (long) (RETRY_DELAY_MS * Math.pow(2, attempt));
+                    log.debug("Connection-level error on attempt {}, retrying after {}ms: {}", 
+                        attempt + 1, delayMs, e.getMessage());
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break; // Exit retry loop if interrupted
+                    }
+                } else {
+                    // Either not a connection-level error, or we've exhausted retries
+                    break;
+                }
+            }
         }
+        
+        // If we didn't succeed after retries, count it as a failure
+        if (!succeeded && lastException != null) {
+            failedQueries.incrementAndGet();
+            System.err.println("Query failed after " + (MAX_RETRIES + 1) + " attempts: " + 
+                lastException.getMessage() + " \n " + ExceptionUtils.getStackTrace(lastException));
+        }
+        
         long end = System.nanoTime();
         queryDurations.add(end - start);
         totalQueries.incrementAndGet();

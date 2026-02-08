@@ -30,14 +30,32 @@ _"The only open-source JDBC Type 3 driver globally, this project introduces a tr
 OJP protects your databases from overwhelming connection storms by acting as a smart backpressure mechanism. Instead of every application instance opening and holding connections, OJP orchestrates and optimizes database access through intelligent pooling, query flow control, and multi-database support. With minimal configuration changes, you replace native JDBC drivers gaining connection resilience, and safer scalability. Elastic scaling becomes simpler without putting your database at risk.
 
 ---
+## Requirements
+
+- **OJP JDBC Driver**: Java 11 or higher
+- **OJP Server**: Java 21 or higher
+
+---
 ## Quick Start
 
 Get OJP running in under 5 minutes:
 
-### 1. Start OJP Server (Docker - Batteries Included)
+### 1. Start OJP Server (Docker)
+
+> **⚠️ Important for v0.4.0-beta and later:** JDBC drivers must be downloaded and mounted. See [Chapter 4: Database Drivers](documents/ebook/part2-chapter4-database-drivers.md) for details.
+
 ```bash
-# Includes H2, PostgreSQL, MySQL, MariaDB drivers
-docker run --rm -d --network host rrobetti/ojp:0.3.1-beta
+# Download drivers first
+mkdir -p ojp-libs
+cd ojp-server
+bash download-drivers.sh ../ojp-libs
+cd ..
+
+# Run with drivers mounted
+docker run --rm -d \
+  --network host \
+  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  rrobetti/ojp:0.3.1-beta
 ```
 
 **Alternative: Runnable JAR (No Docker)**
@@ -45,7 +63,7 @@ docker run --rm -d --network host rrobetti/ojp:0.3.1-beta
 ```bash
 # Download OJP Server JAR and open source drivers
 cd ojp-server
-bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB
+bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
 java -jar ojp-server-0.3.2-snapshot-shaded.jar
 ```
 
@@ -80,7 +98,7 @@ Use the ojp driver: `org.openjproxy.jdbc.Driver`
 
 That's it! Your application now uses intelligent connection pooling through OJP.
 
-**Note**: Docker images include H2, PostgreSQL, MySQL, and MariaDB drivers by default. For proprietary databases (Oracle, SQL Server, DB2), see the [Drop-In Driver Documentation](documents/configuration/DRIVERS_AND_LIBS.md).
+**Note**: For detailed driver setup including proprietary databases (Oracle, SQL Server, DB2), see [Chapter 4: Database Drivers](documents/ebook/part2-chapter4-database-drivers.md).
 
 ## Alternative Setup: Executable JAR (No Docker)
 
@@ -109,10 +127,11 @@ If Docker is not available in your environment, you can build and run OJP Server
 
 ### Further documents
 - [Drop-In External Libraries Support](documents/configuration/DRIVERS_AND_LIBS.md) - Add proprietary database drivers and libraries (Oracle JDBC, Oracle UCP, SQL Server, DB2) without recompiling.
+- [SSL/TLS Certificate Configuration Guide](documents/configuration/ssl-tls-certificate-placeholders.md) - Configure SSL/TLS certificates with server-side property placeholders for PostgreSQL, MySQL, Oracle, SQL Server, and DB2.
 - [Architectural decision records (ADRs)](documents/ADRs) - Technical decisions and rationale behind OJP's architecture.
 - [Get started: Spring Boot, Quarkus and Micronaut](documents/java-frameworks/README.md) - Framework-specific integration guides and examples.
 - [Understanding OJP Service Provider Interfaces (SPIs)](documents/Understanding-OJP-SPIs.md) - Guide for Java developers on implementing custom connection pool providers.
-- [Connection Pool Configuration](documents/configuration/ojp-jdbc-configuration.md) - OJP JDBC driver setup and connection pool settings.
+- [Connection Pool Configuration](documents/configuration/ojp-jdbc-configuration.md) - OJP JDBC driver setup, connection pool settings, and environment-specific configuration (ojp-dev.properties, ojp-staging.properties, ojp-prod.properties).
 - [OJP Server Configuration](documents/configuration/ojp-server-configuration.md) - Server startup options, runtime configuration, and SQL enhancer with schema loading.
 - [Multinode Configuration](documents/multinode/README.md) - High availability and load balancing with multiple OJP servers.
 - [Slow query segregation feature](documents/designs/SLOW_QUERY_SEGREGATION.md) - Feature that prevent connection starvation by slow queries (or statements).
