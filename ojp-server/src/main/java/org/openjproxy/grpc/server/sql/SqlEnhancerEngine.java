@@ -485,61 +485,18 @@ public class SqlEnhancerEngine {
                                      sqlToOptimize.substring(0, Math.min(sqlToOptimize.length(), 50)));
                             SqlEnhancementResult optimizedResult = performOptimization(sqlToOptimize);
                             
-                            // Apply optimizations
-                            RelNode optimizedNode = converter.applyOptimizations(relNode, rules);
-                            
-                            // Generate SQL from optimized RelNode
-                            try {
-                                String optimizedSql = converter.convertToSql(optimizedNode);
-                                
-                                long optimizationEndTime = System.currentTimeMillis();
-                                long optimizationTime = optimizationEndTime - optimizationStartTime;
-                                
-                                // Check if SQL was actually modified (case-sensitive to detect quoted identifiers and schema qualifiers)
-                                boolean wasModified = !sql.trim().equals(optimizedSql.trim());
-                                
-                                // Track metrics
-                                totalQueriesOptimized.incrementAndGet();
-                                totalOptimizationTimeMs.addAndGet(optimizationTime);
-                                if (wasModified) {
-                                    totalQueriesModified.incrementAndGet();
-                                }
-                                
-                                if (wasModified) {
-                                    log.info("SQL optimized with {} rules in {}ms. Original length: {}, Optimized length: {}", 
-                                            rules.size(), optimizationTime, sql.length(), optimizedSql.length());
-                                    log.debug("Original SQL: {}", sql.substring(0, Math.min(sql.length(), 200)));
-                                    log.debug("Optimized SQL: {}", optimizedSql.substring(0, Math.min(optimizedSql.length(), 200)));
-                                }
-                                
-                                result = SqlEnhancementResult.optimized(optimizedSql, wasModified, 
-                                                                       enabledRules, optimizationTime);
-                                
-                                log.debug("Optimization complete in {}ms with {} rules, modified: {}", 
-                                         optimizationTime, rules.size(), wasModified);
-                                
-                            } catch (RelationalAlgebraConverter.SqlGenerationException e) {
-                                log.debug("SQL generation failed, using original SQL: {}", e.getMessage());
-                                long optimizationTime = System.currentTimeMillis() - optimizationStartTime;
-                                // Return original SQL with optimization metadata even though generation failed
-                                result = SqlEnhancementResult.optimized(sql, false, enabledRules, optimizationTime);
-                            }
-                            
-                        } catch (RelationalAlgebraConverter.OptimizationException e) {
-                            log.debug("Optimization failed, using original SQL: {}", e.getMessage());
-                            result = SqlEnhancementResult.success(sql, false);
+                            // Cache the optimized result for future use
+                            cache.put(sqlToOptimize, optimizedResult);
+                            log.debug("Async optimization complete and cached for SQL: {}", 
+                                     sqlToOptimize.substring(0, Math.min(sqlToOptimize.length(), 50)));
+                        } catch (Exception e) {
+                            log.warn("Async optimization failed: {}", e.getMessage());
+                            // Mark as failed so we don't retry
+                            failedOptimizations.add(sqlToOptimize);
                         }
-                    } else {
-                        // Optimization not enabled, return original SQL
-                        result = SqlEnhancementResult.success(sql, false);
-                    }
-                    
-                } catch (RelationalAlgebraConverter.ConversionException e) {
-                    log.info("Conversion failed, falling back to original SQL: {}", e.getMessage(), e);
-                    result = SqlEnhancementResult.success(sql, false);
-                } catch (Exception e) {
-                    log.warn("Unexpected error during conversion/optimization, falling back to original SQL: {}", 
-                            e.getMessage());
+                    }, optimizationExecutor);
+                } else {
+                    // Default fallback
                     result = SqlEnhancementResult.success(sql, false);
                 }
             } else {
