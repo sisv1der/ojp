@@ -94,6 +94,11 @@ public class PostgresSqlEnhancerIntegrationTest {
     public static void setup() throws Exception {
         isTestEnabled = Boolean.parseBoolean(System.getProperty("enablePostgresTests", "false"));
         
+        if (!isTestEnabled) {
+            log.info("PostgreSQL SQL Enhancer Integration Test is disabled. Enable with -DenablePostgresTests=true");
+            return;
+        }
+        
         log.info("Setting up PostgreSQL SQL Enhancer Integration Test");
         log.info("Using OJP servers: Baseline (port {}), Enhanced (port {})", PORT_BASELINE, PORT_ENHANCED);
         
