@@ -1,6 +1,8 @@
 
 ### Prerequisites
-- Java 22 or higher
+- **For OJP JDBC Driver**: Java 11 or higher
+- **For OJP Server**: Java 21 or higher
+- **For Development/Testing**: Java 22 or higher (recommended)
 - Maven 3.9+
 - Docker (for running databases and OJP server)
 
@@ -18,6 +20,8 @@
    ```
 
 3. **Download JDBC drivers** (required before starting the OJP server)
+   
+   > **⚠️ Required for v0.4.0-beta and later:** Starting from version 0.4.0-beta, JDBC drivers are no longer included in the OJP Server JAR and must be downloaded separately.
    
    OJP Server requires JDBC drivers to connect to databases. The open source drivers (H2, PostgreSQL, MySQL, MariaDB) are not packaged with OJP by default and must be downloaded separately.
    
@@ -66,7 +70,11 @@ We have comprehensive JDBC integration tests with OJP for the following database
 - DB2
 - H2
 
-The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers are included in Docker images by default, but when running from source, the drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above). All database tests are disabled by default and must be explicitly enabled using their respective flags (e.g., `-DenableH2Tests=true`). In CI pipelines, only H2 tests run in the Main CI workflow as a fast fail-fast mechanism. For proprietary databases like Oracle and SQL Server, see specific sections below.
+The free and open source databases (H2, Postgres, MySQL, MariaDB and CockroachDB) JDBC drivers must be downloaded separately using the `download-drivers.sh` script (see step 3 above) for both runnable JAR and Docker deployments.
+
+> **📌 Version 0.4.0-beta and Later:** Starting from v0.4.0-beta, JDBC drivers are not included in either the runnable JAR or Docker images.
+
+All database tests are disabled by default and must be explicitly enabled using their respective flags (e.g., `-DenableH2Tests=true`). In CI pipelines, only H2 tests run in the Main CI workflow as a fast fail-fast mechanism. For proprietary databases like Oracle and SQL Server, see specific sections below.
 
 ### Oracle Database Setup (Optional)
 Oracle integration tests require the Oracle JDBC driver and due to licensing restrictions we do not pack it with OJP.
