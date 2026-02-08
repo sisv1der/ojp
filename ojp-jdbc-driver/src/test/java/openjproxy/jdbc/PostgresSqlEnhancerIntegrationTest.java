@@ -99,11 +99,36 @@ public class PostgresSqlEnhancerIntegrationTest {
             return;
         }
         
+        // Check if PostgreSQL is available before proceeding
+        if (!isPostgreSQLAvailable()) {
+            log.info("PostgreSQL is not available at {}:{}. Skipping SQL Enhancer Integration Test.", PG_HOST, PG_PORT);
+            log.info("This test requires PostgreSQL to be running. In CI, it runs only in the postgres-test job.");
+            isTestEnabled = false;
+            return;
+        }
+        
         log.info("Setting up PostgreSQL SQL Enhancer Integration Test");
         log.info("Using OJP servers: Baseline (port {}), Enhanced (port {})", PORT_BASELINE, PORT_ENHANCED);
         
         // Setup test data in PostgreSQL
         setupTestData();
+    }
+    
+    /**
+     * Check if PostgreSQL is available and accepting connections
+     */
+    private static boolean isPostgreSQLAvailable() {
+        String pgUrl = String.format("jdbc:postgresql://%s:%s/%s", PG_HOST, PG_PORT, PG_DB);
+        Properties props = new Properties();
+        props.setProperty("user", PG_USER);
+        props.setProperty("password", PG_PASSWORD);
+        
+        try (Connection conn = PG_DRIVER.connect(pgUrl, props)) {
+            return conn != null && !conn.isClosed();
+        } catch (Exception e) {
+            log.debug("PostgreSQL not available: {}", e.getMessage());
+            return false;
+        }
     }
     
     /**
