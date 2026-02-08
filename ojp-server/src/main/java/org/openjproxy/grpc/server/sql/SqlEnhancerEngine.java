@@ -114,14 +114,20 @@ public class SqlEnhancerEngine {
             .withCaseSensitive(false); // Most SQL is case-insensitive
         
         // Initialize converter if conversion is enabled
-        // Pass SqlDialect for SQL generation and SchemaCache for real schema
+        // Pass SqlDialect for SQL generation, SqlLibrary for operators, and SchemaCache for real schema
         this.converter = conversionEnabled ? 
-            new RelationalAlgebraConverter(parserConfig, calciteDialect, schemaCache) : null;
+            new RelationalAlgebraConverter(parserConfig, calciteDialect, dialect.getSqlLibrary(), schemaCache) : null;
         
         // Initialize optimization components
         this.ruleRegistry = new OptimizationRuleRegistry();
         this.enabledRules = enabledRules != null ? enabledRules : 
-            Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE");
+            Arrays.asList(
+                // Basic expression optimization
+                "FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE",
+                // Subquery optimization - removes correlated subqueries by converting to JOINs
+                "SUB_QUERY_REMOVE", "SUB_QUERY_REMOVE_FILTER", "SUB_QUERY_REMOVE_JOIN",
+                "PROJECT_SUB_QUERY_TO_CORRELATE", "FILTER_SUB_QUERY_TO_CORRELATE", "JOIN_SUB_QUERY_TO_CORRELATE"
+            );
         
         if (enabled) {
             String conversionStatus = conversionEnabled ? " with relational algebra conversion" : "";
@@ -302,6 +308,58 @@ public class SqlEnhancerEngine {
     }
     
     /**
+     * Ensures schema is loaded from the provided DataSource.
+     * This is called before enhance() to populate the schema cache on-demand.
+     * Thread-safe and idempotent - multiple calls will only load once.
+     * 
+     * @param dataSource DataSource to load schema from
+     * @param catalogName Catalog name (may be null)
+     * @param schemaName Schema name (may be null)
+     */
+    public void ensureSchemaLoaded(javax.sql.DataSource dataSource, String catalogName, String schemaName) {
+        // Only load if we have a schema cache and loader
+        if (schemaCache == null || schemaLoader == null || dataSource == null) {
+            return;
+        }
+        
+        // Check if schema is already loaded
+        if (schemaCache.getSchema(false) != null) {
+            log.debug("Schema already loaded in cache");
+            return;
+        }
+        
+        // Try to acquire lock for loading
+        if (!schemaCache.tryAcquireRefreshLock()) {
+            log.debug("Schema load already in progress by another thread");
+            return;
+        }
+        
+        try {
+            // Double-check after acquiring lock
+            if (schemaCache.getSchema(false) != null) {
+                log.debug("Schema loaded by another thread while waiting for lock");
+                return;
+            }
+            
+            log.info("Loading schema metadata from DataSource (catalog: {}, schema: {})", 
+                     catalogName, schemaName);
+            
+            // Load schema synchronously
+            try (java.sql.Connection connection = dataSource.getConnection()) {
+                SchemaMetadata schema = schemaLoader.loadSchema(connection, catalogName, schemaName);
+                schemaCache.updateSchema(schema);
+                log.info("Successfully loaded schema with {} tables", schema.getTables().size());
+            } catch (java.sql.SQLException e) {
+                log.error("Failed to load schema metadata", e);
+                // Don't throw - allow query to proceed without schema (will fall back to generic schema)
+            }
+            
+        } finally {
+            schemaCache.releaseRefreshLock();
+        }
+    }
+    
+    /**
      * Parses, validates, and optionally optimizes SQL.
      * Phase 3: Adds database-specific dialect support.
      * 
@@ -367,8 +425,8 @@ public class SqlEnhancerEngine {
                                 long optimizationEndTime = System.currentTimeMillis();
                                 long optimizationTime = optimizationEndTime - optimizationStartTime;
                                 
-                                // Check if SQL was actually modified
-                                boolean wasModified = !sql.trim().equalsIgnoreCase(optimizedSql.trim());
+                                // Check if SQL was actually modified (case-sensitive to detect quoted identifiers and schema qualifiers)
+                                boolean wasModified = !sql.trim().equals(optimizedSql.trim());
                                 
                                 // Track metrics
                                 totalQueriesOptimized.incrementAndGet();
@@ -407,7 +465,7 @@ public class SqlEnhancerEngine {
                     }
                     
                 } catch (RelationalAlgebraConverter.ConversionException e) {
-                    log.debug("Conversion failed, falling back to original SQL: {}", e.getMessage());
+                    log.info("Conversion failed, falling back to original SQL: {}", e.getMessage(), e);
                     result = SqlEnhancementResult.success(sql, false);
                 } catch (Exception e) {
                     log.warn("Unexpected error during conversion/optimization, falling back to original SQL: {}", 
@@ -421,8 +479,8 @@ public class SqlEnhancerEngine {
             
         } catch (SqlParseException e) {
             // Log parse errors with dialect info
-            log.debug("SQL parse error with {} dialect: {} for SQL: {}", 
-                     dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)));
+            log.info("SQL parse error with {} dialect: {} for SQL: {}",
+                     dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)), e);
             
             // On parse error, return original SQL (pass-through mode)
             result = SqlEnhancementResult.passthrough(sql);
