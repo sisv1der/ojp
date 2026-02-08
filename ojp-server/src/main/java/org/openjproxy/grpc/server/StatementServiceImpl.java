@@ -148,43 +148,65 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     }
 
     /**
-     * Creates and configures the SQL enhancer engine based on server configuration.
-     * Parses mode to determine conversion and optimization settings.
-     * Initializes schema cache and loader for query validation.
-     * 
-     * @param config Server configuration
-     * @return Configured SqlEnhancerEngine instance
+     * Updates the last activity time for the session to prevent premature cleanup.
+     * This should be called at the beginning of any method that operates on a session.
+     *
+     * @param sessionInfo the session information
      */
     private void updateSessionActivity(SessionInfo sessionInfo) {
         if (sessionInfo != null && sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
             sessionManager.updateSessionActivity(sessionInfo);
         }
-        
+    }
+
+    /**
+     * Creates and configures the SQL enhancer engine based on server configuration.
+     * Parses mode to determine conversion and optimization settings.
+     * Initializes schema cache and loader for query validation.
+     *
+     * @param config Server configuration
+     * @return Configured SqlEnhancerEngine instance
+     */
+    private org.openjproxy.grpc.server.sql.SqlEnhancerEngine createSqlEnhancerEngine(ServerConfiguration config) {
+        // Parse mode to determine conversion and optimization settings
+        org.openjproxy.grpc.server.sql.SqlEnhancerMode mode =
+                org.openjproxy.grpc.server.sql.SqlEnhancerMode.fromString(config.getSqlEnhancerMode());
+
+        // Parse rules if specified, otherwise use defaults
+        java.util.List<String> enabledRules = null;
+        if (config.getSqlEnhancerRules() != null && !config.getSqlEnhancerRules().trim().isEmpty()) {
+            enabledRules = java.util.Arrays.asList(config.getSqlEnhancerRules().split(","))
+                    .stream()
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
         // Initialize schema cache and loader if SQL enhancer is enabled with conversion
         org.openjproxy.grpc.server.sql.SchemaCache schemaCache = null;
         org.openjproxy.grpc.server.sql.SchemaLoader schemaLoader = null;
-        
+
         if (config.isSqlEnhancerEnabled() && mode.isConversionEnabled()) {
             log.info("Initializing schema cache and loader for SQL enhancer");
             schemaCache = new org.openjproxy.grpc.server.sql.SchemaCache();
             schemaLoader = new org.openjproxy.grpc.server.sql.SchemaLoader();
             // Note: Schema will be loaded on first query execution when datasource is available
         }
-        
+
         // Create engine with full configuration including schema support
         return new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
-            config.isSqlEnhancerEnabled(),
-            config.getSqlEnhancerDialect(),
-            config.getSqlEnhancerTargetDialect(),
-            mode.isConversionEnabled(),
-            mode.isOptimizationEnabled(),
-            enabledRules,
-            schemaCache,
-            schemaLoader,
-            null,  // DataSource will be provided during query execution
-            null,  // Catalog name will be determined from connection
-            null,  // Schema name will be determined from connection  
-            0      // No automatic refresh (will refresh on-demand)
+                config.isSqlEnhancerEnabled(),
+                config.getSqlEnhancerDialect(),
+                config.getSqlEnhancerTargetDialect(),
+                mode.isConversionEnabled(),
+                mode.isOptimizationEnabled(),
+                enabledRules,
+                schemaCache,
+                schemaLoader,
+                null,  // DataSource will be provided during query execution
+                null,  // Catalog name will be determined from connection
+                null,  // Schema name will be determined from connection
+                0      // No automatic refresh (will refresh on-demand)
         );
     }
 
