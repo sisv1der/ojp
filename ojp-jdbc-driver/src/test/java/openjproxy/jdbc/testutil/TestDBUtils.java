@@ -168,7 +168,7 @@ public class TestDBUtils {
     private static class SimpleXid implements Xid {
         // AtomicInteger replaces synchronized(SimpleXid.class) for thread-safe ID generation
         // and avoids virtual-thread pinning
-        private static AtomicInteger counter = new AtomicInteger(0);
+        private static final AtomicInteger counter = new AtomicInteger(0);
         private final int id;
 
         public SimpleXid() {

@@ -1,11 +1,9 @@
 package org.openjproxy.grpc.client;
 
 import com.zaxxer.hikari.HikariDataSource;
-import io.grpc.StatusRuntimeException;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
@@ -24,6 +22,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 @Slf4j
@@ -169,11 +169,11 @@ public class MultinodeIntegrationTest {
         System.out.println("Total test duration: " + totalTimeMs + " ms");
         System.out.printf("Average query duration: %.3f ms\n", avgQueryMs);
         System.out.println("Total query failures: " + numFailures);
-        Assertions.assertEquals(2160, numQueries);
-        Assertions.assertTrue(numFailures < MAX_FAILURES, 
+        assertEquals(2160, numQueries);
+        assertTrue(numFailures < MAX_FAILURES,
             "Expected fewer than " + MAX_FAILURES + " failures (with retry logic for connection errors), but got: " + numFailures);
-        Assertions.assertTrue(totalTimeMs < 180000);
-        Assertions.assertTrue(avgQueryMs < 40);
+        assertTrue(totalTimeMs < 180000);
+        assertTrue(avgQueryMs < 40);
     }
 
     private static void timeAndRun(Callable<Void> query) {

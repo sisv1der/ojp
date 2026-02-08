@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.sql.RowIdLifetime;
+import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.UUID;
@@ -60,7 +61,7 @@ public class ProtoConverterNewTypesTest {
         // Result should now be a Calendar (with original_type preservation)
         Object result = ProtoConverter.fromParameterValue(value, null);
         assertNotNull(result);
-        assertTrue(result instanceof java.util.Calendar);
+        assertInstanceOf(Calendar.class, result);
         
         // Verify times are equivalent (allowing for millisecond precision)
         Calendar resultCal = (Calendar) result;
@@ -79,7 +80,7 @@ public class ProtoConverterNewTypesTest {
         // Result should be a Timestamp
         Object result = ProtoConverter.fromParameterValue(value, null);
         assertNotNull(result);
-        assertTrue(result instanceof java.sql.Timestamp);
+        assertInstanceOf(Timestamp.class, result);
         
         // Verify times are equivalent
         java.sql.Timestamp resultTs = (java.sql.Timestamp) result;
