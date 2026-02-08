@@ -1,5 +1,20 @@
 # SQL Enhancer Investigation - Final Summary
 
+## ⚠️ IMPORTANT: EXPERIMENTAL FEATURE - NOT RECOMMENDED
+
+**The SQL Enhancer with Apache Calcite is EXPERIMENTAL and NOT YET SUPPORTED for production use.**
+
+- **Status**: Experimental / Not Production Ready
+- **Default**: Disabled by default (must be explicitly enabled)
+- **Known Limitations**: Substantial type system incompatibilities with PostgreSQL and traditional JDBC databases
+- **Recommendation**: **Do NOT use in production environments**
+
+Apache Calcite works well with big data systems (Hive, Drill, Flink, BigQuery, etc.) but has significant limitations with traditional relational databases like PostgreSQL, MySQL, Oracle, and SQL Server. Early testing revealed type system mismatches that prevent reliable query optimization.
+
+**We strongly discourage enabling this feature in its current state.**
+
+---
+
 ## ✅ Investigation Complete
 
 I have successfully investigated the `PostgresSqlEnhancerIntegrationTest` and created a working demonstration of the OJP SQL enhancer functionality.
