@@ -62,7 +62,7 @@ public class GrpcServer {
 
         // Build server with configuration
         SessionManagerImpl sessionManager = new SessionManagerImpl();
-        StatementServiceImpl statementService = new StatementServiceImpl(
+        final StatementServiceImpl statementService = new StatementServiceImpl(
                 sessionManager,
                 new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold()),
                 config
