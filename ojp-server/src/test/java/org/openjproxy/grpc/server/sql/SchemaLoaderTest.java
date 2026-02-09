@@ -63,7 +63,7 @@ class SchemaLoaderTest {
         assertNotNull(table, "Table should exist");
         assertEquals(2, table.getColumns().size(), "Should have 2 columns");
         
-        ColumnMetadata idColumn = table.getColumns().get(0);
+        ColumnMetadata idColumn = table.getColumns().getFirst();
         assertEquals("id", idColumn.getColumnName());
         assertEquals(Types.INTEGER, idColumn.getJdbcType());
         assertFalse(idColumn.isNullable());

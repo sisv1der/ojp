@@ -94,8 +94,7 @@ class XaSlotManagementTest {
 
         AtomicInteger successCount;
         AtomicInteger maxConcurrent;
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        try {
+        try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
             CountDownLatch startLatch = new CountDownLatch(1);
             CountDownLatch doneLatch = new CountDownLatch(threadCount);
             successCount = new AtomicInteger(0);
@@ -135,10 +134,6 @@ class XaSlotManagementTest {
 
             executor.shutdown();
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
-        } finally {
-            if (!executor.isShutdown()) {
-                executor.shutdownNow();
-            }
         }
 
         // Verify that we never exceeded the limit
