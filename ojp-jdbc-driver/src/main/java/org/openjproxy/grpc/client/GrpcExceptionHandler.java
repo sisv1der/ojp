@@ -49,7 +49,8 @@ public class GrpcExceptionHandler {
                 return lowerMessage.contains("session") &&
                        (lowerMessage.contains("has no associated server") || 
                         lowerMessage.contains("binding was lost") ||
-                        lowerMessage.contains("may have expired"));
+                        lowerMessage.contains("may have expired") ||
+                        lowerMessage.contains("were invalidated"));
             }
         }
         return false;
