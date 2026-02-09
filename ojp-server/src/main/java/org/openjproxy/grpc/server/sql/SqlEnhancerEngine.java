@@ -372,6 +372,46 @@ public class SqlEnhancerEngine {
     }
     
     /**
+     * Validates SQL syntax and semantics without optimization.
+     * This method always runs synchronously and returns immediately after validation.
+     * 
+     * @param sql The SQL statement to validate
+     * @return SqlValidationResult containing validation status
+     */
+    public SqlValidationResult validate(String sql) {
+        if (!enabled) {
+            // If disabled, pass through without validation
+            return SqlValidationResult.success(sql);
+        }
+        
+        totalQueriesValidated.incrementAndGet();
+        
+        try {
+            // Parse and validate SQL with dialect-specific configuration
+            SqlParser parser = SqlParser.create(sql, parserConfig);
+            SqlNode sqlNode = parser.parseQuery();
+            
+            // Log successful parse
+            log.debug("Successfully validated SQL with {} dialect: {}", 
+                     dialect, sql.substring(0, Math.min(sql.length(), 100)));
+            
+            return SqlValidationResult.success(sql);
+            
+        } catch (SqlParseException e) {
+            // Log validation error
+            log.debug("SQL validation error with {} dialect: {} for SQL: {}", 
+                     dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)));
+            
+            return SqlValidationResult.failure(sql, e.getMessage());
+        } catch (Exception e) {
+            // Catch any unexpected errors
+            log.warn("Unexpected error during SQL validation with {} dialect: {}", dialect, e.getMessage(), e);
+            
+            return SqlValidationResult.failure(sql, e.getMessage());
+        }
+    }
+    
+    /**
      * Ensures schema is loaded from the provided DataSource.
      * This is called before enhance() to populate the schema cache on-demand.
      * Thread-safe and idempotent - multiple calls will only load once.
