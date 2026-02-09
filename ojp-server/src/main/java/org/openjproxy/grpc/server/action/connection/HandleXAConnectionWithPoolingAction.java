@@ -49,6 +49,27 @@ public class HandleXAConnectionWithPoolingAction {
                        StreamObserver<SessionInfo> responseObserver) {
         log.info("Using XA Pool Provider SPI for connHash: {}", connHash);
         
+        // Synchronize registry creation/access per connection hash to prevent race conditions
+        // Multiple threads connecting with the same credentials could try to create registries simultaneously
+        synchronized (getRegistryLock(connHash)) {
+            executeInternal(context, connectionDetails, connHash, actualMaxXaTransactions, xaStartTimeoutMillis, responseObserver);
+        }
+    }
+    
+    /**
+     * Get a lock object for synchronizing registry operations for a specific connection hash.
+     * This prevents race conditions where multiple threads try to create registries simultaneously.
+     */
+    private Object getRegistryLock(String connHash) {
+        // Use intern() to ensure the same String instance is used as lock for same connection hash
+        // This is safe because connHash is deterministic based on connection credentials
+        return connHash.intern();
+    }
+    
+    private void executeInternal(ActionContext context, ConnectionDetails connectionDetails, String connHash,
+                       int actualMaxXaTransactions, long xaStartTimeoutMillis,
+                       StreamObserver<SessionInfo> responseObserver) {
+        
         // Get current serverEndpoints configuration
         List<String> currentServerEndpoints = connectionDetails.getServerEndpointsList();
         String currentEndpointsHash = (currentServerEndpoints == null || currentServerEndpoints.isEmpty()) 
@@ -56,6 +77,7 @@ public class HandleXAConnectionWithPoolingAction {
                 : String.join(",", currentServerEndpoints);
         
         // Check if we already have an XA registry for this connection hash
+        // NOTE: This is synchronized by the caller (execute method) using connHash as lock
         XATransactionRegistry registry = context.getXaRegistries().get(connHash);
         log.info("XA registry cache lookup for {}: exists={}, current serverEndpoints hash: {}", 
                 connHash, registry != null, currentEndpointsHash);
