@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 
@@ -38,10 +40,10 @@ public class HandleXAConnectionWithPoolingAction {
     private static final HandleXAConnectionWithPoolingAction INSTANCE = new HandleXAConnectionWithPoolingAction();
     
     // Lock objects for synchronizing registry creation per connection hash
-    // Using ConcurrentHashMap to avoid issues with String.intern() and global string pool
+    // Using ReentrantLock for virtual thread compatibility
     // Note: In practice, connection hashes are bounded by the finite set of database credentials
     // used by the application, so this map won't grow indefinitely
-    private final Map<String, Object> registryLocks = new ConcurrentHashMap<>();
+    private final Map<String, Lock> registryLocks = new ConcurrentHashMap<>();
     
     private HandleXAConnectionWithPoolingAction() {
         // Private constructor prevents external instantiation
@@ -56,20 +58,25 @@ public class HandleXAConnectionWithPoolingAction {
                        StreamObserver<SessionInfo> responseObserver) {
         log.info("Using XA Pool Provider SPI for connHash: {}", connHash);
         
-        // Synchronize registry creation/access per connection hash to prevent race conditions
+        // Use ReentrantLock for virtual thread compatibility
+        // Lock registry creation/access per connection hash to prevent race conditions
         // Multiple threads connecting with the same credentials could try to create registries simultaneously
-        synchronized (getRegistryLock(connHash)) {
+        Lock lock = getRegistryLock(connHash);
+        lock.lock();
+        try {
             executeInternal(context, connectionDetails, connHash, actualMaxXaTransactions, xaStartTimeoutMillis, responseObserver);
+        } finally {
+            lock.unlock();
         }
     }
     
     /**
-     * Get a lock object for synchronizing registry operations for a specific connection hash.
+     * Get a lock for synchronizing registry operations for a specific connection hash.
      * This prevents race conditions where multiple threads try to create registries simultaneously.
-     * Uses computeIfAbsent to atomically create lock objects as needed.
+     * Uses ReentrantLock for virtual thread compatibility.
      */
-    private Object getRegistryLock(String connHash) {
-        return registryLocks.computeIfAbsent(connHash, k -> new Object());
+    private Lock getRegistryLock(String connHash) {
+        return registryLocks.computeIfAbsent(connHash, k -> new ReentrantLock());
     }
     
     private void executeInternal(ActionContext context, ConnectionDetails connectionDetails, String connHash,
@@ -83,7 +90,7 @@ public class HandleXAConnectionWithPoolingAction {
                 : String.join(",", currentServerEndpoints);
         
         // Check if we already have an XA registry for this connection hash
-        // NOTE: This is synchronized by the caller (execute method) using the lock object associated with connHash
+        // NOTE: This is locked by the caller (execute method) using ReentrantLock associated with connHash
         XATransactionRegistry registry = context.getXaRegistries().get(connHash);
         log.info("XA registry cache lookup for {}: exists={}, current serverEndpoints hash: {}", 
                 connHash, registry != null, currentEndpointsHash);
