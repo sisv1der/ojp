@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 
@@ -35,6 +36,10 @@ import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMe
 public class HandleXAConnectionWithPoolingAction {
     
     private static final HandleXAConnectionWithPoolingAction INSTANCE = new HandleXAConnectionWithPoolingAction();
+    
+    // Lock objects for synchronizing registry creation per connection hash
+    // Using ConcurrentHashMap to avoid issues with String.intern() and global string pool
+    private final Map<String, Object> registryLocks = new ConcurrentHashMap<>();
     
     private HandleXAConnectionWithPoolingAction() {
         // Private constructor prevents external instantiation
@@ -59,11 +64,10 @@ public class HandleXAConnectionWithPoolingAction {
     /**
      * Get a lock object for synchronizing registry operations for a specific connection hash.
      * This prevents race conditions where multiple threads try to create registries simultaneously.
+     * Uses computeIfAbsent to atomically create lock objects as needed.
      */
     private Object getRegistryLock(String connHash) {
-        // Use intern() to ensure the same String instance is used as lock for same connection hash
-        // This is safe because connHash is deterministic based on connection credentials
-        return connHash.intern();
+        return registryLocks.computeIfAbsent(connHash, k -> new Object());
     }
     
     private void executeInternal(ActionContext context, ConnectionDetails connectionDetails, String connHash,
