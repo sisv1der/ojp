@@ -82,6 +82,13 @@ public class MultinodeXAIntegrationTest {
         totalFailedQueries = new AtomicInteger(0);
     }
 
+    /**
+     * This test runs 5 times (via 5 duplicate entries in multinode_connection.csv).
+     * 
+     * Rationale: These tests kill and restart OJP servers, making timing unpredictable.
+     * Running 5 times provides higher confidence that timing-related issues don't exist,
+     * as server startup/shutdown timing can vary and cause intermittent failures.
+     */
     @SneakyThrows
     @ParameterizedTest
     @CsvFileSource(resources = "/multinode_connection.csv")
