@@ -39,6 +39,8 @@ public class HandleXAConnectionWithPoolingAction {
     
     // Lock objects for synchronizing registry creation per connection hash
     // Using ConcurrentHashMap to avoid issues with String.intern() and global string pool
+    // Note: In practice, connection hashes are bounded by the finite set of database credentials
+    // used by the application, so this map won't grow indefinitely
     private final Map<String, Object> registryLocks = new ConcurrentHashMap<>();
     
     private HandleXAConnectionWithPoolingAction() {
@@ -81,7 +83,7 @@ public class HandleXAConnectionWithPoolingAction {
                 : String.join(",", currentServerEndpoints);
         
         // Check if we already have an XA registry for this connection hash
-        // NOTE: This is synchronized by the caller (execute method) using connHash as lock
+        // NOTE: This is synchronized by the caller (execute method) using the lock object associated with connHash
         XATransactionRegistry registry = context.getXaRegistries().get(connHash);
         log.info("XA registry cache lookup for {}: exists={}, current serverEndpoints hash: {}", 
                 connHash, registry != null, currentEndpointsHash);
