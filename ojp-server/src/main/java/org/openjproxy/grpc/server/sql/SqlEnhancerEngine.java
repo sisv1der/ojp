@@ -767,4 +767,36 @@ public class SqlEnhancerEngine {
             }
         }
     }
+    
+    /**
+     * Shuts down the async optimization executor if it exists.
+     * This method should be called when the SQL enhancer is no longer needed
+     * to ensure proper cleanup of background threads.
+     * 
+     * The method will:
+     * 1. Initiate an orderly shutdown
+     * 2. Wait up to 5 seconds for existing tasks to complete
+     * 3. Force shutdown if tasks don't complete in time
+     */
+    public void shutdown() {
+        if (optimizationExecutor != null) {
+            log.info("Shutting down SQL optimization executor");
+            optimizationExecutor.shutdown();
+            try {
+                // Wait up to 5 seconds for existing tasks to complete
+                if (!optimizationExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    log.warn("SQL optimization executor did not terminate in time, forcing shutdown");
+                    optimizationExecutor.shutdownNow();
+                    // Wait a bit more for tasks to respond to interruption
+                    if (!optimizationExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        log.error("SQL optimization executor did not terminate after forced shutdown");
+                    }
+                }
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while waiting for SQL optimization executor to terminate");
+                optimizationExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
 }
