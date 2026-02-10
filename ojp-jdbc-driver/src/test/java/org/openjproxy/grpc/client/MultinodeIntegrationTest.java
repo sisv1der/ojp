@@ -44,6 +44,7 @@ public class MultinodeIntegrationTest {
     private static AtomicInteger totalQueries = new AtomicInteger(0);
     private static AtomicInteger failedQueries = new AtomicInteger(0);
     private static HikariDataSource ds;
+    private static AtomicInteger testRunCounter = new AtomicInteger(0);
 
     @BeforeAll
     static void checkTestConfiguration() {
@@ -72,6 +73,11 @@ public class MultinodeIntegrationTest {
     @CsvFileSource(resources = "/multinode_connection.csv")
     void runTests(String driverClass, String url, String user, String password) throws SQLException {
         assumeFalse(isTestDisabled, "Multinode tests are disabled");
+        
+        int currentRun = testRunCounter.incrementAndGet();
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("    MULTINODE INTEGRATION TEST - RUN " + currentRun + " of 5");
+        System.out.println("=".repeat(80) + "\n");
         
         this.setUp();
         // 1. Schema and seeding (not timed)
@@ -171,7 +177,7 @@ public class MultinodeIntegrationTest {
         double avgQueryMs = numQueries > 0
                 ? queryDurations.stream().mapToLong(Long::longValue).average().orElse(0) / 1_000_000.0
                 : 0;
-        System.out.println("\n=== TEST REPORT ===");
+        System.out.println("\n=== TEST REPORT (Run " + currentRun + " of 5) ===");
         System.out.println("Total queries executed: " + numQueries);
         System.out.println("Total test duration: " + totalTimeMs + " ms");
         System.out.printf("Average query duration: %.3f ms\n", avgQueryMs);

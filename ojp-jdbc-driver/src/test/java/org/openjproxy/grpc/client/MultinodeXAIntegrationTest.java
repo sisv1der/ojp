@@ -64,6 +64,7 @@ public class MultinodeXAIntegrationTest {
     private static AtomicInteger totalFailedQueries = new AtomicInteger(0);
     private static final AtomicInteger nonConnectivityFailedQueries = new AtomicInteger(0);
     private static final ExecutorService queryExecutor = new RoundRobinExecutorService(100);
+    private static AtomicInteger testRunCounter = new AtomicInteger(0);
 
     private static OjpXADataSource xaDataSource;
 
@@ -94,6 +95,11 @@ public class MultinodeXAIntegrationTest {
     @CsvFileSource(resources = "/multinode_connection.csv")
     void runTests(String driverClass, String url, String user, String password) throws SQLException {
         assumeFalse(isTestDisabled, "Multinode tests are disabled");
+
+        int currentRun = testRunCounter.incrementAndGet();
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("    MULTINODE XA INTEGRATION TEST - RUN " + currentRun + " of 5");
+        System.out.println("=".repeat(80) + "\n");
 
         this.setUp();
         // 1. Schema and seeding (using non-XA connection for setup - no pooling due to test configuration)
@@ -203,7 +209,7 @@ public class MultinodeXAIntegrationTest {
                 : 0;
 
         Thread.sleep(5000); //Wait for any pending queries and logs to flush
-        System.out.println("\n=== TEST REPORT ===");
+        System.out.println("\n=== TEST REPORT (Run " + currentRun + " of 5) ===");
         System.out.println("Total queries executed: " + numQueries);
         System.out.println("Total test duration: " + totalTimeMs + " ms");
         System.out.printf("Average query duration: %.3f ms\n", avgQueryMs);
