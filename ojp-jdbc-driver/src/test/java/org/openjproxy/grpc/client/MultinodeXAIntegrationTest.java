@@ -5,6 +5,8 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
 import org.openjproxy.jdbc.xa.OjpXADataSource;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  * with isolation from non-XA connection pooling.
  */
 @Slf4j
+@Execution(ExecutionMode.SAME_THREAD)
 public class MultinodeXAIntegrationTest {
     private static final int THREADS = 5; // Number of worker threads
     private static final int RAMPUP_MS = 50 * 1000; // 50 seconds Ramp-up window in milliseconds
