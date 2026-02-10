@@ -1088,4 +1088,15 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         org.openjproxy.grpc.server.action.transaction.XaIsSameRMAction.getInstance()
                 .execute(actionContext, request, responseObserver);
     }
+    
+    /**
+     * Shuts down the SQL enhancer engine and releases associated resources.
+     * This method should be called during server shutdown to ensure proper cleanup.
+     */
+    public void shutdown() {
+        if (sqlEnhancerEngine != null) {
+            log.info("Shutting down SQL enhancer engine");
+            sqlEnhancerEngine.shutdown();
+        }
+    }
 }
