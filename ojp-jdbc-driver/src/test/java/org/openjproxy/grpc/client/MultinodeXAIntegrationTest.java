@@ -1315,23 +1315,6 @@ public class MultinodeXAIntegrationTest {
     }
 
     private static void incrementFailures(Exception e) {
-        totalFailedQueries.incrementAndGet();
-        
-        // Check if this is a connectivity-related failure
-        // 1. StatusRuntimeException with UNAVAILABLE - direct server unavailability
-        // 2. Session invalidation errors - indirect result of server unavailability
-        boolean isConnectivityRelated = false;
-        
-        if (e instanceof StatusRuntimeException && e.getMessage().contains("UNAVAILABLE")) {
-            isConnectivityRelated = true;
-        } else if (GrpcExceptionHandler.isSessionInvalidationError(e)) {
-            // Session invalidation due to server failure - use shared detection logic
-            isConnectivityRelated = true;
-        }
-        
-        if (!isConnectivityRelated) {
-            //Errors non related to the fact that a node is down
-            nonConnectivityFailedQueries.incrementAndGet();
-        }
+        MultinodeTestHelper.incrementFailures(e, totalFailedQueries, nonConnectivityFailedQueries);
     }
 }
