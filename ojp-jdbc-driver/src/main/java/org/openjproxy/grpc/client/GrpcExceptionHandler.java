@@ -104,9 +104,14 @@ public class GrpcExceptionHandler {
                 return false;
             }
             
+            // Check for connectivity-related keywords
+            // Using substring matching intentionally - these patterns appear in various error messages
+            // from our multinode connection management and should all be treated as connectivity issues
             return lowerMessage.contains("connection") || 
                    lowerMessage.contains("timeout") ||
-                   lowerMessage.contains("unavailable");
+                   lowerMessage.contains("unavailable") ||
+                   lowerMessage.contains("failed to connect") ||
+                   lowerMessage.contains("no healthy servers");
         }
         
         return false; // Default to not marking unhealthy for unknown errors
