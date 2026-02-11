@@ -34,17 +34,11 @@ public class MultinodeTestHelper {
     public void incrementFailures(Exception e) {
         totalFailedQueries.incrementAndGet();
         
-        // Check if this is a connectivity-related failure
-        // 1. StatusRuntimeException with UNAVAILABLE - direct server unavailability
+        // Check if this is a connectivity-related failure using the shared handler logic
+        // 1. Connection-level errors (UNAVAILABLE, DEADLINE_EXCEEDED, CANCELLED, etc.)
         // 2. Session invalidation errors - indirect result of server unavailability
-        boolean isConnectivityRelated = false;
-        
-        if (e instanceof StatusRuntimeException && e.getMessage().contains("UNAVAILABLE")) {
-            isConnectivityRelated = true;
-        } else if (GrpcExceptionHandler.isSessionInvalidationError(e)) {
-            // Session invalidation due to server failure - use shared detection logic
-            isConnectivityRelated = true;
-        }
+        boolean isConnectivityRelated = GrpcExceptionHandler.isConnectionLevelError(e) || 
+                                        GrpcExceptionHandler.isSessionInvalidationError(e);
         
         if (!isConnectivityRelated) {
             // Errors non related to the fact that a node is down
@@ -59,9 +53,7 @@ public class MultinodeTestHelper {
      * @return true if the exception is connectivity-related, false otherwise
      */
     public boolean isConnectivityRelated(Exception e) {
-        if (e instanceof StatusRuntimeException && e.getMessage().contains("UNAVAILABLE")) {
-            return true;
-        }
-        return GrpcExceptionHandler.isSessionInvalidationError(e);
+        return GrpcExceptionHandler.isConnectionLevelError(e) || 
+               GrpcExceptionHandler.isSessionInvalidationError(e);
     }
 }
