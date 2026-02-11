@@ -501,7 +501,7 @@ cache:
         - timezones
 ```
 
-#### Implementation: ServerConfiguration
+#### Implementation: ServerConfiguration with Multi-Datasource Support
 
 ```java
 // In ServerConfiguration.java
@@ -523,17 +523,215 @@ public class ServerConfiguration {
 }
 
 public class CacheRuleEngine {
-    private final List<CacheRule> rules;
+    private final Map<String, List<CacheRule>> datasourceRules;  // Per-datasource rules
+    private final List<CacheRule> globalRules;  // Apply to all datasources
     
-    public CacheRule matchRule(String sql) {
-        for (CacheRule rule : rules) {
+    public CacheRule matchRule(String sql, String datasourceName) {
+        // 1. Try datasource-specific rules first
+        List<CacheRule> dsRules = datasourceRules.get(datasourceName);
+        if (dsRules != null) {
+            for (CacheRule rule : dsRules) {
+                if (rule.matches(sql)) {
+                    return rule;
+                }
+            }
+        }
+        
+        // 2. Fall back to global rules
+        for (CacheRule rule : globalRules) {
             if (rule.matches(sql)) {
                 return rule;
             }
         }
+        
         return null;
     }
 }
+```
+
+#### Addressing Multi-Datasource Reality
+
+**CRITICAL CONSIDERATION**: A single OJP server can manage **dozens of different datasources**:
+
+```
+                         OJP Server
+                             |
+        +--------------------+--------------------+
+        |                    |                    |
+    DataSource 1        DataSource 2        DataSource 3
+    (PostgreSQL Prod)   (MySQL Analytics)   (Oracle Legacy)
+```
+
+**Key Architectural Fact**: Datasource definitions are **client-side** - specified in the JDBC URL and connection properties:
+
+```java
+// Client 1: PostgreSQL production
+jdbc:ojp[localhost:1059(postgres_prod)]_postgresql://prod-db:5432/sales
+
+// Client 2: MySQL analytics
+jdbc:ojp[localhost:1059(mysql_analytics)]_mysql://analytics-db:3306/reports
+
+// Client 3: Oracle legacy
+jdbc:ojp[localhost:1059(oracle_legacy)]_oracle:thin:@legacy-db:1521/LEGACY
+```
+
+**Solution: Datasource-Scoped Cache Configuration**
+
+```yaml
+# ojp-cache-rules.yml - Multi-datasource aware
+cache:
+  # Global rules (apply to ALL datasources if no specific rule)
+  globalRules:
+    - name: default_select_cache
+      pattern: "SELECT .* FROM .*"
+      ttl: 300s
+      enabled: false  # Opt-in by default
+  
+  # Datasource-specific rules (override global)
+  datasources:
+    postgres_prod:
+      rules:
+        - name: product_catalog
+          pattern: "SELECT .* FROM products WHERE .*"
+          ttl: 600s
+          invalidateOn: [products, product_categories]
+        
+        - name: user_profile
+          pattern: "SELECT .* FROM users WHERE id = ?"
+          ttl: 300s
+          invalidateOn: [users]
+    
+    mysql_analytics:
+      rules:
+        - name: analytics_reports
+          pattern: "SELECT .* FROM report_.*"
+          ttl: 1800s  # 30 minutes for analytics
+          invalidateOn: [report_tables]
+    
+    oracle_legacy:
+      rules:
+        - name: legacy_cache
+          pattern: "SELECT .* FROM LEGACY_.*"
+          ttl: 3600s  # 1 hour for legacy data
+          invalidateOn: [LEGACY_TABLES]
+```
+
+**Alternative: Pattern-Based Datasource Matching**
+
+If explicit datasource names are too rigid, use pattern matching:
+
+```yaml
+cache:
+  datasourcePatterns:
+    - pattern: "postgres_.*"  # Matches: postgres_prod, postgres_dev, etc.
+      rules:
+        - name: postgres_standard
+          pattern: "SELECT .* FROM .*"
+          ttl: 300s
+    
+    - pattern: "mysql_.*"
+      rules:
+        - name: mysql_standard
+          pattern: "SELECT .* FROM .*"
+          ttl: 600s
+    
+    - pattern: ".*_analytics"  # Matches: mysql_analytics, postgres_analytics
+      rules:
+        - name: analytics_long_cache
+          pattern: "SELECT .* FROM .*"
+          ttl: 1800s  # Analytics can cache longer
+```
+
+**Implementation in ExecuteQueryAction**
+
+```java
+public class ExecuteQueryAction implements Action {
+    
+    private final CacheRuleEngine cacheRuleEngine;
+    
+    @Override
+    public OpResult execute(StatementRequest request, SessionManager sessionManager) {
+        String sql = request.getSql();
+        Session session = sessionManager.getSession(request.getSessionId());
+        
+        // Get datasource name from session (comes from client connection)
+        String datasourceName = session.getDataSourceName();
+        
+        // Match rule based on BOTH SQL and datasource
+        CacheRule rule = cacheRuleEngine.matchRule(sql, datasourceName);
+        
+        if (rule != null && rule.isCacheable()) {
+            // Query is cacheable for this datasource
+            QueryCacheKey key = new QueryCacheKey(
+                datasourceName,  // Include datasource in cache key
+                sql,
+                extractParameters(request)
+            );
+            
+            // Try cache
+            CachedResult cached = cache.get(key);
+            if (cached != null && !cached.isExpired(rule.getTtl())) {
+                return buildOpResultFromCache(cached);
+            }
+            
+            // Execute and cache
+            OpResult result = executeQueryOnDatabase(request, sessionManager);
+            if (result.getSuccess()) {
+                cache.put(key, extractResultForCache(result), rule);
+            }
+            
+            return result;
+        }
+        
+        // Not cacheable or no rule matched
+        return executeQueryOnDatabase(request, sessionManager);
+    }
+}
+```
+
+**Cache Key Structure (Datasource-Aware)**
+
+```java
+public class QueryCacheKey {
+    private final String datasourceName;  // CRITICAL: Isolate by datasource
+    private final String sql;
+    private final List<Object> parameters;
+    
+    @Override
+    public boolean equals(Object o) {
+        QueryCacheKey that = (QueryCacheKey) o;
+        return Objects.equals(datasourceName, that.datasourceName)
+            && Objects.equals(sql, that.sql)
+            && Objects.equals(parameters, that.parameters);
+    }
+    
+    // Different datasources with same SQL = different cache entries
+}
+```
+
+**Why Datasource-Aware Caching Matters:**
+
+1. **Isolation**: PostgreSQL production and MySQL analytics should have separate caches
+2. **Different Policies**: Production might cache aggressively, analytics conservatively
+3. **Security**: Prevent cache pollution across datasources
+4. **Performance**: Different databases have different performance characteristics
+5. **Multi-Tenancy**: Each tenant can have their own datasource with custom cache rules
+
+**Real-World Example:**
+
+```
+OJP Server managing:
+- postgres_prod (high-traffic e-commerce)
+  → Cache product catalog aggressively (600s TTL)
+  → Cache user data conservatively (300s TTL)
+
+- mysql_analytics (reporting database)
+  → Cache reports for 30 minutes (data changes infrequently)
+  → Cache aggregations for 1 hour
+
+- oracle_legacy (old ERP system)
+  → Cache reference data for hours (rarely changes)
+  → Don't cache transactional data
 ```
 
 #### Advantages
@@ -542,16 +740,22 @@ public class CacheRuleEngine {
 - ✅ Can be updated without redeploying applications
 - ✅ Supports complex matching rules
 - ✅ Declarative and version-controlled
+- ✅ **Datasource-aware**: Different rules for different databases
+- ✅ **Scales naturally**: Add new datasources without code changes
+- ✅ **Isolation**: Each datasource has independent cache namespace
 
 #### Disadvantages
 - ⚠️ Requires server restart or hot-reload mechanism
 - ⚠️ Less visible to developers
 - ⚠️ Can be out of sync with application expectations
+- ⚠️ Configuration grows with number of datasources
 
 #### Best For
 - Production environments with DBAs/DevOps teams
 - Multi-tenant scenarios with different cache policies
 - Organizations with strict change control processes
+- **Environments with multiple datasources per OJP server**
+- **Heterogeneous database landscapes**
 
 ---
 
