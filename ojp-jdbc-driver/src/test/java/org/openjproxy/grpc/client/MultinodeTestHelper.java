@@ -1,7 +1,5 @@
 package org.openjproxy.grpc.client;
 
-import io.grpc.StatusRuntimeException;
-
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
