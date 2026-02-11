@@ -555,22 +555,328 @@ public class CacheRuleEngine {
 
 ---
 
-### 3.4 Recommendation: Hybrid Multi-Level Approach
+### 3.4 Client-Side Configuration (Connection-Time Distribution)
 
-**Best Practice:** Support all three methods with a clear precedence order:
+**Approach:** Define cacheable queries in client configuration files (`ojp.properties` or `ojp.yaml`) which are sent to all OJP servers in the cluster during connection establishment.
+
+#### Configuration File: ojp-cache-client.yaml
+
+```yaml
+# Client-side cache configuration
+ojp:
+  cache:
+    enabled: true
+    queries:
+      - sql: "SELECT * FROM products WHERE category = ?"
+        ttl: 600s
+        refreshInterval: 300s
+        invalidateOn: [products, product_categories]
+        
+      - sql: "SELECT id, name, email FROM users WHERE id = ?"
+        ttl: 300s
+        refreshInterval: 150s
+        invalidateOn: [users]
+        
+      - sql: "SELECT * FROM countries"
+        ttl: 3600s
+        refreshInterval: 1800s
+        invalidateOn: [countries]
+        preload: true  # Pre-populate cache on startup
+```
+
+#### Implementation: Connection-Time Propagation
+
+```java
+// In ojp-jdbc-driver: Connection establishment
+public class OjpDriver implements Driver {
+    
+    @Override
+    public Connection connect(String url, Properties info) throws SQLException {
+        // Load client-side cache configuration
+        CacheConfiguration clientConfig = loadCacheConfiguration();
+        
+        // Create connection request with cache config
+        ConnectionRequest request = ConnectionRequest.newBuilder()
+            .setConnectionDetails(details)
+            .setCacheConfiguration(serializeCacheConfig(clientConfig))
+            .build();
+        
+        // Send to OJP server (or all servers in multinode)
+        SessionInfo session = statementService.connect(request);
+        
+        log.info("Connected with cache configuration: {} rules", 
+                 clientConfig.getQueries().size());
+        
+        return new OjpConnection(session, statementService);
+    }
+    
+    private CacheConfiguration loadCacheConfiguration() {
+        // Try multiple sources in order:
+        // 1. System property: -Dojp.cache.config=path/to/config.yaml
+        // 2. Classpath: /ojp-cache-client.yaml
+        // 3. Environment variable: OJP_CACHE_CONFIG
+        // 4. Default location: ~/.ojp/cache-config.yaml
+        
+        String configPath = System.getProperty("ojp.cache.config");
+        if (configPath != null) {
+            return CacheConfiguration.fromFile(configPath);
+        }
+        
+        InputStream stream = getClass().getResourceAsStream("/ojp-cache-client.yaml");
+        if (stream != null) {
+            return CacheConfiguration.fromYaml(stream);
+        }
+        
+        return CacheConfiguration.empty();
+    }
+}
+
+// In ojp-server: Connection handler
+public class ConnectionAction implements Action {
+    
+    private final SessionManager sessionManager;
+    private final QueryResultCache cache;
+    
+    @Override
+    public OpResult execute(StatementRequest request, SessionManager manager) {
+        // Extract cache configuration from connection request
+        CacheConfiguration clientConfig = 
+            deserializeCacheConfig(request.getCacheConfiguration());
+        
+        // Create session with client-provided cache rules
+        Session session = sessionManager.createSession(request.getConnectionDetails());
+        session.setCacheConfiguration(clientConfig);
+        
+        // Register cache rules for this session
+        if (clientConfig.isEnabled()) {
+            for (CacheQuery query : clientConfig.getQueries()) {
+                cache.registerRule(session.getId(), query);
+                
+                // Preload cache if requested
+                if (query.isPreload()) {
+                    cache.preloadQuery(query);
+                }
+            }
+            
+            log.info("Registered {} cache rules for session {}", 
+                    clientConfig.getQueries().size(), session.getId());
+        }
+        
+        return buildConnectionResult(session);
+    }
+}
+
+// Cache rule matching in ExecuteQueryAction
+public class ExecuteQueryAction implements Action {
+    
+    @Override
+    public OpResult execute(StatementRequest request, SessionManager manager) {
+        Session session = manager.getSession(request.getSessionId());
+        String sql = request.getSql();
+        
+        // Check if this query matches session's cache rules
+        CacheQuery matchedRule = session.getCacheConfiguration().matchQuery(sql);
+        
+        if (matchedRule != null) {
+            QueryCacheKey key = new QueryCacheKey(
+                session.getId(), 
+                sql, 
+                extractParameters(request)
+            );
+            
+            // Try cache first
+            CachedResult cached = cache.get(key);
+            if (cached != null && !cached.isExpired(matchedRule.getTtl())) {
+                return buildOpResultFromCache(cached);
+            }
+            
+            // Execute and cache
+            OpResult result = executeQueryOnDatabase(request, manager);
+            if (result.getSuccess()) {
+                cache.put(key, extractResultForCache(result), matchedRule);
+            }
+            
+            return result;
+        }
+        
+        // No cache rule - execute normally
+        return executeQueryOnDatabase(request, manager);
+    }
+}
+```
+
+#### Multinode Distribution
+
+In a multinode setup, the JDBC driver can send the cache configuration to ALL servers:
+
+```java
+public class MultinodeStatementService implements StatementService {
+    
+    private final MultinodeConnectionManager connectionManager;
+    
+    @Override
+    public SessionInfo connect(ConnectionDetails details, CacheConfiguration cacheConfig) {
+        // Get all server endpoints
+        List<ServerEndpoint> allServers = connectionManager.getAllServers();
+        
+        // Send cache configuration to ALL servers
+        for (ServerEndpoint server : allServers) {
+            try {
+                StatementServiceBlockingStub stub = 
+                    connectionManager.getStub(server);
+                
+                ConnectionRequest request = ConnectionRequest.newBuilder()
+                    .setConnectionDetails(details)
+                    .setCacheConfiguration(serializeCacheConfig(cacheConfig))
+                    .setDistributionMode(DistributionMode.CLUSTER_WIDE)
+                    .build();
+                
+                stub.distributeCacheConfiguration(request);
+                
+                log.debug("Distributed cache config to server: {}", server);
+                
+            } catch (Exception e) {
+                log.warn("Failed to distribute cache config to {}: {}", 
+                        server, e.getMessage());
+            }
+        }
+        
+        // Establish connection on primary server
+        ServerEndpoint primary = connectionManager.selectHealthyServer();
+        return connectionManager.getStub(primary).connect(details);
+    }
+}
+```
+
+#### Advantages
+- ✅ **Application control**: Developers define cache rules close to the code
+- ✅ **Per-application policies**: Different apps can have different cache rules
+- ✅ **Cluster-wide consistency**: All servers receive the same configuration
+- ✅ **Version controlled**: Cache config travels with application code
+- ✅ **Environment-specific**: Can use different configs for dev/staging/prod
+- ✅ **Dynamic distribution**: No server restart needed
+- ✅ **Explicit and visible**: Clear what's being cached
+
+#### Disadvantages
+- ⚠️ **Configuration duplication**: Each application must define cache rules
+- ⚠️ **Connection overhead**: Configuration sent on every connection
+- ⚠️ **Memory per session**: Each session stores its own cache rules
+- ⚠️ **Potential inconsistency**: Different apps may define conflicting rules
+- ⚠️ **Network overhead**: Sending config to all servers adds latency
+- ⚠️ **No centralized governance**: Harder to enforce organization-wide policies
+- ⚠️ **Scaling concerns**: Large number of connections × large config = significant overhead
+
+#### Best For
+- Applications with unique caching requirements
+- Development/testing environments
+- Microservices with isolated caching needs
+- Scenarios where cache rules are tightly coupled to application logic
+- Teams that want application-level control
+
+#### Performance Considerations
+
+**Connection-time overhead:**
+```
+Small config (10 rules, ~2KB):  +5-10ms connection time
+Medium config (50 rules, ~10KB): +20-30ms connection time
+Large config (200 rules, ~40KB): +50-100ms connection time
+```
+
+**Mitigation strategies:**
+1. **Compression**: GZIP compress configuration before sending
+2. **Caching**: Server caches configs by hash, send only hash on reconnect
+3. **Lazy distribution**: Send to servers as connections are made to them
+4. **Smart delta**: Send only changed rules on reconnection
+
+```java
+// Optimized with compression and caching
+public class CacheConfigurationOptimizer {
+    
+    private static final ConcurrentHashMap<String, CacheConfiguration> configCache 
+        = new ConcurrentHashMap<>();
+    
+    public static byte[] serializeOptimized(CacheConfiguration config) {
+        // Calculate hash
+        String hash = calculateHash(config);
+        
+        // Compress with GZIP
+        byte[] compressed = compress(config.toBytes());
+        
+        // Return: [hash(32 bytes)][compressed_data]
+        return concat(hash.getBytes(), compressed);
+    }
+    
+    public static CacheConfiguration deserializeOptimized(byte[] data, 
+                                                         String sessionId) {
+        String hash = new String(data, 0, 32);
+        
+        // Check if we've seen this config before
+        CacheConfiguration cached = configCache.get(hash);
+        if (cached != null) {
+            log.debug("Using cached configuration for session {}", sessionId);
+            return cached;
+        }
+        
+        // Decompress and parse
+        byte[] compressed = Arrays.copyOfRange(data, 32, data.length);
+        byte[] decompressed = decompress(compressed);
+        CacheConfiguration config = CacheConfiguration.fromBytes(decompressed);
+        
+        // Cache for future connections
+        configCache.put(hash, config);
+        
+        return config;
+    }
+}
+```
+
+---
+
+### 3.5 Recommendation: Hybrid Multi-Level Approach
+
+**Best Practice:** Support all four methods with a clear precedence order:
 
 ```
-1. SQL Comment Hints (highest priority)
+1. SQL Comment Hints (highest priority - per-query override)
    ↓
-2. JDBC Connection Properties
+2. Client-Side Configuration (per-application cache policy)
    ↓
-3. Server-Side Configuration (lowest priority)
+3. JDBC Connection Properties (connection-level defaults)
+   ↓
+4. Server-Side Configuration (lowest priority - organization defaults)
 ```
 
 This provides maximum flexibility:
-- Developers can override with SQL hints for specific queries
-- Applications can set connection-level defaults
-- Ops teams can configure server-side defaults and policies
+- **SQL hints**: Developers can override for specific critical queries
+- **Client config**: Applications define their standard caching patterns
+- **Connection properties**: Environment-specific tuning (dev vs prod)
+- **Server config**: Ops teams set organization-wide defaults and policies
+
+**Practical Usage Patterns:**
+
+```yaml
+# Server-side (ojp-cache-rules.yml) - Organization defaults
+cache:
+  defaultTtl: 300s
+  rules:
+    - pattern: "SELECT .* FROM audit_.*"
+      cacheable: false  # Never cache audit queries
+
+# Client-side (ojp-cache-client.yaml) - Application-specific
+ojp:
+  cache:
+    queries:
+      - sql: "SELECT * FROM products WHERE category = ?"
+        ttl: 600s
+
+# Connection properties - Environment override
+jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb
+  ?cacheEnabled=true
+  &cacheDefaultTtl=600  # Production uses longer TTL
+
+# SQL hints - Critical query override
+/* @cache ttl=60s */ SELECT * FROM inventory WHERE product_id = ?
+```
 
 ---
 
@@ -1159,7 +1465,492 @@ public class PostgresListenNotifyCache {
 
 ---
 
-### 5.4 Approach 3: Hybrid JDBC + External Cache
+### 5.4 Approach 4: JDBC Driver as Active Relay (Push-Based)
+
+**Concept:** Use the OJP JDBC driver as an active relay to stream cached data and broadcast invalidation signals directly to all OJP servers, eliminating polling overhead.
+
+#### Architecture
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Driver as OJP JDBC Driver
+    participant ServerA as OJP Server A
+    participant ServerB as OJP Server B
+    participant ServerC as OJP Server C
+    participant DB as Database
+
+    App->>Driver: executeQuery(SELECT ...)
+    Driver->>ServerA: gRPC: executeQuery()
+    
+    alt Cache MISS
+        ServerA->>DB: Execute query
+        DB-->>ServerA: Result set
+        ServerA-->>Driver: Result + Cache Signal
+        
+        Note over Driver: Spawn virtual thread<br/>to propagate cache
+        
+        par Parallel Distribution
+            Driver->>ServerB: gRPC: distributeCachedResult()
+            Driver->>ServerC: gRPC: distributeCachedResult()
+        end
+        
+        ServerB->>ServerB: Store in local cache
+        ServerC->>ServerC: Store in local cache
+    end
+    
+    Driver-->>App: Result set
+    
+    Note over App: Later: UPDATE occurs
+    
+    App->>Driver: executeUpdate(UPDATE ...)
+    Driver->>ServerA: gRPC: executeUpdate()
+    ServerA->>DB: Execute update
+    DB-->>ServerA: Success
+    ServerA->>ServerA: Invalidate local cache
+    ServerA-->>Driver: Success + Invalidation Signal
+    
+    Note over Driver: Broadcast invalidation<br/>(virtual thread)
+    
+    par Broadcast Invalidation
+        Driver->>ServerB: gRPC: invalidateCache()
+        Driver->>ServerC: gRPC: invalidateCache()
+    end
+    
+    Driver-->>App: Success
+```
+
+#### Implementation
+
+##### 1. Enhanced gRPC Protocol
+
+```protobuf
+// Add to statement.proto
+service StatementService {
+    // Existing methods...
+    rpc ExecuteQuery(StatementRequest) returns (OpResult);
+    rpc ExecuteUpdate(StatementRequest) returns (OpResult);
+    
+    // New cache coordination methods
+    rpc DistributeCachedResult(CacheDistributionRequest) returns (CacheDistributionResponse);
+    rpc InvalidateCache(CacheInvalidationRequest) returns (CacheInvalidationResponse);
+}
+
+message OpResult {
+    bool success = 1;
+    // ... existing fields ...
+    
+    // New cache coordination fields
+    CacheSignal cacheSignal = 20;
+}
+
+message CacheSignal {
+    enum SignalType {
+        NONE = 0;
+        CACHE_AND_DISTRIBUTE = 1;  // Server wants driver to distribute
+        INVALIDATE_AND_BROADCAST = 2;  // Server wants driver to broadcast invalidation
+    }
+    
+    SignalType type = 1;
+    string cacheKey = 2;
+    bytes cachedData = 3;  // Serialized result set
+    repeated string affectedTables = 4;
+    int64 ttl = 5;
+}
+
+message CacheDistributionRequest {
+    string cacheKey = 1;
+    bytes cachedData = 2;
+    int64 ttl = 3;
+    string sourceServerId = 4;  // Exclude from distribution
+}
+
+message CacheInvalidationRequest {
+    repeated string affectedTables = 1;
+    repeated string cacheKeys = 2;  // Optional: specific keys
+    string sourceServerId = 3;  // Exclude from broadcast
+}
+```
+
+##### 2. JDBC Driver Implementation
+
+```java
+// In ojp-jdbc-driver
+public class OjpStatement implements Statement {
+    
+    private final StatementService statementService;
+    private final ExecutorService cacheDistributionExecutor;
+    
+    public OjpStatement(StatementService service) {
+        this.statementService = service;
+        
+        // Use virtual threads if Java 21+, otherwise use thread pool
+        if (Runtime.version().feature() >= 21) {
+            this.cacheDistributionExecutor = 
+                Executors.newVirtualThreadPerTaskExecutor();
+        } else {
+            this.cacheDistributionExecutor = 
+                Executors.newFixedThreadPool(10);
+        }
+    }
+    
+    @Override
+    public ResultSet executeQuery(String sql) throws SQLException {
+        StatementRequest request = StatementRequest.newBuilder()
+            .setSessionId(sessionId)
+            .setSql(sql)
+            .build();
+        
+        OpResult result = statementService.executeQuery(request);
+        
+        // Check for cache distribution signal
+        if (result.hasCacheSignal() && 
+            result.getCacheSignal().getType() == SignalType.CACHE_AND_DISTRIBUTE) {
+            
+            // Spawn virtual thread to distribute cache asynchronously
+            cacheDistributionExecutor.submit(() -> {
+                distributeCacheToCluster(result.getCacheSignal());
+            });
+        }
+        
+        return new RemoteProxyResultSet(result);
+    }
+    
+    @Override
+    public int executeUpdate(String sql) throws SQLException {
+        StatementRequest request = StatementRequest.newBuilder()
+            .setSessionId(sessionId)
+            .setSql(sql)
+            .build();
+        
+        OpResult result = statementService.executeUpdate(request);
+        
+        // Check for invalidation broadcast signal
+        if (result.hasCacheSignal() && 
+            result.getCacheSignal().getType() == SignalType.INVALIDATE_AND_BROADCAST) {
+            
+            // Spawn virtual thread to broadcast invalidation
+            cacheDistributionExecutor.submit(() -> {
+                broadcastInvalidationToCluster(result.getCacheSignal());
+            });
+        }
+        
+        return result.getUpdateCount();
+    }
+    
+    private void distributeCacheToCluster(CacheSignal signal) {
+        try {
+            if (!(statementService instanceof MultinodeStatementService)) {
+                return;  // Single server, no distribution needed
+            }
+            
+            MultinodeStatementService multinode = 
+                (MultinodeStatementService) statementService;
+            
+            // Get all servers except the source
+            List<ServerEndpoint> targetServers = 
+                multinode.getAllServersExcept(signal.getSourceServerId());
+            
+            CacheDistributionRequest request = CacheDistributionRequest.newBuilder()
+                .setCacheKey(signal.getCacheKey())
+                .setCachedData(signal.getCachedData())
+                .setTtl(signal.getTtl())
+                .setSourceServerId(getCurrentServerId())
+                .build();
+            
+            // Parallel distribution using virtual threads
+            List<CompletableFuture<Void>> futures = targetServers.stream()
+                .map(server -> CompletableFuture.runAsync(() -> {
+                    try {
+                        StatementServiceBlockingStub stub = 
+                            multinode.getStub(server);
+                        stub.distributeCachedResult(request);
+                        
+                        log.debug("Distributed cache to server: {}", server);
+                        
+                    } catch (Exception e) {
+                        log.warn("Failed to distribute cache to {}: {}", 
+                                server, e.getMessage());
+                    }
+                }, cacheDistributionExecutor))
+                .collect(Collectors.toList());
+            
+            // Wait for all distributions (with timeout)
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .get(5, TimeUnit.SECONDS);
+            
+            log.info("Cache distributed to {} servers", targetServers.size());
+            
+        } catch (Exception e) {
+            log.error("Cache distribution failed", e);
+        }
+    }
+    
+    private void broadcastInvalidationToCluster(CacheSignal signal) {
+        try {
+            if (!(statementService instanceof MultinodeStatementService)) {
+                return;
+            }
+            
+            MultinodeStatementService multinode = 
+                (MultinodeStatementService) statementService;
+            
+            List<ServerEndpoint> targetServers = 
+                multinode.getAllServersExcept(signal.getSourceServerId());
+            
+            CacheInvalidationRequest request = CacheInvalidationRequest.newBuilder()
+                .addAllAffectedTables(signal.getAffectedTablesList())
+                .setSourceServerId(getCurrentServerId())
+                .build();
+            
+            // Parallel broadcast
+            List<CompletableFuture<Void>> futures = targetServers.stream()
+                .map(server -> CompletableFuture.runAsync(() -> {
+                    try {
+                        StatementServiceBlockingStub stub = 
+                            multinode.getStub(server);
+                        stub.invalidateCache(request);
+                        
+                        log.debug("Broadcasted invalidation to: {}", server);
+                        
+                    } catch (Exception e) {
+                        log.warn("Failed to invalidate cache on {}: {}", 
+                                server, e.getMessage());
+                    }
+                }, cacheDistributionExecutor))
+                .collect(Collectors.toList());
+            
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .get(2, TimeUnit.SECONDS);
+            
+            log.info("Cache invalidation broadcasted to {} servers", 
+                    targetServers.size());
+            
+        } catch (Exception e) {
+            log.error("Invalidation broadcast failed", e);
+        }
+    }
+}
+```
+
+##### 3. Server-Side Implementation
+
+```java
+// In ojp-server
+public class ExecuteQueryAction implements Action {
+    
+    private final QueryResultCache cache;
+    private final CacheConfiguration config;
+    
+    @Override
+    public OpResult execute(StatementRequest request, SessionManager manager) {
+        String sql = request.getSql();
+        
+        // Check if cacheable
+        if (!isCacheable(sql)) {
+            return executeQueryOnDatabase(request, manager);
+        }
+        
+        QueryCacheKey key = new QueryCacheKey(sql, extractParameters(request));
+        
+        // Try cache first
+        CachedResult cached = cache.get(key);
+        if (cached != null && !cached.isExpired()) {
+            return buildOpResultFromCache(cached);
+        }
+        
+        // Cache MISS - execute query
+        OpResult result = executeQueryOnDatabase(request, manager);
+        
+        if (result.getSuccess() && config.isDistributionEnabled()) {
+            // Store in local cache
+            CachedResult cachedResult = extractResultForCache(result);
+            cache.put(key, cachedResult);
+            
+            // Signal driver to distribute to other servers
+            CacheSignal signal = CacheSignal.newBuilder()
+                .setType(SignalType.CACHE_AND_DISTRIBUTE)
+                .setCacheKey(key.toString())
+                .setCachedData(serializeCachedResult(cachedResult))
+                .setTtl(cachedResult.getTtl())
+                .build();
+            
+            result = result.toBuilder()
+                .setCacheSignal(signal)
+                .build();
+        }
+        
+        return result;
+    }
+}
+
+public class ExecuteUpdateAction implements Action {
+    
+    private final QueryResultCache cache;
+    private final TableDependencyAnalyzer analyzer;
+    
+    @Override
+    public OpResult execute(StatementRequest request, SessionManager manager) {
+        String sql = request.getSql();
+        
+        // Execute update
+        OpResult result = executeUpdateOnDatabase(request, manager);
+        
+        if (result.getSuccess()) {
+            // Extract affected tables
+            Set<String> affectedTables = analyzer.extractTables(sql);
+            
+            // Invalidate local cache
+            cache.invalidateByTables(affectedTables);
+            
+            // Signal driver to broadcast invalidation
+            CacheSignal signal = CacheSignal.newBuilder()
+                .setType(SignalType.INVALIDATE_AND_BROADCAST)
+                .addAllAffectedTables(affectedTables)
+                .build();
+            
+            result = result.toBuilder()
+                .setCacheSignal(signal)
+                .build();
+        }
+        
+        return result;
+    }
+}
+
+// New gRPC service methods
+public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
+    
+    private final QueryResultCache cache;
+    
+    @Override
+    public void distributeCachedResult(CacheDistributionRequest request,
+                                      StreamObserver<CacheDistributionResponse> responseObserver) {
+        try {
+            // Deserialize and store in local cache
+            CachedResult result = deserializeCachedResult(request.getCachedData());
+            QueryCacheKey key = QueryCacheKey.fromString(request.getCacheKey());
+            
+            cache.put(key, result);
+            
+            log.info("Received and stored cache from relay: {}", key);
+            
+            responseObserver.onNext(CacheDistributionResponse.newBuilder()
+                .setSuccess(true)
+                .build());
+            responseObserver.onCompleted();
+            
+        } catch (Exception e) {
+            log.error("Failed to store distributed cache", e);
+            responseObserver.onError(e);
+        }
+    }
+    
+    @Override
+    public void invalidateCache(CacheInvalidationRequest request,
+                               StreamObserver<CacheInvalidationResponse> responseObserver) {
+        try {
+            // Invalidate local cache by tables
+            Set<String> tables = new HashSet<>(request.getAffectedTablesList());
+            cache.invalidateByTables(tables);
+            
+            log.info("Invalidated cache for tables: {}", tables);
+            
+            responseObserver.onNext(CacheInvalidationResponse.newBuilder()
+                .setSuccess(true)
+                .setInvalidatedCount(cache.getInvalidatedCount())
+                .build());
+            responseObserver.onCompleted();
+            
+        } catch (Exception e) {
+            log.error("Failed to invalidate cache", e);
+            responseObserver.onError(e);
+        }
+    }
+}
+```
+
+#### Advantages
+- ✅ **Real-time propagation**: No polling delays, immediate cache distribution
+- ✅ **Zero database overhead**: No notification table or queries needed
+- ✅ **Efficient with virtual threads**: Scales to thousands of connections (Java 21+)
+- ✅ **Direct server-to-server**: Leverages existing gRPC connections
+- ✅ **Async and non-blocking**: Doesn't slow down query execution
+- ✅ **Push-based**: More efficient than polling
+- ✅ **Simple failure handling**: Failed distributions don't affect primary query
+- ✅ **No additional infrastructure**: Uses existing OJP components
+
+#### Disadvantages
+- ⚠️ **Driver complexity**: Adds significant logic to the JDBC driver
+- ⚠️ **Memory pressure**: Driver must serialize result sets for distribution
+- ⚠️ **Network amplification**: One query generates N-1 distribution calls
+- ⚠️ **Potential data duplication**: Large result sets sent to multiple servers
+- ⚠️ **Driver stability risk**: Bugs in distribution affect all queries
+- ⚠️ **Harder to debug**: Distribution happens asynchronously in driver
+- ⚠️ **Connection dependency**: Requires driver to know all server endpoints
+- ⚠️ **No persistence**: If driver crashes during distribution, caches inconsistent
+- ⚠️ **Testing complexity**: Harder to test multinode coordination
+
+#### Performance Characteristics
+
+**Cache Distribution Overhead:**
+```
+Small result (10 rows, ~2KB):     +10-20ms per server
+Medium result (100 rows, ~20KB):  +30-50ms per server  
+Large result (1000 rows, ~200KB): +100-200ms per server
+
+3-server cluster, medium result:  ~100ms total distribution time
+10-server cluster, medium result: ~300ms total distribution time
+```
+
+**Optimization: Selective Distribution**
+
+Only distribute if result set meets criteria:
+
+```java
+public class CacheDistributionPolicy {
+    
+    private final int maxSizeBytes = 100_000;  // 100KB
+    private final int maxRows = 500;
+    
+    public boolean shouldDistribute(CachedResult result) {
+        // Don't distribute large results
+        if (result.getSizeBytes() > maxSizeBytes) {
+            return false;
+        }
+        
+        if (result.getRowCount() > maxRows) {
+            return false;
+        }
+        
+        // Don't distribute if TTL is very short
+        if (result.getTtl() < Duration.ofSeconds(60)) {
+            return false;
+        }
+        
+        return true;
+    }
+}
+```
+
+#### Best For
+- Small to medium-sized result sets (< 100KB)
+- High cache hit rate scenarios
+- Clusters with < 10 servers
+- Applications using Java 21+ (virtual threads)
+- Real-time cache consistency requirements
+- Environments where database load is a bottleneck
+
+#### Not Recommended For
+- Large result sets (> 1MB)
+- Very large clusters (> 20 servers)
+- High write rate scenarios (constant invalidations)
+- Legacy Java environments without virtual thread support
+- Unstable network conditions
+
+---
+
+### 5.5 Approach 5: Hybrid JDBC + External Cache
 
 **Concept:** Use JDBC for coordination + external distributed cache (Redis, Hazelcast).
 
@@ -1241,7 +2032,7 @@ public class HybridCacheService {
 
 ---
 
-### 5.5 Recommendation Matrix
+### 5.6 Comprehensive Recommendation Matrix
 
 | Scenario | Recommended Approach | Reason |
 |----------|---------------------|--------|
@@ -1249,8 +2040,14 @@ public class HybridCacheService {
 | PostgreSQL-only | LISTEN/NOTIFY | Real-time, native support |
 | Large scale (10+ servers) | Redis + JDBC backup | Performance and reliability |
 | Multi-database support | JDBC Polling | Works with any database |
-| Real-time requirements | LISTEN/NOTIFY or Redis | Sub-second invalidation |
+| Real-time requirements (<100ms) | JDBC Driver Relay (Java 21+) or LISTEN/NOTIFY | Immediate propagation |
 | High availability critical | Hybrid (Redis + JDBC) | Redundant notification paths |
+| Small result sets, high reuse | JDBC Driver Relay | Efficient push-based distribution |
+| Large result sets | JDBC Polling | Avoids network amplification |
+| Java 21+ environment | JDBC Driver Relay | Leverages virtual threads |
+| Legacy Java (<21) | JDBC Polling or LISTEN/NOTIFY | Mature, stable approaches |
+| Development/testing | Client-side config | Easy per-app customization |
+| Production at scale | Server-side config + JDBC Polling | Centralized governance |
 
 ---
 
@@ -1727,11 +2524,114 @@ public void testCachePerformanceImprovement() {
 
 ## 13. Summary and Recommendations
 
-### 13.1 Recommended Approach
+### 13.1 Honest Evaluation: All Approaches Compared
 
-**For Most Deployments:**
+After analyzing all five approaches for marking queries and five approaches for cache propagation, here's an honest assessment:
 
-1. **Query Marking:** SQL comment hints (flexible, explicit, works everywhere)
+#### Query Marking Approaches: Ranked by Practicality
+
+**1. SQL Comment Hints (⭐ RECOMMENDED)**
+```sql
+/* @cache ttl=300s */ SELECT * FROM products
+```
+- **Pros**: Simple, explicit, no app changes, works everywhere
+- **Cons**: SQL modification needed, can clutter queries
+- **Verdict**: ✅ **Best overall** - strikes perfect balance between control and simplicity
+
+**2. Server-Side Configuration**
+```yaml
+cache:
+  rules:
+    - pattern: "SELECT .* FROM products"
+      ttl: 600s
+```
+- **Pros**: Centralized, no SQL changes, organization governance
+- **Cons**: Less visible to developers, regex matching overhead
+- **Verdict**: ✅ **Excellent for defaults** - use alongside SQL hints
+
+**3. JDBC Connection Properties**
+```
+?cacheEnabled=true&cacheDefaultTtl=300
+```
+- **Pros**: Environment-specific, no SQL changes
+- **Cons**: Coarse-grained, less control per query
+- **Verdict**: ✅ **Good for environment tuning** - supplementary approach
+
+**4. Client-Side Configuration (NEW)**
+```yaml
+# ojp-cache-client.yaml
+queries:
+  - sql: "SELECT * FROM products WHERE id = ?"
+    ttl: 600s
+```
+- **Pros**: Application control, version-controlled with code
+- **Cons**: ⚠️ **Connection overhead**, configuration duplication, memory per session
+- **Verdict**: ⚠️ **Use sparingly** - Only for applications with unique caching needs
+- **Honest assessment**: Adds complexity without significant benefit over SQL hints
+  - Each connection sends configuration to all servers (network overhead)
+  - Memory consumed per session for storing rules
+  - Potential for inconsistent rules across applications
+  - Better handled by SQL hints (per-query) or server config (organization-wide)
+
+#### Cache Propagation Approaches: Ranked by Practicality
+
+**1. JDBC Notification Table (⭐ RECOMMENDED FOR MOST)**
+- **Pros**: Simple, reliable, works with any DB, no extra infrastructure
+- **Cons**: 1-2 second polling latency
+- **Verdict**: ✅ **Best overall** - proven, maintainable, good enough for 90% of use cases
+- **When to use**: Default choice unless you have specific requirements
+
+**2. PostgreSQL LISTEN/NOTIFY**
+- **Pros**: Real-time (sub-second), PostgreSQL-native, elegant
+- **Cons**: PostgreSQL-only
+- **Verdict**: ✅ **Excellent for PostgreSQL** - if you're PostgreSQL-only, use this
+
+**3. Hybrid (Redis + JDBC Backup)**
+- **Pros**: Fast + reliable, best of both worlds
+- **Cons**: Additional infrastructure, complexity
+- **Verdict**: ✅ **For high-scale production** - when 1-2 second latency is unacceptable
+
+**4. JDBC Driver as Active Relay (NEW)**
+```
+Server → Driver → All Other Servers (push-based)
+```
+- **Pros**: ✅ Real-time, no database overhead, uses virtual threads (Java 21+)
+- **Cons**: ⚠️ **Significant drawbacks**:
+  - Driver complexity and stability risk
+  - Network amplification (1 query → N-1 distribution calls)
+  - Memory pressure (serializing result sets in driver)
+  - Large result sets become prohibitively expensive
+  - Harder to debug and test
+  - Driver must know ALL server endpoints
+  - No persistence if driver crashes during distribution
+
+- **Verdict**: ⚠️ **NOT RECOMMENDED for most scenarios**
+- **Honest assessment**: 
+  - **Looks appealing** but has serious practical issues:
+    - ❌ Moves too much logic into the client driver (violates separation of concerns)
+    - ❌ Every client connection must track all servers (coupling)
+    - ❌ Result set serialization in driver memory (resource intensive)
+    - ❌ Network traffic scales poorly: 10 servers × 100KB result = 900KB extra traffic per query
+    - ❌ Debugging distributed cache issues becomes nightmare (happens in driver, not server)
+    - ❌ If driver has bug, affects ALL applications
+  
+  - **Only consider if**: ALL of these are true:
+    - Java 21+ environment (virtual threads essential)
+    - Small result sets only (< 10KB)
+    - Very small cluster (< 5 servers)
+    - Extremely latency-sensitive (< 100ms required)
+    - Team has expertise in complex JDBC driver development
+  
+  - **Better alternatives**:
+    - Use JDBC Notification Table (simple, reliable)
+    - Use PostgreSQL LISTEN/NOTIFY (real-time, proven)
+    - Use Redis pub/sub (purpose-built for this)
+
+### 13.2 Final Recommendation
+
+**For Most Deployments** (90% of use cases):
+
+1. **Query Marking:** SQL comment hints (primary) + Server-side configuration (defaults)
    ```sql
    /* @cache ttl=300s */ SELECT * FROM products WHERE active = true
    ```
@@ -1746,16 +2646,25 @@ public void testCachePerformanceImprovement() {
    - Uses existing infrastructure
    - 1-2 second eventual consistency is acceptable for most use cases
 
-**For High-Scale Deployments:**
+**For PostgreSQL-Only Deployments:**
+
+Same as above, but use **LISTEN/NOTIFY** instead of notification table for real-time propagation.
+
+**For High-Scale Deployments** (large clusters, high throughput):
 
 1. **Query Marking:** Hybrid (SQL hints + server-side rules)
-2. **Local Caching:** Same as above
+2. **Local Caching:** Same as above  
 3. **Distributed Caching:** Redis pub/sub with JDBC fallback
    - Real-time invalidation
    - Reliable fallback
-   - Best for high-throughput scenarios
+   - Purpose-built for pub/sub patterns
 
-### 13.2 Implementation Priority
+**NOT Recommended:**
+
+- ❌ **Client-side configuration**: Adds overhead without clear benefit over SQL hints
+- ❌ **JDBC Driver Relay**: Complexity and risks outweigh benefits; better alternatives exist
+
+### 13.3 Implementation Priority
 
 **Phase 1 (Immediate Value):**
 - ✅ SQL hint parsing
@@ -1774,11 +2683,11 @@ public void testCachePerformanceImprovement() {
 
 **Phase 4 (Advanced - Optional):**
 - Semantic query analysis with Calcite
-- Redis integration
+- Redis integration (if high-scale)
 - Query result compression
 - Cache warming
 
-### 13.3 Key Takeaways
+### 13.4 Key Takeaways
 
 1. **OJP's architecture is well-suited for caching**
    - Existing extension points (Action pattern, SQL enhancement pipeline)
@@ -1786,20 +2695,27 @@ public void testCachePerformanceImprovement() {
    - Multinode architecture supports distributed coordination
 
 2. **JDBC can effectively coordinate cache across servers**
-   - Notification table approach is simple and reliable
+   - Notification table approach is simple and reliable (RECOMMENDED)
    - PostgreSQL LISTEN/NOTIFY offers real-time option
    - Hybrid approach provides best of both worlds
+   - Driver relay is possible but not recommended (complexity > benefit)
 
-3. **SQL comment hints are the most practical marking approach**
+3. **SQL comment hints remain the most practical marking approach**
    - No application code changes
    - Explicit and visible
    - Works with any framework/language
+   - Client-side configuration adds overhead without clear advantage
 
-4. **Start simple, add complexity as needed**
+4. **Start simple, add complexity only when needed**
    - Begin with local caching + TTL
    - Add write-through invalidation
-   - Expand to distributed coordination
-   - Consider advanced features only if needed
+   - Use JDBC notification table for distribution (not driver relay)
+   - Consider advanced features (Redis, LISTEN/NOTIFY) only if requirements demand it
+
+5. **Avoid premature optimization**
+   - JDBC notification table's 1-2 second latency is acceptable for most use cases
+   - Adding driver relay complexity for milliseconds of improvement is rarely worth it
+   - Focus on cache hit rates and TTL tuning before complex propagation mechanisms
 
 ---
 
