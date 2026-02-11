@@ -22,16 +22,12 @@ This document provides a comprehensive analysis of how query result caching coul
 
 ### 1.1 Current Query Flow
 
-```
-Application (JDBC)
-    ↓
-OJP JDBC Driver (Type 3)
-    ↓ gRPC
-OJP Server
-    ↓
-Connection Pool (HikariCP)
-    ↓
-Target Database (PostgreSQL, MySQL, Oracle, etc.)
+```mermaid
+flowchart TD
+    A[Application JDBC] --> B[OJP JDBC Driver Type 3]
+    B -->|gRPC| C[OJP Server]
+    C --> D[Connection Pool HikariCP]
+    D --> E[Target Database<br/>PostgreSQL, MySQL, Oracle, etc.]
 ```
 
 ### 1.2 Existing Caching Mechanisms
@@ -1167,30 +1163,22 @@ public class PostgresListenNotifyCache {
 
 **Concept:** Use JDBC for coordination + external distributed cache (Redis, Hazelcast).
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  OJP Cluster                         │
-│                                                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
-│  │ OJP      │  │ OJP      │  │ OJP      │          │
-│  │ Server A │  │ Server B │  │ Server C │          │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘          │
-│       │             │             │                  │
-│       └─────────────┼─────────────┘                  │
-│                     │                                 │
-│                     ↓                                 │
-│           ┌───────────────────┐                      │
-│           │  Redis Cluster    │                      │
-│           │  (Cache Storage   │                      │
-│           │   + Pub/Sub)      │                      │
-│           └─────────┬─────────┘                      │
-│                     │                                 │
-│                     ↓                                 │
-│           ┌───────────────────┐                      │
-│           │  Notification DB  │                      │
-│           │  (JDBC - Backup)  │                      │
-│           └───────────────────┘                      │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph OJP_Cluster["OJP Cluster"]
+        ServerA["OJP Server A"]
+        ServerB["OJP Server B"]
+        ServerC["OJP Server C"]
+        
+        ServerA --> Redis
+        ServerB --> Redis
+        ServerC --> Redis
+        
+        Redis["Redis Cluster<br/>(Cache Storage + Pub/Sub)"]
+        Redis --> NotifDB["Notification DB<br/>(JDBC - Backup)"]
+    end
+    
+    style OJP_Cluster fill:#f0f0f0,stroke:#333,stroke-width:2px
 ```
 
 #### Implementation
