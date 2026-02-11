@@ -2032,22 +2032,25 @@ public class HybridCacheService {
 
 ---
 
-### 5.6 Comprehensive Recommendation Matrix
+### 5.6 Comprehensive Recommendation Matrix (REVISED)
 
 | Scenario | Recommended Approach | Reason |
 |----------|---------------------|--------|
-| Small deployment (1-3 servers) | JDBC Polling | Simple, no extra infrastructure |
-| PostgreSQL-only | LISTEN/NOTIFY | Real-time, native support |
-| Large scale (10+ servers) | Redis + JDBC backup | Performance and reliability |
-| Multi-database support | JDBC Polling | Works with any database |
+| **Most deployments (90%)** | **JDBC Driver Relay** | Data already in memory, saves database load, real-time |
+| Small-medium result sets (<200KB) | JDBC Driver Relay | Efficient distribution, data already in driver |
+| Large result sets (>200KB) | JDBC Polling | Avoids network amplification |
+| PostgreSQL-only | LISTEN/NOTIFY | Real-time, PostgreSQL-native |
+| Very large clusters (20+ servers) | Redis + JDBC backup | Reduces network amplification |
+| Multi-database support | JDBC Driver Relay or Polling | Works with any database |
 | Real-time requirements (<100ms) | JDBC Driver Relay (Java 21+) or LISTEN/NOTIFY | Immediate propagation |
 | High availability critical | Hybrid (Redis + JDBC) | Redundant notification paths |
-| Small result sets, high reuse | JDBC Driver Relay | Efficient push-based distribution |
-| Large result sets | JDBC Polling | Avoids network amplification |
-| Java 21+ environment | JDBC Driver Relay | Leverages virtual threads |
-| Legacy Java (<21) | JDBC Polling or LISTEN/NOTIFY | Mature, stable approaches |
-| Development/testing | Client-side config | Easy per-app customization |
-| Production at scale | Server-side config + JDBC Polling | Centralized governance |
+| Java 21+ environment | JDBC Driver Relay | Leverages virtual threads for efficiency |
+| Legacy Java (<21) | JDBC Polling or LISTEN/NOTIFY | Virtual threads make driver relay more efficient |
+| ORM-based applications (Hibernate, Spring Data) | Server-side config + Driver Relay | Works regardless of framework |
+| Development/testing | Client-side config + Driver Relay | Easy per-app customization |
+| Production | Server-side config + Driver Relay | Centralized governance, efficient distribution |
+
+**Key Change**: JDBC Driver Relay is now recommended as default for most scenarios, with fallback to polling only for large results or very large clusters.
 
 ---
 
@@ -2526,98 +2529,211 @@ public void testCachePerformanceImprovement() {
 
 ### 13.1 Honest Evaluation: All Approaches Compared
 
-After analyzing all five approaches for marking queries and five approaches for cache propagation, here's an honest assessment:
+After analyzing all five approaches for marking queries and five approaches for cache propagation, here's an honest assessment considering real-world constraints:
 
-#### Query Marking Approaches: Ranked by Practicality
+#### Query Marking Approaches: Ranked by Real-World Practicality
 
-**1. SQL Comment Hints (⭐ RECOMMENDED)**
-```sql
-/* @cache ttl=300s */ SELECT * FROM products
-```
-- **Pros**: Simple, explicit, no app changes, works everywhere
-- **Cons**: SQL modification needed, can clutter queries
-- **Verdict**: ✅ **Best overall** - strikes perfect balance between control and simplicity
+**IMPORTANT CONSIDERATION: ORM/Framework Reality**
 
-**2. Server-Side Configuration**
+In real-world enterprise applications, raw JDBC is rarely used directly. Instead, developers use:
+- **Hibernate** + JPA
+- **Spring Data JPA**
+- **MyBatis**
+- **jOOQ**
+- Other ORMs and query builders
+
+This significantly impacts the practicality of SQL-level hints, as developers often don't write raw SQL.
+
+**1. Server-Side Configuration (⭐ MOST PRACTICAL)**
 ```yaml
 cache:
   rules:
-    - pattern: "SELECT .* FROM products"
+    - pattern: "SELECT .* FROM products WHERE .*"
       ttl: 600s
+    - pattern: "SELECT .* FROM users WHERE id = ?"
+      ttl: 300s
 ```
-- **Pros**: Centralized, no SQL changes, organization governance
-- **Cons**: Less visible to developers, regex matching overhead
-- **Verdict**: ✅ **Excellent for defaults** - use alongside SQL hints
+- **Pros**: 
+  - ✅ Works with ANY framework (Hibernate, Spring Data, MyBatis, jOOQ)
+  - ✅ No application code changes needed
+  - ✅ Centralized governance (DBAs/DevOps can manage)
+  - ✅ Can be updated without redeploying applications
+  - ✅ Pattern matching works for ORM-generated queries
+- **Cons**: Less visible to developers, regex overhead
+- **Verdict**: ✅ **BEST for real-world** - works regardless of ORM/framework
 
-**3. JDBC Connection Properties**
-```
-?cacheEnabled=true&cacheDefaultTtl=300
-```
-- **Pros**: Environment-specific, no SQL changes
-- **Cons**: Coarse-grained, less control per query
-- **Verdict**: ✅ **Good for environment tuning** - supplementary approach
-
-**4. Client-Side Configuration (NEW)**
+**2. Client-Side Configuration**
 ```yaml
 # ojp-cache-client.yaml
 queries:
   - sql: "SELECT * FROM products WHERE id = ?"
     ttl: 600s
 ```
-- **Pros**: Application control, version-controlled with code
-- **Cons**: ⚠️ **Connection overhead**, configuration duplication, memory per session
-- **Verdict**: ⚠️ **Use sparingly** - Only for applications with unique caching needs
-- **Honest assessment**: Adds complexity without significant benefit over SQL hints
-  - Each connection sends configuration to all servers (network overhead)
-  - Memory consumed per session for storing rules
-  - Potential for inconsistent rules across applications
-  - Better handled by SQL hints (per-query) or server config (organization-wide)
+- **Pros**: 
+  - ✅ Application control
+  - ✅ Works with ORMs (can match generated SQL patterns)
+  - ✅ Version-controlled with application code
+  - ✅ Per-application policies
+- **Cons**: Connection overhead, configuration sent to all servers
+- **Verdict**: ✅ **Good for per-application policies** - especially useful when different apps need different cache rules
+
+**3. JDBC Connection Properties**
+```
+?cacheEnabled=true&cacheDefaultTtl=300
+```
+- **Pros**: Environment-specific, works with any ORM
+- **Cons**: Coarse-grained, all-or-nothing caching
+- **Verdict**: ✅ **Good for environment tuning** - enable/disable caching per environment
+
+**4. SQL Comment Hints**
+```sql
+/* @cache ttl=300s */ SELECT * FROM products
+```
+- **Pros**: Explicit, fine-grained control
+- **Cons**: ⚠️ **IMPRACTICAL with ORMs**:
+  - Hibernate/JPA: Cannot easily inject SQL hints into generated queries
+  - Spring Data: Would require @Query annotations with native SQL (loses type safety)
+  - Most ORMs abstract away raw SQL
+  - Requires SQL modification which defeats ORM purpose
+- **Verdict**: ⚠️ **Limited applicability** - Only useful for applications writing raw SQL
+
+**REVISED RANKING (Real-World):**
+1. **Server-Side Configuration** (works everywhere, no code changes)
+2. **Client-Side Configuration** (per-app policies, works with ORMs)
+3. **JDBC Connection Properties** (environment-level control)
+4. **SQL Comment Hints** (only for raw JDBC, impractical with ORMs)
 
 #### Cache Propagation Approaches: Ranked by Practicality
 
-**1. JDBC Notification Table (⭐ RECOMMENDED FOR MOST)**
-- **Pros**: Simple, reliable, works with any DB, no extra infrastructure
-- **Cons**: 1-2 second polling latency
-- **Verdict**: ✅ **Best overall** - proven, maintainable, good enough for 90% of use cases
-- **When to use**: Default choice unless you have specific requirements
+**IMPORTANT CONSIDERATION: Data Already in Memory**
 
-**2. PostgreSQL LISTEN/NOTIFY**
-- **Pros**: Real-time (sub-second), PostgreSQL-native, elegant
-- **Cons**: PostgreSQL-only
-- **Verdict**: ✅ **Excellent for PostgreSQL** - if you're PostgreSQL-only, use this
+A critical point: when a query executes through OJP, the result set is already streamed from database → OJP Server → JDBC Driver → Application. The data is **already in the JDBC driver's memory** as it's being returned to the application. This changes the cost analysis significantly.
 
-**3. Hybrid (Redis + JDBC Backup)**
-- **Pros**: Fast + reliable, best of both worlds
-- **Cons**: Additional infrastructure, complexity
-- **Verdict**: ✅ **For high-scale production** - when 1-2 second latency is unacceptable
-
-**4. JDBC Driver as Active Relay (NEW)**
+**1. JDBC Driver as Active Relay (⭐ REVISED: RECOMMENDED)**
 ```
-Server → Driver → All Other Servers (push-based)
+Server → Driver (data already here) → Stream to other servers
 ```
-- **Pros**: ✅ Real-time, no database overhead, uses virtual threads (Java 21+)
-- **Cons**: ⚠️ **Significant drawbacks**:
-  - Driver complexity and stability risk
-  - Network amplification (1 query → N-1 distribution calls)
-  - Memory pressure (serializing result sets in driver)
-  - Large result sets become prohibitively expensive
-  - Harder to debug and test
-  - Driver must know ALL server endpoints
-  - No persistence if driver crashes during distribution
+- **Pros**: 
+  - ✅ **Data already in memory** - no additional database load
+  - ✅ Real-time propagation (immediate)
+  - ✅ Zero database overhead (no polling, no notification table)
+  - ✅ Efficient with virtual threads (Java 21+)
+  - ✅ Push-based (more efficient than polling)
+  - ✅ Simple failure handling (doesn't affect primary query)
+  - ✅ No additional infrastructure needed
+- **Cons**: 
+  - ⚠️ Network amplification (N-1 distribution calls)
+  - ⚠️ Large result sets still expensive to distribute
+  - ⚠️ Requires driver to know cluster topology
+- **Verdict**: ✅ **RECOMMENDED** - data is already in driver memory, just distribute it
+- **REVISED ASSESSMENT**: 
+  - **Initial concern was overstated**: "serializing result sets in driver" - they're already serialized (gRPC protocol)
+  - **Key insight**: The data is **already flowing through the driver**, we're just adding a side-effect to stream it to other servers
+  - **Not violating separation of concerns**: Driver is already responsible for communication with OJP servers
+  - **Network cost is real but justified**: Saves N-1 database queries, which is the whole point
+  - **With selective distribution policy** (only small/medium results), this is very practical
 
-- **Verdict**: ⚠️ **NOT RECOMMENDED for most scenarios**
-- **Honest assessment**: 
-  - **Looks appealing** but has serious practical issues:
-    - ❌ Moves too much logic into the client driver (violates separation of concerns)
-    - ❌ Every client connection must track all servers (coupling)
-    - ❌ Result set serialization in driver memory (resource intensive)
-    - ❌ Network traffic scales poorly: 10 servers × 100KB result = 900KB extra traffic per query
-    - ❌ Debugging distributed cache issues becomes nightmare (happens in driver, not server)
-    - ❌ If driver has bug, affects ALL applications
-  
-  - **Only consider if**: ALL of these are true:
-    - Java 21+ environment (virtual threads essential)
-    - Small result sets only (< 10KB)
+**Optimization: Smart Distribution Policy**
+```java
+// Only distribute if beneficial
+public boolean shouldDistribute(CachedResult result) {
+    // Don't distribute very large results
+    if (result.getSizeBytes() > 200_000) return false;  // 200KB limit
+    
+    // Don't distribute if TTL is very short (not worth it)
+    if (result.getTtl() < Duration.ofSeconds(60)) return false;
+    
+    // Don't distribute single-row results (cheap to re-query)
+    if (result.getRowCount() < 2) return false;
+    
+    return true;
+}
+```
+
+**2. JDBC Notification Table**
+- **Pros**: Simple, reliable, works with any DB
+- **Cons**: 
+  - ⚠️ **Database overhead**: Additional polling queries every 1-2 seconds
+  - ⚠️ **Latency**: 1-2 second delay before invalidation propagates
+  - ⚠️ **Requires database table** and periodic cleanup
+- **Verdict**: ✅ **Solid fallback** - when driver relay not suitable (large results, many servers)
+- **When to use**: Default for large result sets, legacy Java environments
+
+**3. PostgreSQL LISTEN/NOTIFY**
+- **Pros**: Real-time, PostgreSQL-native
+- **Cons**: PostgreSQL-only, requires database-level triggers
+- **Verdict**: ✅ **Excellent for PostgreSQL-only** deployments
+
+**4. Hybrid (Redis + JDBC Backup)**
+- **Pros**: Fast + reliable
+- **Cons**: Additional infrastructure (Redis cluster)
+- **Verdict**: ✅ **For high-scale** - when cluster is very large (20+ servers)
+
+**REVISED RANKING:**
+1. **JDBC Driver Relay** (data already in memory, just distribute it)
+2. **PostgreSQL LISTEN/NOTIFY** (if PostgreSQL-only)
+3. **JDBC Notification Table** (for large results or legacy environments)
+4. **Redis + JDBC** (for very large clusters)
+
+### 13.2 Final Recommendation (REVISED)
+
+**For Most Deployments (90% of use cases):**
+
+1. **Query Marking:** Server-Side Configuration (primary) + Client-Side Configuration (per-app overrides)
+   ```yaml
+   # Server-side: ojp-cache-rules.yml
+   cache:
+     rules:
+       - pattern: "SELECT .* FROM products WHERE .*"
+         ttl: 600s
+   
+   # Client-side: ojp-cache-client.yaml (optional, per-app)
+   queries:
+     - sql: "SELECT * FROM users WHERE id = ?"
+       ttl: 300s
+   ```
+   - **Works with ALL ORMs and frameworks** (Hibernate, Spring Data, etc.)
+   - **No application code changes** required
+   - **Centralized + per-application flexibility**
+
+2. **Local Caching:** TTL-based with write-through invalidation
+
+3. **Distributed Caching:** JDBC Driver as Active Relay
+   - **Key advantage**: Data is already in driver memory
+   - **Use with smart distribution policy**: Only distribute beneficial results (< 200KB, TTL > 60s, > 1 row)
+   - **Saves database load**: N-1 fewer queries to database
+   - **Simple implementation**: Data already serialized in gRPC format
+
+**For Legacy Java Environments (< Java 21):**
+- Use **JDBC Notification Table** instead of driver relay
+- Virtual threads make driver relay significantly more efficient
+
+**For PostgreSQL-Only Deployments:**
+- Use **LISTEN/NOTIFY** for real-time propagation
+
+**For Very Large Clusters (20+ servers):**
+- Consider **Redis + JDBC** hybrid to reduce network amplification
+
+### 13.3 Why This Recommendation Changed
+
+**Initial Analysis Was Too Conservative on Driver Relay:**
+- ❌ **Overlooked**: Data is already in driver memory (no "serialization" cost)
+- ❌ **Overlooked**: The whole point is to avoid N-1 database queries
+- ❌ **Overstated**: "Violates separation of concerns" - driver already manages server communication
+- ✅ **Correct**: Network amplification is real, but mitigated by smart distribution policy
+
+**Initial Analysis Underestimated ORM Challenge:**
+- ❌ **Overlooked**: Most developers use ORMs, not raw JDBC
+- ❌ **Overlooked**: SQL hints are impractical with Hibernate/Spring Data
+- ✅ **Correct**: Server-side configuration works regardless of framework
+
+**Revised Philosophy:**
+- **Start with server-side configuration** (works everywhere, no code changes)
+- **Use driver relay for distribution** (data already in memory, avoid database load)
+- **Apply smart distribution policy** (only beneficial results)
+- **Scale up to Redis only if needed** (very large clusters)
+
+### 13.4 Implementation Priority
     - Very small cluster (< 5 servers)
     - Extremely latency-sensitive (< 100ms required)
     - Team has expertise in complex JDBC driver development
@@ -2683,39 +2799,42 @@ Same as above, but use **LISTEN/NOTIFY** instead of notification table for real-
 
 **Phase 4 (Advanced - Optional):**
 - Semantic query analysis with Calcite
-- Redis integration (if high-scale)
+- Redis integration (if very large clusters 20+)
 - Query result compression
 - Cache warming
 
-### 13.4 Key Takeaways
+### 13.5 Key Takeaways (REVISED)
 
 1. **OJP's architecture is well-suited for caching**
    - Existing extension points (Action pattern, SQL enhancement pipeline)
    - Already has some caching infrastructure (SqlEnhancerEngine)
    - Multinode architecture supports distributed coordination
+   - Data already flows through driver - perfect for cache distribution
 
-2. **JDBC can effectively coordinate cache across servers**
-   - Notification table approach is simple and reliable (RECOMMENDED)
-   - PostgreSQL LISTEN/NOTIFY offers real-time option
-   - Hybrid approach provides best of both worlds
-   - Driver relay is possible but not recommended (complexity > benefit)
+2. **Real-world applications use ORMs, not raw JDBC**
+   - Hibernate, Spring Data JPA, MyBatis abstract away SQL
+   - SQL comment hints are impractical with ORMs
+   - Server-side configuration works regardless of framework
+   - Client-side configuration provides per-application flexibility
 
-3. **SQL comment hints remain the most practical marking approach**
-   - No application code changes
-   - Explicit and visible
-   - Works with any framework/language
-   - Client-side configuration adds overhead without clear advantage
+3. **JDBC Driver Relay is more practical than initially assessed**
+   - Data is already in driver memory (no serialization cost)
+   - Saves N-1 database queries (the whole point of caching)
+   - Network cost is justified by database load reduction
+   - Smart distribution policy (size limits, TTL thresholds) makes it practical
+   - Driver already manages server communication (not violating SoC)
 
-4. **Start simple, add complexity only when needed**
-   - Begin with local caching + TTL
-   - Add write-through invalidation
-   - Use JDBC notification table for distribution (not driver relay)
-   - Consider advanced features (Redis, LISTEN/NOTIFY) only if requirements demand it
+4. **Recommended approach balances practicality and performance**
+   - Server-side configuration: Works with any ORM/framework
+   - Driver relay: Efficient distribution (data already in memory)
+   - Smart policy: Only distribute beneficial results
+   - Scales to Redis only when needed (very large clusters)
 
-5. **Avoid premature optimization**
-   - JDBC notification table's 1-2 second latency is acceptable for most use cases
-   - Adding driver relay complexity for milliseconds of improvement is rarely worth it
-   - Focus on cache hit rates and TTL tuning before complex propagation mechanisms
+5. **Implementation priorities based on value**
+   - Phase 1: Local caching (immediate value)
+   - Phase 2: Write-through invalidation (consistency)
+   - Phase 3: Driver relay distribution (efficient, real-time)
+   - Phase 4: Scale to Redis only if cluster very large (20+ servers)
 
 ---
 

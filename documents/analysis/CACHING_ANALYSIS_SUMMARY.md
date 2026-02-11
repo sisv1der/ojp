@@ -1,4 +1,4 @@
-# OJP Caching Implementation - Quick Reference
+# OJP Caching Implementation - Quick Reference (REVISED)
 
 **Full Analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](../../CACHING_IMPLEMENTATION_ANALYSIS.md)
 
@@ -8,76 +8,102 @@
 
 ### Q1: How can queries for caching be marked?
 
-**Three approaches available:**
+**IMPORTANT**: Most real-world applications use ORMs (Hibernate, Spring Data, MyBatis), not raw JDBC. This impacts the practicality of different approaches.
 
-1. **SQL Comment Hints** ⭐ RECOMMENDED
-   ```sql
-   /* @cache ttl=300s */
-   SELECT * FROM products WHERE category = 'electronics';
-   ```
-   - ✅ Most flexible and explicit
-   - ✅ No application code changes
-   - ✅ Works with any framework/language
+**Four approaches ranked by real-world practicality:**
 
-2. **JDBC Connection Properties**
-   ```java
-   jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb
-     ?cacheEnabled=true
-     &cachePattern=SELECT.*FROM products.*
-     &cacheTtl=300
-   ```
-   - ✅ Connection-level control
-   - ✅ Environment-specific configuration
-
-3. **Server-Side Configuration**
+1. **Server-Side Configuration** ⭐ MOST PRACTICAL
    ```yaml
    # ojp-cache-rules.yml
    cache:
      rules:
-       - pattern: "SELECT .* FROM products .*"
+       - pattern: "SELECT .* FROM products WHERE .*"
          ttl: 600s
    ```
+   - ✅ Works with ANY framework (Hibernate, Spring Data, MyBatis, jOOQ)
+   - ✅ No application code changes
    - ✅ Centralized management
-   - ✅ No application changes
+   - ✅ Pattern matching works for ORM-generated queries
+
+2. **Client-Side Configuration**
+   ```yaml
+   # ojp-cache-client.yaml
+   queries:
+     - sql: "SELECT * FROM users WHERE id = ?"
+       ttl: 300s
+   ```
+   - ✅ Per-application policies
+   - ✅ Works with ORMs
+   - ✅ Version-controlled with application code
+
+3. **JDBC Connection Properties**
+   ```java
+   jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb
+     ?cacheEnabled=true&cacheDefaultTtl=300
+   ```
+   - ✅ Environment-specific configuration
+   - ✅ Works with any ORM
+
+4. **SQL Comment Hints**
+   ```sql
+   /* @cache ttl=300s */
+   SELECT * FROM products WHERE category = 'electronics';
+   ```
+   - ⚠️ IMPRACTICAL with ORMs (Hibernate, Spring Data)
+   - ✅ Good for raw JDBC applications only
 
 ### Q2: Can JDBC drivers replicate cache across OJP servers?
 
-**YES - Multiple options:**
+**YES - Multiple options, REVISED RECOMMENDATION:**
 
-#### Option 1: JDBC Notification Table ⭐ RECOMMENDED FOR MOST
+#### Option 1: JDBC Driver as Active Relay ⭐ RECOMMENDED FOR MOST
+
+**Key Insight**: Data is already in driver memory when returned to application!
+
+```
+Database → OJP Server → JDBC Driver (data here!) → Stream to other servers
+```
+
+**How it works:**
+1. Query executes, result flows through driver to application
+2. Driver spawns virtual thread to stream data to other OJP servers
+3. Other servers cache the result locally
+4. Next query on any server hits cache (no database query)
+
+**Characteristics:**
+- ✅ Data already in memory (no serialization cost)
+- ✅ Real-time propagation (immediate)
+- ✅ Zero database overhead (no polling)
+- ✅ Saves N-1 database queries (the whole point!)
+- ✅ Efficient with virtual threads (Java 21+)
+- ⚠️ Use smart distribution policy (< 200KB, TTL > 60s)
+
+**Smart Distribution Policy:**
+```java
+// Only distribute beneficial results
+- Skip very large results (> 200KB)
+- Skip very short TTL (< 60s)
+- Skip single-row results
+```
+
+#### Option 2: JDBC Notification Table (Fallback)
 
 ```sql
 CREATE TABLE ojp_cache_notifications (
     notification_id BIGSERIAL PRIMARY KEY,
-    server_id VARCHAR(255) NOT NULL,
-    operation VARCHAR(50) NOT NULL,
+    server_id VARCHAR(255),
     affected_tables TEXT[],
-    timestamp TIMESTAMP DEFAULT NOW()
+    timestamp TIMESTAMP
 );
 ```
 
-**How it works:**
-1. Server A writes to database → invalidates local cache
-2. Server A inserts notification into `ojp_cache_notifications`
-3. Servers B & C poll this table every 1 second
-4. Servers B & C invalidate their caches based on notifications
-
 **Characteristics:**
-- ✅ Simple implementation using existing JDBC
-- ✅ No additional infrastructure required
+- ✅ Simple, reliable
 - ✅ Works with any database
-- ⚠️ 1-2 second latency (eventual consistency)
+- ⚠️ 1-2 second polling latency
+- ⚠️ Additional database overhead (polling queries)
 
-#### Option 2: PostgreSQL LISTEN/NOTIFY
-
-**Real-time cache invalidation for PostgreSQL:**
-```java
-connection.createStatement().execute("LISTEN ojp_cache_invalidation");
-// Receive notifications instantly when data changes
-```
-
-**Characteristics:**
-- ✅ Real-time (sub-second latency)
+**When to use**: Large result sets, legacy Java environments
 - ✅ Minimal overhead
 - ⚠️ PostgreSQL-specific
 
