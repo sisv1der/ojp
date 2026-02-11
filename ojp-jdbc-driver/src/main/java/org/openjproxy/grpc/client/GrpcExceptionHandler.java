@@ -106,7 +106,9 @@ public class GrpcExceptionHandler {
             
             return lowerMessage.contains("connection") || 
                    lowerMessage.contains("timeout") ||
-                   lowerMessage.contains("unavailable");
+                   lowerMessage.contains("unavailable") ||
+                   lowerMessage.contains("failed to connect") ||
+                   lowerMessage.contains("no healthy servers");
         }
         
         return false; // Default to not marking unhealthy for unknown errors
