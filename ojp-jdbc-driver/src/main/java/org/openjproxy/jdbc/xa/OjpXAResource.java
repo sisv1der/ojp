@@ -66,34 +66,34 @@ public class OjpXAResource implements XAResource {
                 // Check if this is a connection-level error
                 boolean isConnectionError = isConnectionLevelError(e);
                 
-                if (!isConnectionError) {
+                if (isConnectionError) {
+                    // Connection-level error - can retry
+                    lastException = new XAException(XAException.XAER_RMFAIL);
+                    lastException.initCause(e);
+                    
+                    attempt++;
+                    
+                    if (attempt < maxRetries) {
+                        log.warn("xaStart failed with connection error (attempt {}/{}): {}. Attempting to recreate session...", 
+                                attempt, maxRetries, e.getMessage());
+                        
+                        try {
+                            // Recreate session on a different server
+                            this.sessionInfo = xaConnection.recreateSession();
+                            log.info("Session recreated successfully on attempt {}", attempt);
+                        } catch (SQLException recreateEx) {
+                            log.error("Failed to recreate session on attempt {}: {}", attempt, recreateEx.getMessage());
+                            // Continue to next retry if we have attempts left
+                        }
+                    } else {
+                        log.error("xaStart failed after {} attempts", maxRetries, e);
+                    }
+                } else {
                     // Database-level error - don't retry
                     log.error("Database-level error in start (not retrying)", e);
                     XAException xae = new XAException(XAException.XAER_RMERR);
                     xae.initCause(e);
                     throw xae;
-                }
-                
-                // Connection-level error - can retry
-                lastException = new XAException(XAException.XAER_RMFAIL);
-                lastException.initCause(e);
-                
-                attempt++;
-                
-                if (attempt < maxRetries) {
-                    log.warn("xaStart failed with connection error (attempt {}/{}): {}. Attempting to recreate session...", 
-                            attempt, maxRetries, e.getMessage());
-                    
-                    try {
-                        // Recreate session on a different server
-                        this.sessionInfo = xaConnection.recreateSession();
-                        log.info("Session recreated successfully on attempt {}", attempt);
-                    } catch (SQLException recreateEx) {
-                        log.error("Failed to recreate session on attempt {}: {}", attempt, recreateEx.getMessage());
-                        // Continue to next retry if we have attempts left
-                    }
-                } else {
-                    log.error("xaStart failed after {} attempts", maxRetries, e);
                 }
             }
         }
