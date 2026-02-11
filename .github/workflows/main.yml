@@ -701,11 +701,15 @@ jobs:
   #
   # ===========================================================================
   multinode-test:
-    name: Multinode Integration Test
+    name: Multinode Integration Test (Run ${{ matrix.run }})
     runs-on: ubuntu-latest
     # DEPENDENCY: This job only runs if build-test succeeds
     # This ensures we don't waste resources on multinode tests if H2 tests fail
     needs: [build-test]
+    strategy:
+      max-parallel: 1
+      matrix:
+        run: [1, 2, 3, 4, 5]
 
     steps:
       - name: Git checkout
@@ -1080,11 +1084,15 @@ jobs:
   #
   # ===========================================================================
   multinode-xa-test:
-    name: Multinode XA Integration Test
+    name: Multinode XA Integration Test (Run ${{ matrix.run }})
     runs-on: ubuntu-latest
     # DEPENDENCY: This job only runs if build-test succeeds
     # This ensures we don't waste resources on multinode XA tests if H2 tests fail
     needs: [build-test]
+    strategy:
+      max-parallel: 1
+      matrix:
+        run: [1, 2, 3, 4, 5]
 
     steps:
       - name: Git checkout
