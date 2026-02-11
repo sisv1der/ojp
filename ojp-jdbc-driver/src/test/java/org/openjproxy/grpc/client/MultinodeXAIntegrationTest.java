@@ -64,6 +64,7 @@ public class MultinodeXAIntegrationTest {
     private static AtomicInteger totalFailedQueries = new AtomicInteger(0);
     private static final AtomicInteger nonConnectivityFailedQueries = new AtomicInteger(0);
     private static final ExecutorService queryExecutor = new RoundRobinExecutorService(100);
+    private static MultinodeTestHelper testHelper;
 
     private static OjpXADataSource xaDataSource;
 
@@ -80,6 +81,7 @@ public class MultinodeXAIntegrationTest {
         queryDurations = new ConcurrentLinkedQueue<>();
         totalQueries = new AtomicInteger(0);
         totalFailedQueries = new AtomicInteger(0);
+        testHelper = new MultinodeTestHelper(totalFailedQueries, nonConnectivityFailedQueries);
     }
 
     @SneakyThrows
@@ -1315,6 +1317,6 @@ public class MultinodeXAIntegrationTest {
     }
 
     private static void incrementFailures(Exception e) {
-        MultinodeTestHelper.incrementFailures(e, totalFailedQueries, nonConnectivityFailedQueries);
+        testHelper.incrementFailures(e);
     }
 }

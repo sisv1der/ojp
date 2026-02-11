@@ -7,19 +7,31 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Helper class for multinode integration tests.
  * Contains common logic for exception tracking and categorization.
+ * Each test should instantiate its own helper to avoid counter conflicts.
  */
 public class MultinodeTestHelper {
+    
+    private final AtomicInteger totalFailedQueries;
+    private final AtomicInteger nonConnectivityFailedQueries;
+    
+    /**
+     * Creates a new helper instance with the provided counters.
+     * 
+     * @param totalFailedQueries Counter for all failures
+     * @param nonConnectivityFailedQueries Counter for non-connectivity failures only
+     */
+    public MultinodeTestHelper(AtomicInteger totalFailedQueries, 
+                               AtomicInteger nonConnectivityFailedQueries) {
+        this.totalFailedQueries = totalFailedQueries;
+        this.nonConnectivityFailedQueries = nonConnectivityFailedQueries;
+    }
     
     /**
      * Categorizes and increments failure counters based on exception type.
      * 
      * @param e The exception that caused the failure
-     * @param totalFailedQueries Counter for all failures
-     * @param nonConnectivityFailedQueries Counter for non-connectivity failures only
      */
-    public static void incrementFailures(Exception e, 
-                                        AtomicInteger totalFailedQueries,
-                                        AtomicInteger nonConnectivityFailedQueries) {
+    public void incrementFailures(Exception e) {
         totalFailedQueries.incrementAndGet();
         
         // Check if this is a connectivity-related failure
@@ -46,7 +58,7 @@ public class MultinodeTestHelper {
      * @param e The exception to check
      * @return true if the exception is connectivity-related, false otherwise
      */
-    public static boolean isConnectivityRelated(Exception e) {
+    public boolean isConnectivityRelated(Exception e) {
         if (e instanceof StatusRuntimeException && e.getMessage().contains("UNAVAILABLE")) {
             return true;
         }
