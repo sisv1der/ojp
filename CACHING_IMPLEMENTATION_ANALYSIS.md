@@ -549,6 +549,306 @@ public class CacheRuleEngine {
 }
 ```
 
+#### Hot-Reload and Dynamic Configuration Updates
+
+**CRITICAL OPERATIONAL CONCERN**: Server-side configuration requiring restarts affects all applications.
+
+**Problem**: 
+- Single OJP server serves multiple applications
+- One app needs cache config update → requires OJP restart
+- Restart affects ALL applications using that OJP server
+- Unacceptable in production environments
+
+**Solution 1: File-Watch Based Hot-Reload**
+
+```java
+// In ServerConfiguration.java
+public class ServerConfiguration {
+    
+    private volatile CacheRuleEngine cacheRuleEngine;
+    private final ScheduledExecutorService configWatcher;
+    private final Path configFilePath;
+    private long lastModified;
+    
+    public void loadConfiguration() {
+        // ... existing configuration loading ...
+        
+        // Load cache rules
+        String cacheRulesFile = System.getProperty("ojp.cache.rules.file", 
+                                                   "ojp-cache-rules.yml");
+        configFilePath = Paths.get(cacheRulesFile);
+        
+        if (Files.exists(configFilePath)) {
+            reloadCacheConfiguration();
+            startConfigWatcher();
+        }
+    }
+    
+    private void startConfigWatcher() {
+        configWatcher = Executors.newScheduledThreadPool(1);
+        
+        // Check for config file changes every 10 seconds
+        configWatcher.scheduleAtFixedRate(() -> {
+            try {
+                long currentModified = Files.getLastModifiedTime(configFilePath).toMillis();
+                
+                if (currentModified > lastModified) {
+                    log.info("Cache configuration file changed, reloading...");
+                    reloadCacheConfiguration();
+                    log.info("Cache configuration reloaded successfully");
+                }
+            } catch (Exception e) {
+                log.error("Failed to check/reload configuration", e);
+            }
+        }, 10, 10, TimeUnit.SECONDS);
+    }
+    
+    private void reloadCacheConfiguration() throws IOException {
+        // Load new configuration
+        CacheRuleEngine newEngine = CacheRuleEngine.fromYaml(configFilePath.toFile());
+        
+        // Atomic swap (volatile ensures visibility)
+        this.cacheRuleEngine = newEngine;
+        this.lastModified = Files.getLastModifiedTime(configFilePath).toMillis();
+        
+        log.info("Loaded {} cache rules from {}", 
+                newEngine.getRuleCount(), configFilePath);
+    }
+    
+    public CacheRuleEngine getCacheRuleEngine() {
+        return cacheRuleEngine;  // Volatile read, always gets latest
+    }
+}
+```
+
+**Solution 2: HTTP/gRPC Admin API for Dynamic Updates**
+
+```java
+// Add admin endpoint to StatementServiceImpl
+public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
+    
+    private final ServerConfiguration config;
+    
+    @Override
+    public void updateCacheConfiguration(CacheConfigUpdateRequest request,
+                                        StreamObserver<CacheConfigUpdateResponse> responseObserver) {
+        try {
+            // Authenticate admin request (API key, mTLS, etc.)
+            if (!authenticateAdmin(request.getAdminToken())) {
+                responseObserver.onError(new StatusException(Status.PERMISSION_DENIED));
+                return;
+            }
+            
+            // Parse new configuration
+            CacheRuleEngine newEngine = CacheRuleEngine.fromYaml(request.getConfigYaml());
+            
+            // Validate configuration before applying
+            if (!newEngine.validate()) {
+                responseObserver.onError(new StatusException(
+                    Status.INVALID_ARGUMENT.withDescription("Invalid configuration")));
+                return;
+            }
+            
+            // Apply new configuration atomically
+            config.updateCacheRuleEngine(newEngine);
+            
+            // Optional: Persist to disk
+            if (request.getPersist()) {
+                Files.write(config.getConfigFilePath(), 
+                           request.getConfigYaml().getBytes(StandardCharsets.UTF_8));
+            }
+            
+            responseObserver.onNext(CacheConfigUpdateResponse.newBuilder()
+                .setSuccess(true)
+                .setMessage("Configuration updated successfully")
+                .build());
+            responseObserver.onCompleted();
+            
+            log.info("Cache configuration updated via admin API");
+            
+        } catch (Exception e) {
+            log.error("Failed to update cache configuration", e);
+            responseObserver.onError(e);
+        }
+    }
+}
+
+// Client utility for updating configuration
+public class OjpAdminClient {
+    
+    public static void updateCacheConfig(String serverEndpoint, 
+                                        String adminToken,
+                                        String configYaml,
+                                        boolean persist) throws Exception {
+        ManagedChannel channel = ManagedChannelBuilder
+            .forTarget(serverEndpoint)
+            .build();
+        
+        try {
+            StatementServiceBlockingStub stub = StatementServiceGrpc.newBlockingStub(channel);
+            
+            CacheConfigUpdateRequest request = CacheConfigUpdateRequest.newBuilder()
+                .setAdminToken(adminToken)
+                .setConfigYaml(configYaml)
+                .setPersist(persist)
+                .build();
+            
+            CacheConfigUpdateResponse response = stub.updateCacheConfiguration(request);
+            
+            if (response.getSuccess()) {
+                System.out.println("Configuration updated: " + response.getMessage());
+            } else {
+                throw new Exception("Update failed: " + response.getMessage());
+            }
+            
+        } finally {
+            channel.shutdown();
+        }
+    }
+}
+
+// Usage from command line or CI/CD
+// ojp-admin update-cache-config --server localhost:1059 
+//                               --token $ADMIN_TOKEN 
+//                               --config cache-rules.yml
+//                               --persist
+```
+
+**Solution 3: Version-Based Configuration with Graceful Transition**
+
+```java
+public class CacheRuleEngine {
+    private final int version;
+    private final Map<String, List<CacheRule>> datasourceRules;
+    private final List<CacheRule> globalRules;
+    private final Instant loadedAt;
+    
+    public CacheRuleEngine(int version, /* ... */) {
+        this.version = version;
+        this.loadedAt = Instant.now();
+        // ...
+    }
+}
+
+public class ServerConfiguration {
+    private volatile CacheRuleEngine currentEngine;
+    private volatile CacheRuleEngine previousEngine;  // Keep one version back
+    
+    public void updateCacheRuleEngine(CacheRuleEngine newEngine) {
+        if (newEngine.getVersion() <= currentEngine.getVersion()) {
+            log.warn("Ignoring older configuration version: {} <= {}", 
+                    newEngine.getVersion(), currentEngine.getVersion());
+            return;
+        }
+        
+        // Keep previous version for 5 minutes (allows in-flight requests to complete)
+        this.previousEngine = this.currentEngine;
+        this.currentEngine = newEngine;
+        
+        // Schedule cleanup of old version
+        scheduler.schedule(() -> {
+            log.info("Releasing old configuration version {}", 
+                    previousEngine.getVersion());
+            previousEngine = null;
+        }, 5, TimeUnit.MINUTES);
+        
+        log.info("Updated cache configuration from version {} to {}", 
+                previousEngine.getVersion(), currentEngine.getVersion());
+    }
+}
+```
+
+**Solution 4: Configuration as Code with Git Integration**
+
+```yaml
+# ojp-cache-rules.yml with metadata
+version: 42
+updatedAt: 2026-02-12T07:00:00Z
+updatedBy: devops-team
+git:
+  commit: abc123def456
+  branch: main
+  repo: https://github.com/company/ojp-cache-config
+
+cache:
+  datasources:
+    postgres_prod:
+      rules:
+        - name: product_catalog
+          pattern: "SELECT .* FROM products WHERE .*"
+          ttl: 600s
+          # Audit: who, what, why
+          comment: "Increased from 300s per JIRA-1234"
+          lastUpdated: 2026-02-12T06:30:00Z
+```
+
+```java
+// Git-backed configuration loader
+public class GitConfigurationLoader {
+    
+    private final String gitRepoUrl;
+    private final String configFilePath;
+    private final Path localClonePath;
+    
+    public void startAutoSync() {
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                // Pull latest from git
+                Git git = Git.open(localClonePath.toFile());
+                git.pull().call();
+                
+                // Check if config file changed
+                if (configFileChanged()) {
+                    reloadConfiguration();
+                }
+                
+            } catch (Exception e) {
+                log.error("Failed to sync configuration from git", e);
+            }
+        }, 60, 60, TimeUnit.SECONDS);  // Check every minute
+    }
+}
+```
+
+**Configuration Update Workflow (Zero Downtime)**
+
+```
+1. Developer updates cache-rules.yml in git repo
+2. Commits and pushes to main branch
+3. CI/CD pipeline:
+   a. Validates configuration (syntax, logic)
+   b. Runs tests
+   c. Calls OJP admin API to update config
+   d. Verifies update successful
+4. OJP servers:
+   a. Receive new configuration via API or git-pull
+   b. Validate configuration
+   c. Atomically swap to new config (volatile)
+   d. Keep old config for 5 minutes (in-flight requests)
+5. Zero downtime for all applications
+```
+
+**Benefits of Hot-Reload Solutions:**
+
+- ✅ **Zero downtime**: No restart required
+- ✅ **Isolated impact**: Only affects cache behavior, not connections
+- ✅ **Gradual rollout**: Update one server at a time
+- ✅ **Quick rollback**: Keep previous version, easy to revert
+- ✅ **Audit trail**: Git history shows who changed what and why
+- ✅ **Validation**: Test config before applying
+- ✅ **Multi-app safe**: One app's config change doesn't restart OJP
+
+**Recommended Approach:**
+
+**For Most Deployments:**
+1. **File-watch hot-reload** (simple, automatic)
+2. **Admin API** for manual updates (control, validation)
+
+**For Large-Scale Production:**
+1. **Git-backed configuration** (version control, audit)
+2. **Admin API** for deployment automation
+3. **Gradual rollout** across cluster
+
 #### Addressing Multi-Datasource Reality
 
 **CRITICAL CONSIDERATION**: A single OJP server can manage **dozens of different datasources**:
@@ -737,18 +1037,22 @@ OJP Server managing:
 #### Advantages
 - ✅ Centralized cache policy management
 - ✅ No application or SQL changes needed
-- ✅ Can be updated without redeploying applications
+- ✅ **Hot-reload support**: Update configuration without restart
+- ✅ **Zero downtime**: File-watch or admin API updates
+- ✅ **Multi-app safe**: Config changes don't affect other applications
 - ✅ Supports complex matching rules
 - ✅ Declarative and version-controlled
 - ✅ **Datasource-aware**: Different rules for different databases
 - ✅ **Scales naturally**: Add new datasources without code changes
 - ✅ **Isolation**: Each datasource has independent cache namespace
+- ✅ **Gradual rollout**: Update servers one at a time
+- ✅ **Quick rollback**: Keep previous config version for safety
 
 #### Disadvantages
-- ⚠️ Requires server restart or hot-reload mechanism
-- ⚠️ Less visible to developers
+- ⚠️ Less visible to developers (unless using git-backed config)
 - ⚠️ Can be out of sync with application expectations
 - ⚠️ Configuration grows with number of datasources
+- ⚠️ Requires monitoring to ensure hot-reload works correctly
 
 #### Best For
 - Production environments with DBAs/DevOps teams
@@ -756,6 +1060,7 @@ OJP Server managing:
 - Organizations with strict change control processes
 - **Environments with multiple datasources per OJP server**
 - **Heterogeneous database landscapes**
+- **Multi-application deployments** (hot-reload prevents restart impact)
 
 ---
 
