@@ -1,18 +1,59 @@
-# OJP Caching Implementation - Quick Reference (REVISED)
+# OJP Caching Implementation - Quick Reference
 
 **Full Analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](../../CACHING_IMPLEMENTATION_ANALYSIS.md)
 
 ---
 
-## Quick Answers to Key Questions
+## ⭐ FINAL DESIGN DECISION (GO-TO APPROACH)
+
+### Query Marking: Client-Side `ojp.properties` Configuration ✅
+
+**Configuration in the same file as connection pools:**
+
+```properties
+# In ojp.properties
+postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = ?
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=users
+```
+
+**Why:** Follows existing OJP patterns, simple, each datasource independent, no OJP restart needed.
+
+### Cache Distribution: JDBC Driver as Active Relay ✅
+
+**Driver distributes cache when returning results** (data already in memory):
+- Uses virtual threads (Java 21+) to stream to other servers
+- Smart policy: Only distribute < 200KB, TTL > 60s, > 1 row
+- Real-time, zero database overhead
+
+**Why:** Data already in driver memory, saves N-1 database queries, real-time propagation.
+
+### Fallbacks for Special Cases
+
+- **Legacy Java (<21)**: JDBC Notification Table (polling)
+- **PostgreSQL-only**: LISTEN/NOTIFY
+- **Very large clusters (20+)**: Redis + JDBC
+
+---
+
+## Detailed Answers (Other Approaches Considered)
+
+## Detailed Answers (Other Approaches Considered)
 
 ### Q1: How can queries for caching be marked?
 
+**⭐ RECOMMENDED: Client-Side `ojp.properties` Configuration** (see above)
+
+**Other approaches analyzed (not recommended):**
+
 **IMPORTANT**: Most real-world applications use ORMs (Hibernate, Spring Data, MyBatis), not raw JDBC. This impacts the practicality of different approaches.
 
-**Four approaches ranked by real-world practicality:**
-
-1. **Server-Side Configuration** ⭐ MOST PRACTICAL
+1. **Server-Side Configuration** ❌ Too Complex
    ```yaml
    # ojp-cache-rules.yml
    cache:
@@ -20,73 +61,35 @@
        - pattern: "SELECT .* FROM products WHERE .*"
          ttl: 600s
    ```
-   - ✅ Works with ANY framework (Hibernate, Spring Data, MyBatis, jOOQ)
-   - ✅ No application code changes
-   - ✅ Centralized management
-   - ✅ Pattern matching works for ORM-generated queries
+   - ❌ Requires hot-reload, admin API
+   - ❌ Doesn't follow existing OJP patterns
+   - ❌ Restart affects all apps
 
-2. **Client-Side Configuration**
-   ```yaml
-   # ojp-cache-client.yaml
-   queries:
-     - sql: "SELECT * FROM users WHERE id = ?"
-       ttl: 300s
-   ```
-   - ✅ Per-application policies
-   - ✅ Works with ORMs
-   - ✅ Version-controlled with application code
-
-3. **JDBC Connection Properties**
-   ```java
-   jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb
-     ?cacheEnabled=true&cacheDefaultTtl=300
-   ```
-   - ✅ Environment-specific configuration
-   - ✅ Works with any ORM
-
-4. **SQL Comment Hints**
+2. **SQL Comment Hints** ❌ Doesn't Work with ORMs
    ```sql
    /* @cache ttl=300s */
    SELECT * FROM products WHERE category = 'electronics';
    ```
-   - ⚠️ IMPRACTICAL with ORMs (Hibernate, Spring Data)
-   - ✅ Good for raw JDBC applications only
+   - ❌ IMPRACTICAL with ORMs (Hibernate, Spring Data)
+   - ✅ Only for raw JDBC applications
+
+3. **JDBC Connection Properties** ⚠️ Too Coarse-Grained
+   ```java
+   jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb
+     ?cacheEnabled=true&cacheDefaultTtl=300
+   ```
+   - ⚠️ All-or-nothing caching
+   - ⚠️ No per-query control
 
 ### Q2: Can JDBC drivers replicate cache across OJP servers?
 
-**YES - Multiple options, REVISED RECOMMENDATION:**
+**⭐ RECOMMENDED: JDBC Driver as Active Relay** (see above)
 
-#### Option 1: JDBC Driver as Active Relay ⭐ RECOMMENDED FOR MOST
+**YES - Other options analyzed (not recommended for most cases):**
 
-**Key Insight**: Data is already in driver memory when returned to application!
+#### Option 1: JDBC Notification Table ⚠️ Fallback Only
 
-```
-Database → OJP Server → JDBC Driver (data here!) → Stream to other servers
-```
-
-**How it works:**
-1. Query executes, result flows through driver to application
-2. Driver spawns virtual thread to stream data to other OJP servers
-3. Other servers cache the result locally
-4. Next query on any server hits cache (no database query)
-
-**Characteristics:**
-- ✅ Data already in memory (no serialization cost)
-- ✅ Real-time propagation (immediate)
-- ✅ Zero database overhead (no polling)
-- ✅ Saves N-1 database queries (the whole point!)
-- ✅ Efficient with virtual threads (Java 21+)
-- ⚠️ Use smart distribution policy (< 200KB, TTL > 60s)
-
-**Smart Distribution Policy:**
-```java
-// Only distribute beneficial results
-- Skip very large results (> 200KB)
-- Skip very short TTL (< 60s)
-- Skip single-row results
-```
-
-#### Option 2: JDBC Notification Table (Fallback)
+Polling-based approach using database table:
 
 ```sql
 CREATE TABLE ojp_cache_notifications (
@@ -98,51 +101,51 @@ CREATE TABLE ojp_cache_notifications (
 ```
 
 **Characteristics:**
-- ✅ Simple, reliable
-- ✅ Works with any database
+- ✅ Simple, works with any database
 - ⚠️ 1-2 second polling latency
-- ⚠️ Additional database overhead (polling queries)
+- ⚠️ Additional database overhead
+- **Use when:** Legacy Java (<21) or very large result sets
 
-**When to use**: Large result sets, legacy Java environments
-- ✅ Minimal overhead
-- ⚠️ PostgreSQL-specific
+#### Option 2: PostgreSQL LISTEN/NOTIFY ⚠️ PostgreSQL-Only
 
-#### Option 3: Hybrid (Redis + JDBC)
-
-**For high-scale deployments:**
-```
-Redis Pub/Sub (fast path) + JDBC notifications (reliable fallback)
+```sql
+LISTEN cache_invalidation;
+NOTIFY cache_invalidation, '{"tables": ["products"]}';
 ```
 
 **Characteristics:**
-- ✅ Best performance and reliability
-- ⚠️ Requires Redis infrastructure
+- ✅ Real-time, PostgreSQL-native
+- ❌ PostgreSQL-only
+- **Use when:** PostgreSQL-only deployment
+
+#### Option 3: Redis + JDBC ⚠️ High-Scale Only
+
+```java
+redisTemplate.convertAndSend("cache:invalidation", notification);
+```
+
+**Characteristics:**
+- ✅ Fast, scalable
+- ❌ Additional infrastructure (Redis cluster)
+- **Use when:** Very large clusters (20+ servers)
 
 ---
 
-## Recommended Implementation Strategy
+## Implementation Strategy (Following Final Design Decision)
 
-### Phase 1: Local Caching (Single Server)
-```java
-// 1. Parse SQL for cache hints
-CacheDirective directive = CacheHintParser.parseCacheHint(sql);
-
-// 2. Check cache
-if (directive != null) {
-    CachedResult cached = cache.get(sql, params);
-    if (cached != null && !cached.isExpired()) {
-        return cached;  // Cache HIT
-    }
-}
-
-// 3. Execute query
-OpResult result = executeQueryOnDatabase(request);
-
-// 4. Store in cache
-if (directive != null) {
-    cache.put(sql, params, result, directive.getTtl());
-}
+### Phase 1: Local Caching with Client-Side Config
+```properties
+# In ojp.properties
+postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
 ```
+
+**Implementation:**
+1. JDBC driver loads cache config from `ojp.properties`
+2. Sends config to OJP server during connection
+3. Server stores per-session cache rules
+4. Matches queries against session's rules
 
 ### Phase 2: Write-Through Invalidation
 ```java
@@ -156,13 +159,17 @@ Set<String> tables = extractTablesFromSQL(sql);
 cache.invalidateByTables(tables);
 ```
 
-### Phase 3: Distributed Coordination
+### Phase 3: Distributed Coordination via Driver Relay
 ```java
-// After local invalidation:
-notificationService.notifyOtherServers(tables);
-
-// Other servers receive notification:
-cache.invalidateByTables(tables);
+// After query execution, if cacheable:
+if (shouldCache && shouldDistribute(result)) {
+    // Data already in driver memory
+    virtualThread.submit(() -> {
+        for (OjpServer otherServer : otherServers) {
+            otherServer.cacheResult(key, result);
+        }
+    });
+}
 ```
 
 ---
@@ -181,7 +188,7 @@ graph TD
     App2 --> Driver
     App3 --> Driver
     
-    Driver["OJP JDBC Driver<br/>(No changes needed for<br/>cache implementation)"]
+    Driver["OJP JDBC Driver<br/>(Distributes cache<br/>via virtual threads)"]
     
     Driver -->|gRPC| ServerA
     Driver -->|gRPC| ServerB
@@ -231,28 +238,27 @@ public class QueryCacheKey {
 
 ---
 
-## Configuration Example
+## Configuration Example (Final Design)
 
-```yaml
-# ojp-server.yml
-cache:
-  enabled: true
-  defaultTtl: 300s
-  maxSize: 10000
-  evictionPolicy: LRU
-  
-  # Distributed cache coordination
-  replication:
-    enabled: true
-    mode: jdbc  # or 'postgres-notify' or 'redis'
-    serverId: ojp-server-1
-    
-    jdbc:
-      url: jdbc:postgresql://cache-db:5432/ojp_cache
-      username: ojp_cache
-      password: ${OJP_CACHE_PASSWORD}
-      pollIntervalSeconds: 1
-      cleanupIntervalMinutes: 60
+```properties
+# In ojp.properties - Client-side configuration
+postgres_prod.ojp.cache.enabled=true
+
+# Cache products table queries for 10 minutes
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products,product_categories
+
+# Cache user lookups for 5 minutes
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = ?
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=users
+
+# MySQL analytics datasource - longer TTL
+mysql_analytics.ojp.cache.enabled=true
+mysql_analytics.ojp.cache.queries.1.pattern=SELECT .* FROM report_.*
+mysql_analytics.ojp.cache.queries.1.ttl=1800s
+mysql_analytics.ojp.cache.queries.1.invalidateOn=report_tables
 ```
 
 ---
@@ -326,21 +332,27 @@ if (cached != null && !userHasPermission(session, cached.getTables())) {
 
 ---
 
-## Migration Path
+## Migration Path (Following Final Design)
 
 ### For Existing OJP Users
 
 **Zero Breaking Changes:**
 1. Caching is **opt-in** - disabled by default
-2. No JDBC driver changes required
+2. No JDBC driver changes for applications
 3. No application code changes needed
-4. Add SQL hints only to queries you want cached
+4. Configure in `ojp.properties` only for queries you want cached
 
 **Migration Steps:**
 1. Deploy new OJP server version with cache support
 2. Monitor baseline performance
-3. Enable caching for specific queries using SQL hints
-4. Monitor cache hit rates and performance improvement
+3. Add cache configuration to client's `ojp.properties`:
+   ```properties
+   postgres_prod.ojp.cache.enabled=true
+   postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
+   postgres_prod.ojp.cache.queries.1.ttl=600s
+   ```
+4. Restart affected application (not OJP server)
+5. Monitor cache hit rates and performance improvement
 5. Gradually expand cache coverage
 6. Enable distributed cache coordination if using multinode
 
@@ -350,21 +362,22 @@ if (cached != null && !userHasPermission(session, cached.getTables())) {
 
 ### Q: Does caching work with parameterized queries?
 **A:** Yes! Parameters are part of the cache key.
-```sql
-/* @cache ttl=300s */
-SELECT * FROM users WHERE id = ?  -- Cached per ID value
+```properties
+# In ojp.properties
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM users WHERE id = ?
+postgres_prod.ojp.cache.queries.1.ttl=300s
+# Cached per ID value
 ```
 
 ### Q: What happens if data changes outside of OJP?
-**A:** TTL expiration provides safety net. For real-time needs, use shorter TTLs or external cache invalidation triggers.
+**A:** TTL expiration provides safety net. For real-time needs, use shorter TTLs.
 
 ### Q: Can I cache JOINs?
 **A:** Yes! The cache tracks all tables involved and invalidates when any are modified.
-```sql
-/* @cache ttl=600s invalidate_on=products,categories */
-SELECT p.*, c.name 
-FROM products p 
-JOIN categories c ON p.category_id = c.id
+```properties
+postgres_prod.ojp.cache.queries.1.pattern=SELECT p.\*, c.name FROM products p JOIN categories c .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products,categories
 ```
 
 ### Q: How do I monitor cache performance?
@@ -378,6 +391,16 @@ JOIN categories c ON p.category_id = c.id
 - Cache HIT: ~0.5ms overhead (in-memory lookup)
 - Cache MISS: ~5-10ms overhead (store result)
 - Memory: ~1-10KB per cached query result (depends on result size)
+
+### Q: Where do I configure cache rules?
+**A:** In the same `ojp.properties` file where you configure connection pools:
+```properties
+postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.queries.1.pattern=...
+```
+
+### Q: Does changing cache config require OJP server restart?
+**A:** No! Only restart the affected application. OJP server is not affected.
 
 ---
 

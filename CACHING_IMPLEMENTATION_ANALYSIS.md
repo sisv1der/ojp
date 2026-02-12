@@ -18,6 +18,79 @@ This document provides a comprehensive analysis of how query result caching coul
 
 ---
 
+## ⭐ FINAL DESIGN DECISION
+
+After thorough analysis and iterative refinement based on real-world constraints, the **recommended approach** is:
+
+### 1. Query Marking: Client-Side Configuration in `ojp.properties` ✅
+
+**Configuration is defined client-side** in the same `ojp.properties` file used for connection pools and datasource configuration:
+
+```properties
+# In ojp.properties (with connection pool config)
+postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = ?
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=users
+```
+
+**Why this approach:**
+- ✅ **Follows existing OJP patterns** - All datasource config is already client-side
+- ✅ **Simple** - No server-side config files or hot-reload mechanisms
+- ✅ **Decoupled** - Each datasource controls its own cache independently
+- ✅ **No OJP restart** - Only restart affected application, not OJP server
+- ✅ **Works with ORMs** - Pattern matching works for Hibernate/Spring Data generated SQL
+
+### 2. Cache Distribution: JDBC Driver as Active Relay ✅
+
+**Cache data is distributed by the JDBC driver** when returning query results:
+- Data is already in driver memory (being returned to application)
+- Driver streams cached results to other OJP servers via virtual threads (Java 21+)
+- Smart distribution policy: Only distribute results < 200KB, TTL > 60s, > 1 row
+
+**Why this approach:**
+- ✅ **Data already in memory** - No additional database queries needed
+- ✅ **Saves N-1 database queries** - The whole point of distributed caching
+- ✅ **Real-time propagation** - Immediate, no polling delays
+- ✅ **Zero database overhead** - No notification tables or polling
+
+### 3. Fallback Options for Special Cases
+
+- **Legacy Java (<21)**: Use JDBC Notification Table (polling-based)
+- **PostgreSQL-only**: Use LISTEN/NOTIFY for real-time propagation
+- **Very large clusters (20+)**: Consider Redis + JDBC hybrid
+
+---
+
+### Implementation Flow
+
+1. **Configuration**: Define cache rules in client's `ojp.properties` file
+2. **Connection**: JDBC driver sends cache config to OJP server during connection
+3. **Per-Session Storage**: Server stores cache rules for each session
+4. **Query Execution**: Server matches queries against session's cache rules
+5. **Cache Hit**: Return cached result immediately
+6. **Cache Miss**: Execute query, cache result, distribute to other servers via driver
+7. **Invalidation**: DML operations invalidate affected cache entries
+
+---
+
+### Alternative Approaches Considered
+
+The document explores other approaches for completeness, but they are **not recommended** for the following reasons:
+
+- **SQL Comment Hints** (`/* @cache */`): Doesn't work with ORMs (Hibernate, Spring Data)
+- **Server-Side Configuration**: Too complex (hot-reload, admin API, affects multiple apps)
+- **JDBC Notification Table**: Adds database overhead, polling latency (good fallback though)
+- **Redis**: Additional infrastructure complexity (only for very large clusters)
+
+**See Section 13 for detailed comparison and rationale.**
+
+---
+
 ## 1. Background: OJP Architecture
 
 ### 1.1 Current Query Flow
