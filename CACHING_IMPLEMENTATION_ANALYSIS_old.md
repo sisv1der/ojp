@@ -3253,14 +3253,7 @@ jdbc:ojp[localhost:1059(postgres_prod)]_postgresql://db:5432/mydb
 
 ---
 
-
-**Data Already in Memory**: The data is already in the JDBC driver being returned to the application. Just add a side-effect to stream it to other servers.
-
-**Smart Distribution Policy**:
-```java
-public boolean shouldDistribute(CachedResult result) {
-    // Don't distribute very large results
-    if (result.getSizeBytes() > 200_000) return false;  // 200KB limit
+#### Cache Propagation: JDBC Driver as Active Relay (⭐ RECOMMENDED)
     
     // Don't distribute if TTL is very short (not worth it)
     if (result.getTtl() < Duration.ofSeconds(60)) return false;
@@ -3272,145 +3265,191 @@ public boolean shouldDistribute(CachedResult result) {
 }
 ```
 
-**Fallback Options**:
-- **JDBC Notification Table**: For large results or legacy Java environments
-- **PostgreSQL LISTEN/NOTIFY**: For PostgreSQL-only deployments
-- **Redis + JDBC**: For very large clusters (20+ servers)
+**2. JDBC Notification Table**
+- **Pros**: Simple, reliable, works with any DB
+- **Cons**: 
+  - ⚠️ **Database overhead**: Additional polling queries every 1-2 seconds
+  - ⚠️ **Latency**: 1-2 second delay before invalidation propagates
+  - ⚠️ **Requires database table** and periodic cleanup
+- **Verdict**: ✅ **Solid fallback** - when driver relay not suitable (large results, many servers)
+- **When to use**: Default for large result sets, legacy Java environments
 
----
+**3. PostgreSQL LISTEN/NOTIFY**
+- **Pros**: Real-time, PostgreSQL-native
+- **Cons**: PostgreSQL-only, requires database-level triggers
+- **Verdict**: ✅ **Excellent for PostgreSQL-only** deployments
 
-### 13.2 Final Recommendation (SIMPLIFIED)
+**4. Hybrid (Redis + JDBC Backup)**
+- **Pros**: Fast + reliable
+- **Cons**: Additional infrastructure (Redis cluster)
+- **Verdict**: ✅ **For high-scale** - when cluster is very large (20+ servers)
 
-**⭐ RECOMMENDED FOR MOST DEPLOYMENTS (90% of use cases):**
+**REVISED RANKING:**
+1. **JDBC Driver Relay** (data already in memory, just distribute it)
+2. **PostgreSQL LISTEN/NOTIFY** (if PostgreSQL-only)
+3. **JDBC Notification Table** (for large results or legacy environments)
+4. **Redis + JDBC** (for very large clusters)
 
-**1. Query Marking: Client-Side Configuration in `ojp.properties`**
+### 13.2 Final Recommendation (REVISED)
 
-```properties
-# In ojp.properties (same file as connection pool config)
-postgres_prod.ojp.cache.enabled=true
-postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
-postgres_prod.ojp.cache.queries.1.ttl=600s
-postgres_prod.ojp.cache.queries.1.invalidateOn=products
+**For Most Deployments (90% of use cases):**
 
-postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = ?
-postgres_prod.ojp.cache.queries.2.ttl=300s
-postgres_prod.ojp.cache.queries.2.invalidateOn=users
-```
+1. **Query Marking:** Server-Side Configuration (primary) + Client-Side Configuration (per-app overrides)
+   ```yaml
+   # Server-side: ojp-cache-rules.yml
+   cache:
+     rules:
+       - pattern: "SELECT .* FROM products WHERE .*"
+         ttl: 600s
+   
+   # Client-side: ojp-cache-client.yaml (optional, per-app)
+   queries:
+     - sql: "SELECT * FROM users WHERE id = ?"
+       ttl: 300s
+   ```
+   - **Works with ALL ORMs and frameworks** (Hibernate, Spring Data, etc.)
+   - **No application code changes** required
+   - **Centralized + per-application flexibility**
 
-**Why this approach?**
-- ✅ **Follows existing OJP patterns** (same as connection pool config)
-- ✅ **Simple**: No server-side config, no hot-reload complexity
-- ✅ **Decoupled**: Each datasource controls its own cache
-- ✅ **Independent updates**: Change one app without affecting others
-- ✅ **Works with ORMs**: Pattern matching for generated SQL
-- ✅ **No OJP restart**: Only restart affected application
-- ✅ **Familiar**: Developers already know this location
+2. **Local Caching:** TTL-based with write-through invalidation
 
-**2. Local Caching:** TTL-based with write-through invalidation
+3. **Distributed Caching:** JDBC Driver as Active Relay
+   - **Key advantage**: Data is already in driver memory
+   - **Use with smart distribution policy**: Only distribute beneficial results (< 200KB, TTL > 60s, > 1 row)
+   - **Saves database load**: N-1 fewer queries to database
+   - **Simple implementation**: Data already serialized in gRPC format
 
-**3. Distributed Caching:** JDBC Driver as Active Relay
-- Data already in driver memory
-- Smart distribution policy (< 200KB, TTL > 60s, > 1 row)
-- Saves N-1 database queries
+**For Legacy Java Environments (< Java 21):**
+- Use **JDBC Notification Table** instead of driver relay
+- Virtual threads make driver relay significantly more efficient
 
-**Alternative (Even Simpler)**: JDBC URL Parameters
-```
-jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb?ojpCacheEnabled=true&ojpCacheDefaultTtl=600
-```
+**For PostgreSQL-Only Deployments:**
+- Use **LISTEN/NOTIFY** for real-time propagation
 
-**Fallback Options:**
-- **Legacy Java (<21)**: Use JDBC Notification Table instead of driver relay
-- **PostgreSQL-Only**: Use LISTEN/NOTIFY for real-time propagation
-- **Very Large Clusters (20+)**: Consider Redis + JDBC hybrid
+**For Very Large Clusters (20+ servers):**
+- Consider **Redis + JDBC** hybrid to reduce network amplification
 
----
+### 13.3 Why This Recommendation Changed
 
-### 13.3 Why Client-Side Configuration is the Right Approach
+**Initial Analysis Was Too Conservative on Driver Relay:**
+- ❌ **Overlooked**: Data is already in driver memory (no "serialization" cost)
+- ❌ **Overlooked**: The whole point is to avoid N-1 database queries
+- ❌ **Overstated**: "Violates separation of concerns" - driver already manages server communication
+- ✅ **Correct**: Network amplification is real, but mitigated by smart distribution policy
 
-**Key Insight from @rrobetti**: "The configuration of cached queries shall be in the client within the ojp.properties under the datasource configuration. This way every datasource controls its own set of cached queries and can update them independently. This is aligned with other OJP configurations related to datasources and pooling which are already done in the client side."
+**Initial Analysis Underestimated ORM Challenge:**
+- ❌ **Overlooked**: Most developers use ORMs, not raw JDBC
+- ❌ **Overlooked**: SQL hints are impractical with Hibernate/Spring Data
+- ✅ **Correct**: Server-side configuration works regardless of framework
 
-**Comparison: Client-Side vs. Server-Side**
+**Revised Philosophy:**
+- **Start with server-side configuration** (works everywhere, no code changes)
+- **Use driver relay for distribution** (data already in memory, avoid database load)
+- **Apply smart distribution policy** (only beneficial results)
+- **Scale up to Redis only if needed** (very large clusters)
 
-| Aspect | Client-Side (✅ Recommended) | Server-Side (❌ Too Complex) |
-|--------|------------------------------|------------------------------|
-| **Simplicity** | ✅ Simple, no hot-reload needed | ❌ Requires hot-reload, admin API, git-backed config |
-| **Alignment** | ✅ Follows existing OJP patterns | ❌ New pattern, different from pool config |
-| **Updates** | ✅ Edit ojp.properties, restart app | ❌ Edit server config, hot-reload mechanism |
-| **Impact** | ✅ Only affected app restarted | ❌ Potential impact on all apps |
-| **Decoupling** | ✅ Each datasource independent | ❌ Centralized, potential conflicts |
-| **Familiarity** | ✅ Developers know where to look | ❌ New location, less discoverable |
-| **Version Control** | ✅ With application code | ⚠️ Separate repo or server files |
-| **Testing** | ✅ Test with app deployment | ⚠️ Separate deployment/testing |
-| **Complexity** | ✅ Minimal | ❌ File-watch, admin API, validation, rollback |
+### 13.4 Implementation Priority
+    - Very small cluster (< 5 servers)
+    - Extremely latency-sensitive (< 100ms required)
+    - Team has expertise in complex JDBC driver development
+  
+  - **Better alternatives**:
+    - Use JDBC Notification Table (simple, reliable)
+    - Use PostgreSQL LISTEN/NOTIFY (real-time, proven)
+    - Use Redis pub/sub (purpose-built for this)
 
-**This is the right approach because:**
-1. **Follows existing patterns**: Connection pools, XA config - all datasource settings are client-side
-2. **Simpler**: No complex server-side hot-reload mechanisms needed
-3. **Decoupled**: Each application/datasource is independent
-4. **Natural fit**: Cache rules are datasource-specific, belong with datasource config
-5. **No over-engineering**: Don't add complexity when simpler solution exists
+### 13.2 Final Recommendation
 
----
+**For Most Deployments** (90% of use cases):
 
-### 13.4 Evolution of Recommendations
+1. **Query Marking:** SQL comment hints (primary) + Server-side configuration (defaults)
+   ```sql
+   /* @cache ttl=300s */ SELECT * FROM products WHERE active = true
+   ```
 
-**Iteration 1**: SQL hints + JDBC notification table
-- ❌ SQL hints don't work with ORMs (Hibernate, Spring Data)
+2. **Local Caching:** TTL-based with write-through invalidation
+   - Simple and effective
+   - No complex consistency protocols
+   - Good for most workloads
 
-**Iteration 2**: Server-side config with hot-reload + driver relay
-- ❌ Too complex (hot-reload, admin API, git-backed config, version management)
-- ❌ Doesn't follow existing OJP patterns
-- ❌ Server configuration for what should be client configuration
+3. **Distributed Caching:** JDBC notification table for multinode
+   - Simple implementation
+   - Uses existing infrastructure
+   - 1-2 second eventual consistency is acceptable for most use cases
 
-**Iteration 3 (Final)**: Client-side `ojp.properties` + driver relay
-- ✅ **Simple**: Follows existing OJP configuration patterns
-- ✅ **Aligned**: Same location as all other datasource config
-- ✅ **Decoupled**: Each datasource independent
-- ✅ **Practical**: No unnecessary complexity
+**For PostgreSQL-Only Deployments:**
 
-**Learning**: Sometimes the simplest solution aligned with existing patterns is the best solution. Don't over-engineer when a straightforward approach exists.
+Same as above, but use **LISTEN/NOTIFY** instead of notification table for real-time propagation.
 
----
+**For High-Scale Deployments** (large clusters, high throughput):
 
-### 13.5 Implementation Priority
+1. **Query Marking:** Hybrid (SQL hints + server-side rules)
+2. **Local Caching:** Same as above  
+3. **Distributed Caching:** Redis pub/sub with JDBC fallback
+   - Real-time invalidation
+   - Reliable fallback
+   - Purpose-built for pub/sub patterns
 
-**Phase 1: Local Caching (Immediate Value)**
-- Query result cache with TTL
-- Parse cache config from `ojp.properties`
-- Send to server during connection
-- Store per-session in server
+**NOT Recommended:**
 
-**Phase 2: Write-Through Invalidation (Consistency)**
-- Invalidate cache on DML operations
-- Table dependency tracking
-- Per-session cache isolation
+- ❌ **Client-side configuration**: Adds overhead without clear benefit over SQL hints
+- ❌ **JDBC Driver Relay**: Complexity and risks outweigh benefits; better alternatives exist
 
-**Phase 3: Distributed Coordination (Multinode)**
-- JDBC Driver as Active Relay
-- Smart distribution policy
-- Cache hit/miss metrics
+### 13.3 Implementation Priority
 
-**Phase 4: Advanced (Optional)**
-- Redis integration for very large clusters
+**Phase 1 (Immediate Value):**
+- ✅ SQL hint parsing
+- ✅ Local query result cache with TTL
+- ✅ Basic metrics and monitoring
+
+**Phase 2 (Enhanced):**
+- ✅ Write-through invalidation
+- ✅ Table dependency tracking
+- ✅ Configuration options
+
+**Phase 3 (Distributed):**
+- ✅ JDBC notification table
+- ✅ Multinode coordination
+- ✅ Comprehensive testing
+
+**Phase 4 (Advanced - Optional):**
+- Semantic query analysis with Calcite
+- Redis integration (if very large clusters 20+)
 - Query result compression
 - Cache warming
-- Advanced invalidation strategies
 
----
+### 13.5 Key Takeaways (REVISED)
 
-### 13.6 Key Takeaways
+1. **OJP's architecture is well-suited for caching**
+   - Existing extension points (Action pattern, SQL enhancement pipeline)
+   - Already has some caching infrastructure (SqlEnhancerEngine)
+   - Multinode architecture supports distributed coordination
+   - Data already flows through driver - perfect for cache distribution
 
-1. **Keep it Simple**: Client-side configuration in `ojp.properties` is simpler than server-side with hot-reload
+2. **Real-world applications use ORMs, not raw JDBC**
+   - Hibernate, Spring Data JPA, MyBatis abstract away SQL
+   - SQL comment hints are impractical with ORMs
+   - Server-side configuration works regardless of framework
+   - Client-side configuration provides per-application flexibility
 
-2. **Follow Existing Patterns**: OJP already does datasource config client-side - cache config should too
+3. **JDBC Driver Relay is more practical than initially assessed**
+   - Data is already in driver memory (no serialization cost)
+   - Saves N-1 database queries (the whole point of caching)
+   - Network cost is justified by database load reduction
+   - Smart distribution policy (size limits, TTL thresholds) makes it practical
+   - Driver already manages server communication (not violating SoC)
 
-3. **Data Already in Memory**: JDBC driver relay makes sense because data is already there
+4. **Recommended approach balances practicality and performance**
+   - Server-side configuration: Works with any ORM/framework
+   - Driver relay: Efficient distribution (data already in memory)
+   - Smart policy: Only distribute beneficial results
+   - Scales to Redis only when needed (very large clusters)
 
-4. **Decoupling is Good**: Each datasource controlling its own cache rules prevents conflicts
-
-5. **Avoid Over-Engineering**: Don't build hot-reload, admin APIs, git-backed config when not needed
-
-6. **Listen to Feedback**: @rrobetti's insight about aligning with existing patterns was the key
+5. **Implementation priorities based on value**
+   - Phase 1: Local caching (immediate value)
+   - Phase 2: Write-through invalidation (consistency)
+   - Phase 3: Driver relay distribution (efficient, real-time)
+   - Phase 4: Scale to Redis only if cluster very large (20+ servers)
 
 ---
 
@@ -3419,64 +3458,99 @@ jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb?ojpCacheEnabled=true&ojpCache
 ### OJP Documentation
 - [OJP Architecture](documents/ebook/part1-chapter2-architecture.md)
 - [Multinode Configuration](documents/multinode/README.md)
-- [Per-Endpoint Datasources](documents/multinode/per-endpoint-datasources.md)
 - [SQL Enhancer](INVESTIGATION_SQL_ENHANCER.md)
 
 ### Apache Calcite
 - [Calcite Documentation](https://calcite.apache.org/)
 - [SQL Parser](https://calcite.apache.org/docs/reference.html)
+- [Optimization Rules](https://calcite.apache.org/docs/adapter.html)
 
 ### Distributed Caching
 - [Cache Consistency Patterns](https://martinfowler.com/bliki/TwoHardThings.html)
+- [Redis Pub/Sub](https://redis.io/topics/pubsub)
 - [PostgreSQL LISTEN/NOTIFY](https://www.postgresql.org/docs/current/sql-notify.html)
 
 ### JDBC Specifications
-- [JDBC 4.3 Specification](https://download.oracle.com/otn-pub/jcp/jdbc-4_3-mrel3-spec/jdbc4.3-fr-spec.pdf)
+- [JDBC 4.3 Specification](https://jcp.org/en/jsr/detail?id=221)
+- [Connection Pooling](https://docs.oracle.com/javase/tutorial/jdbc/basics/connection-pooling.html)
 
 ---
 
-## Appendix: Complete Example Configuration
+## Appendix A: Example SQL Hint Syntax
 
-```properties
-# ojp.properties - Complete cache configuration example
+### Basic Cache Hint
+```sql
+/* @cache ttl=300s */
+SELECT * FROM products WHERE category = 'electronics';
+```
 
-# Default datasource cache configuration
-ojp.cache.enabled=true
-ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
-ojp.cache.queries.1.ttl=600s
-ojp.cache.queries.1.invalidateOn=products,product_categories
+### Cache with Explicit Key
+```sql
+/* @cache ttl=600s key=product_catalog */
+SELECT id, name, price FROM products WHERE active = true;
+```
 
-ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = ?
-ojp.cache.queries.2.ttl=300s
-ojp.cache.queries.2.invalidateOn=users
+### Cache with Table Dependencies
+```sql
+/* @cache ttl=900s invalidate_on=products,categories */
+SELECT p.name, c.name 
+FROM products p 
+JOIN categories c ON p.category_id = c.id;
+```
 
-# PostgreSQL production datasource
-postgres_prod.ojp.cache.enabled=true
-postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM orders WHERE .*
-postgres_prod.ojp.cache.queries.1.ttl=300s
-postgres_prod.ojp.cache.queries.1.invalidateOn=orders
+### Cache with Size Limit
+```sql
+/* @cache ttl=300s maxSize=1000 */
+SELECT * FROM users WHERE region = 'US';
+```
 
-postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM inventory WHERE .*
-postgres_prod.ojp.cache.queries.2.ttl=120s
-postgres_prod.ojp.cache.queries.2.invalidateOn=inventory
-
-# MySQL analytics datasource (longer TTL for analytics)
-mysql_analytics.ojp.cache.enabled=true
-mysql_analytics.ojp.cache.queries.1.pattern=SELECT .* FROM report_.*
-mysql_analytics.ojp.cache.queries.1.ttl=1800s
-mysql_analytics.ojp.cache.queries.1.invalidateOn=report_tables
-
-mysql_analytics.ojp.cache.queries.2.pattern=SELECT .* FROM metrics_.*
-mysql_analytics.ojp.cache.queries.2.ttl=3600s
-mysql_analytics.ojp.cache.queries.2.invalidateOn=metrics_tables
-
-# Oracle legacy datasource (very long TTL for rarely changing data)
-oracle_legacy.ojp.cache.enabled=true
-oracle_legacy.ojp.cache.queries.1.pattern=SELECT .* FROM LEGACY_REFERENCE_.*
-oracle_legacy.ojp.cache.queries.1.ttl=7200s
-oracle_legacy.ojp.cache.queries.1.invalidateOn=LEGACY_TABLES
+### Disable Caching for Specific Query
+```sql
+/* @cache disabled */
+SELECT * FROM sensitive_data WHERE user_id = ?;
 ```
 
 ---
 
-**END OF ANALYSIS**
+## Appendix B: Database Schema for JDBC Notifications
+
+```sql
+-- PostgreSQL schema
+CREATE SCHEMA IF NOT EXISTS ojp_cache;
+
+CREATE TABLE ojp_cache.notifications (
+    notification_id BIGSERIAL PRIMARY KEY,
+    server_id VARCHAR(255) NOT NULL,
+    operation VARCHAR(50) NOT NULL,
+    affected_tables TEXT[],
+    cache_keys TEXT[],
+    timestamp TIMESTAMP DEFAULT NOW(),
+    processed_by TEXT[],
+    metadata JSONB
+);
+
+CREATE INDEX idx_notif_timestamp 
+    ON ojp_cache.notifications(timestamp);
+
+CREATE INDEX idx_notif_processed 
+    ON ojp_cache.notifications 
+    USING GIN(processed_by);
+
+-- Automatic cleanup of old notifications
+CREATE OR REPLACE FUNCTION ojp_cache.cleanup_old_notifications()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM ojp_cache.notifications
+    WHERE timestamp < NOW() - INTERVAL '1 hour';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule cleanup (requires pg_cron extension)
+-- SELECT cron.schedule('cleanup-cache-notifications', 
+--                      '*/30 * * * *',  -- Every 30 minutes
+--                      'SELECT ojp_cache.cleanup_old_notifications()');
+```
+
+---
+
+**End of Analysis Document**
