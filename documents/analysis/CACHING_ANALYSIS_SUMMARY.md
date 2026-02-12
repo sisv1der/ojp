@@ -13,6 +13,7 @@
 ```properties
 # In ojp.properties
 postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.distribute=true  # Optional: enable driver relay (default: false)
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=600s
 postgres_prod.ojp.cache.queries.1.invalidateOn=products
@@ -24,14 +25,18 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 
 **Why:** Follows existing OJP patterns, simple, each datasource independent, no OJP restart needed.
 
-### Cache Distribution: JDBC Driver as Active Relay ✅
+### Cache Distribution: JDBC Driver as Active Relay (Optional) ✅
 
-**Driver distributes cache when returning results** (data already in memory):
+**Distribution is OPTIONAL** per datasource via `ojp.cache.distribute` property:
+- `distribute=true` - Enable driver relay to other OJP servers
+- `distribute=false` - Cache only maintained locally (default)
+
+**When distribution is enabled**, driver distributes cache when returning results (data already in memory):
 - Uses virtual threads (Java 21+) to stream to other servers
 - Smart policy: Only distribute < 200KB, TTL > 60s, > 1 row
 - Real-time, zero database overhead
 
-**Why:** Data already in driver memory, saves N-1 database queries, real-time propagation.
+**Why:** Data already in driver memory, saves N-1 database queries, real-time propagation. Optional for flexibility.
 
 ### Fallbacks for Special Cases
 

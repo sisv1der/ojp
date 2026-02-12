@@ -29,6 +29,7 @@ After thorough analysis and iterative refinement based on real-world constraints
 ```properties
 # In ojp.properties (with connection pool config)
 postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.distribute=true  # Optional: enable/disable driver relay (default: false)
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=600s
 postgres_prod.ojp.cache.queries.1.invalidateOn=products
@@ -45,15 +46,20 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 - ✅ **No OJP restart** - Only restart affected application, not OJP server
 - ✅ **Works with ORMs** - Pattern matching works for Hibernate/Spring Data generated SQL
 
-### 2. Cache Distribution: JDBC Driver as Active Relay ✅
+### 2. Cache Distribution: JDBC Driver as Active Relay (Optional) ✅
 
-**Cache data is distributed by the JDBC driver** when returning query results:
+**Cache data distribution is OPTIONAL** and controlled per-datasource:
+- `ojp.cache.distribute=true` - Enable driver relay to other OJP servers
+- `ojp.cache.distribute=false` - Cache only maintained locally on each server (default)
+
+**When distribution is enabled**, cached data is distributed by the JDBC driver when returning query results:
 - Data is already in driver memory (being returned to application)
 - Driver streams cached results to other OJP servers via virtual threads (Java 21+)
 - Smart distribution policy: Only distribute results < 200KB, TTL > 60s, > 1 row
 
 **Why this approach:**
-- ✅ **Data already in memory** - No additional database queries needed
+- ✅ **Optional** - Can use local-only caching for simpler deployments
+- ✅ **Data already in memory** - No additional database queries needed when distributing
 - ✅ **Saves N-1 database queries** - The whole point of distributed caching
 - ✅ **Real-time propagation** - Immediate, no polling delays
 - ✅ **Zero database overhead** - No notification tables or polling
@@ -68,13 +74,14 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 
 ### Implementation Flow
 
-1. **Configuration**: Define cache rules in client's `ojp.properties` file
+1. **Configuration**: Define cache rules in client's `ojp.properties` file (with optional distribution)
 2. **Connection**: JDBC driver sends cache config to OJP server during connection
 3. **Per-Session Storage**: Server stores cache rules for each session
 4. **Query Execution**: Server matches queries against session's cache rules
 5. **Cache Hit**: Return cached result immediately
-6. **Cache Miss**: Execute query, cache result, distribute to other servers via driver
-7. **Invalidation**: DML operations invalidate affected cache entries
+6. **Cache Miss**: Execute query, cache result locally
+7. **Distribution** (if enabled): Driver distributes cached result to other servers
+8. **Invalidation**: DML operations invalidate affected cache entries
 
 ---
 
@@ -2492,10 +2499,20 @@ Only distribute if result set meets criteria:
 ```java
 public class CacheDistributionPolicy {
     
+    private final boolean distributionEnabled;  // From ojp.cache.distribute property
     private final int maxSizeBytes = 100_000;  // 100KB
     private final int maxRows = 500;
     
+    public CacheDistributionPolicy(boolean distributionEnabled) {
+        this.distributionEnabled = distributionEnabled;
+    }
+    
     public boolean shouldDistribute(CachedResult result) {
+        // First check: is distribution enabled for this datasource?
+        if (!distributionEnabled) {
+            return false;  // Local-only caching
+        }
+        
         // Don't distribute large results
         if (result.getSizeBytes() > maxSizeBytes) {
             return false;
@@ -3145,17 +3162,20 @@ ojp.cache.queries.2.invalidateOn=users
 
 # Multinode datasource cache configuration (separate from default)
 multinode.ojp.cache.enabled=true
+multinode.ojp.cache.distribute=false  # Local-only for this datasource
 multinode.ojp.cache.queries.1.pattern=SELECT .* FROM analytics_.*
 multinode.ojp.cache.queries.1.ttl=1800s
 multinode.ojp.cache.queries.1.invalidateOn=analytics_tables
 
 # PostgreSQL production datasource
 postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.distribute=true  # Enable distribution to other servers
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM orders WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=300s
 
 # MySQL analytics datasource (longer TTL)
 mysql_analytics.ojp.cache.enabled=true
+mysql_analytics.ojp.cache.distribute=false  # Local-only caching
 mysql_analytics.ojp.cache.queries.1.pattern=SELECT .* FROM report_.*
 mysql_analytics.ojp.cache.queries.1.ttl=3600s
 ```
@@ -3194,6 +3214,7 @@ public static Properties loadOjpPropertiesForDataSource(String dataSourceName) {
 // Parse cache configuration from properties
 public class CacheConfiguration {
     private final boolean enabled;
+    private final boolean distribute;  // Enable driver relay distribution
     private final List<CacheQuery> queries;
     
     public static CacheConfiguration fromProperties(Properties props) {
@@ -3203,6 +3224,10 @@ public class CacheConfiguration {
         if (!enabled) {
             return CacheConfiguration.disabled();
         }
+        
+        // Check if distribution is enabled (default: false for local-only caching)
+        boolean distribute = Boolean.parseBoolean(
+            props.getProperty("ojp.cache.distribute", "false"));
         
         List<CacheQuery> queries = new ArrayList<>();
         
@@ -3217,7 +3242,7 @@ public class CacheConfiguration {
             queries.add(new CacheQuery(pattern, parseTtl(ttl), parseTableList(invalidateOn)));
         }
         
-        return new CacheConfiguration(enabled, queries);
+        return new CacheConfiguration(enabled, distribute, queries);
     }
 }
 ```
@@ -3329,9 +3354,16 @@ jdbc:ojp[localhost:1059(postgres_prod)]_postgresql://db:5432/mydb
 
 **Data Already in Memory**: The data is already in the JDBC driver being returned to the application. Just add a side-effect to stream it to other servers.
 
-**Smart Distribution Policy**:
+**Distribution is Optional** via `ojp.cache.distribute` property:
+- `distribute=true`: Enable driver relay to other servers
+- `distribute=false`: Cache only maintained locally (default)
+
+**Smart Distribution Policy** (when distribution is enabled):
 ```java
 public boolean shouldDistribute(CachedResult result) {
+    // First check: is distribution enabled for this datasource?
+    if (!distributionEnabled) return false;  // Local-only caching
+    
     // Don't distribute very large results
     if (result.getSizeBytes() > 200_000) return false;  // 200KB limit
     
@@ -3361,6 +3393,7 @@ public boolean shouldDistribute(CachedResult result) {
 ```properties
 # In ojp.properties (same file as connection pool config)
 postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.distribute=true  # Optional: enable driver relay (default: false)
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=600s
 postgres_prod.ojp.cache.queries.1.invalidateOn=products
@@ -3378,10 +3411,12 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 - ✅ **Works with ORMs**: Pattern matching for generated SQL
 - ✅ **No OJP restart**: Only restart affected application
 - ✅ **Familiar**: Developers already know this location
+- ✅ **Optional distribution**: Can start with local-only caching
 
 **2. Local Caching:** TTL-based with write-through invalidation
 
-**3. Distributed Caching:** JDBC Driver as Active Relay
+**3. Distributed Caching (Optional):** JDBC Driver as Active Relay
+- **Enable via**: `ojp.cache.distribute=true` (default: false for local-only)
 - Data already in driver memory
 - Smart distribution policy (< 200KB, TTL > 60s, > 1 row)
 - Saves N-1 database queries
@@ -3515,6 +3550,7 @@ jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb?ojpCacheEnabled=true&ojpCache
 
 # Default datasource cache configuration
 ojp.cache.enabled=true
+ojp.cache.distribute=false  # Local-only caching for default datasource
 ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 ojp.cache.queries.1.ttl=600s
 ojp.cache.queries.1.invalidateOn=products,product_categories
@@ -3525,6 +3561,7 @@ ojp.cache.queries.2.invalidateOn=users
 
 # PostgreSQL production datasource
 postgres_prod.ojp.cache.enabled=true
+postgres_prod.ojp.cache.distribute=true  # Enable distribution for production
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM orders WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=300s
 postgres_prod.ojp.cache.queries.1.invalidateOn=orders
@@ -3535,6 +3572,7 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=inventory
 
 # MySQL analytics datasource (longer TTL for analytics)
 mysql_analytics.ojp.cache.enabled=true
+mysql_analytics.ojp.cache.distribute=false  # Local-only for analytics
 mysql_analytics.ojp.cache.queries.1.pattern=SELECT .* FROM report_.*
 mysql_analytics.ojp.cache.queries.1.ttl=1800s
 mysql_analytics.ojp.cache.queries.1.invalidateOn=report_tables
