@@ -133,13 +133,75 @@ public class PostgresMultipleTypesIntegrationTest {
         Object valOffsetDateTimeRet = resultSet.getObject(19);
         Object valOffsetTimeRet = resultSet.getObject(20);
         
-        // Validate java.time types
+        // Validate java.time types - compare actual values
         assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
         assertNotNull(valLocalDateRet, "LocalDate should not be null");
         assertNotNull(valLocalTimeRet, "LocalTime should not be null");
         assertNotNull(valInstantRet, "Instant should not be null");
         assertNotNull(valOffsetDateTimeRet, "OffsetDateTime should not be null");
         assertNotNull(valOffsetTimeRet, "OffsetTime should not be null");
+        
+        // Since databases may return these as Timestamp or java.sql types, we need to convert for comparison
+        // For LocalDateTime - compare the timestamp components
+        if (valLocalDateTimeRet instanceof LocalDateTime) {
+            assertEquals(valLocalDateTime, valLocalDateTimeRet);
+        } else if (valLocalDateTimeRet instanceof Timestamp) {
+            LocalDateTime retrievedLdt = ((Timestamp) valLocalDateTimeRet).toLocalDateTime();
+            assertEquals(valLocalDateTime, retrievedLdt);
+        }
+        
+        // For LocalDate - compare date components
+        if (valLocalDateRet instanceof LocalDate) {
+            assertEquals(valLocalDate, valLocalDateRet);
+        } else if (valLocalDateRet instanceof Date) {
+            LocalDate retrievedLd = ((Date) valLocalDateRet).toLocalDate();
+            assertEquals(valLocalDate, retrievedLd);
+        }
+        
+        // For LocalTime - compare time components (note: some DBs may lose nanosecond precision)
+        if (valLocalTimeRet instanceof LocalTime) {
+            LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        } else if (valLocalTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valLocalTimeRet).toLocalTime();
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        }
+        
+        // For Instant - compare the instant (may be stored as Timestamp)
+        if (valInstantRet instanceof Instant) {
+            // Compare epoch seconds as precision may vary
+            assertEquals(valInstant.getEpochSecond(), ((Instant) valInstantRet).getEpochSecond());
+        } else if (valInstantRet instanceof Timestamp) {
+            Instant retrievedInstant = ((Timestamp) valInstantRet).toInstant();
+            assertEquals(valInstant.getEpochSecond(), retrievedInstant.getEpochSecond());
+        }
+        
+        // For OffsetDateTime - compare instant values (timezone info may be lost in some DBs)
+        if (valOffsetDateTimeRet instanceof OffsetDateTime) {
+            OffsetDateTime retrievedOdt = (OffsetDateTime) valOffsetDateTimeRet;
+            assertEquals(valOffsetDateTime.toInstant(), retrievedOdt.toInstant());
+        } else if (valOffsetDateTimeRet instanceof Timestamp) {
+            // MySQL doesn't preserve timezone, so compare the timestamp
+            Instant retrievedInstant = ((Timestamp) valOffsetDateTimeRet).toInstant();
+            assertEquals(valOffsetDateTime.toInstant(), retrievedInstant);
+        }
+        
+        // For OffsetTime - compare time components (timezone may be lost in some DBs)
+        if (valOffsetTimeRet instanceof OffsetTime) {
+            OffsetTime retrievedOt = (OffsetTime) valOffsetTimeRet;
+            assertEquals(valOffsetTime.getHour(), retrievedOt.getHour());
+            assertEquals(valOffsetTime.getMinute(), retrievedOt.getMinute());
+            assertEquals(valOffsetTime.getSecond(), retrievedOt.getSecond());
+        } else if (valOffsetTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valOffsetTimeRet).toLocalTime();
+            assertEquals(valOffsetTime.getHour(), retrievedLt.getHour());
+            assertEquals(valOffsetTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valOffsetTime.getSecond(), retrievedLt.getSecond());
+        }
 
         // Test column name access
         assertEquals(1, resultSet.getInt("val_int"));
