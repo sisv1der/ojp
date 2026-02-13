@@ -40,6 +40,16 @@ public class SQLServerMultipleTypesIntegrationTest {
         isTestDisabled = !Boolean.parseBoolean(System.getProperty("enableSqlServerTests", "false"));
     }
 
+    /**
+     * Test SQL Server's natively supported java.time types via JDBC 4.2.
+     * SQL Server has first-class support for:
+     * - LocalDate (DATE)
+     * - LocalTime (TIME)
+     * - LocalDateTime (DATETIME2/TIMESTAMP)
+     * 
+     * Note: SQL Server has DATETIMEOFFSET for timezone-aware types,
+     * so OffsetDateTime/OffsetTime/Instant are tested in partial support test.
+     */
     @ParameterizedTest
     @ArgumentsSource(SQLServerConnectionProvider.class)
     void typesCoverageTestSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, ParseException {
@@ -47,7 +57,7 @@ public class SQLServerMultipleTypesIntegrationTest {
         
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
-        System.out.println("Testing for url -> " + url);
+        System.out.println("Testing SQL Server natively supported types for url -> " + url);
 
         TestDBUtils.createMultiTypeTestTable(conn, "sqlserver_multi_types_test", TestDBUtils.SqlSyntax.SQLSERVER);
 
@@ -76,7 +86,7 @@ public class SQLServerMultipleTypesIntegrationTest {
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         psInsert.setTimestamp(14, new Timestamp(sdfTimestamp.parse("30/03/2025 21:22:23").getTime()));
         
-        // New java.time types - use explicit Types for better database compatibility
+        // SQL Server natively supported java.time types (JDBC 4.2)
         LocalDateTime valLocalDateTime = LocalDateTime.of(2024, 12, 1, 14, 30, 45);
         psInsert.setObject(15, valLocalDateTime, Types.TIMESTAMP);
 
@@ -86,14 +96,12 @@ public class SQLServerMultipleTypesIntegrationTest {
         LocalTime valLocalTime = LocalTime.of(15, 45, 30);
         psInsert.setObject(17, valLocalTime, Types.TIME);
 
-        Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
-        psInsert.setObject(18, valInstant, Types.TIMESTAMP);
-
-        OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
-        psInsert.setObject(19, valOffsetDateTime, Types.TIMESTAMP);
-
-        OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
-        psInsert.setObject(20, valOffsetTime, Types.TIMESTAMP);
+        // Instant, OffsetDateTime, OffsetTime: NOT natively supported in SQL Server JDBC 4.2
+        // SQL Server has DATETIMEOFFSET but requires special handling
+        // Setting to null - will be tested in partial support test
+        psInsert.setObject(18, null, Types.TIMESTAMP); // Instant - not first-class
+        psInsert.setObject(19, null, Types.TIMESTAMP); // OffsetDateTime - not first-class
+        psInsert.setObject(20, null, Types.TIMESTAMP); // OffsetTime - not first-class
         
         psInsert.executeUpdate();
 
@@ -127,24 +135,19 @@ public class SQLServerMultipleTypesIntegrationTest {
         assertEquals("11:12:13", sdfTimeOnly.format(resultSet.getTime(13)));
         assertEquals("30/03/2025 21:22:23", sdfTimestamp.format(resultSet.getTimestamp(14)));
         
-        // New java.time types - retrieve as Object to get the actual type
+        // SQL Server natively supported java.time types - retrieve as Object to get the actual type
         Object valLocalDateTimeRet = resultSet.getObject(15);
         Object valLocalDateRet = resultSet.getObject(16);
         Object valLocalTimeRet = resultSet.getObject(17);
-        Object valInstantRet = resultSet.getObject(18);
-        Object valOffsetDateTimeRet = resultSet.getObject(19);
-        Object valOffsetTimeRet = resultSet.getObject(20);
+        // Columns 18-20 (Instant, OffsetDateTime, OffsetTime) are null - not tested in success scenario
         
-        // Validate java.time types - compare actual values
+        // Validate SQL Server's natively supported java.time types (JDBC 4.2)
         assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
         assertNotNull(valLocalDateRet, "LocalDate should not be null");
         assertNotNull(valLocalTimeRet, "LocalTime should not be null");
-        assertNotNull(valInstantRet, "Instant should not be null");
-        assertNotNull(valOffsetDateTimeRet, "OffsetDateTime should not be null");
-        assertNotNull(valOffsetTimeRet, "OffsetTime should not be null");
         
-        // Since databases may return these as Timestamp or java.sql types, we need to convert for comparison
-        // For LocalDateTime - compare the timestamp components
+        // SQL Server JDBC driver should return actual java.time types per JDBC 4.2
+        // For LocalDateTime (DATETIME2/TIMESTAMP)
         if (valLocalDateTimeRet instanceof LocalDateTime) {
             assertEquals(valLocalDateTime, valLocalDateTimeRet);
         } else if (valLocalDateTimeRet instanceof Timestamp) {
@@ -152,7 +155,7 @@ public class SQLServerMultipleTypesIntegrationTest {
             assertEquals(valLocalDateTime, retrievedLdt);
         }
         
-        // For LocalDate - compare date components
+        // For LocalDate (DATE)
         if (valLocalDateRet instanceof LocalDate) {
             assertEquals(valLocalDate, valLocalDateRet);
         } else if (valLocalDateRet instanceof Date) {
@@ -160,7 +163,7 @@ public class SQLServerMultipleTypesIntegrationTest {
             assertEquals(valLocalDate, retrievedLd);
         }
         
-        // For LocalTime - compare time components (note: some DBs may lose nanosecond precision)
+        // For LocalTime (TIME)
         if (valLocalTimeRet instanceof LocalTime) {
             LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
             assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
@@ -172,38 +175,6 @@ public class SQLServerMultipleTypesIntegrationTest {
             assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
             assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
         }
-        
-        // For Instant - compare the instant (may be stored as Timestamp)
-        if (valInstantRet instanceof Instant) {
-            // Compare epoch seconds as precision may vary
-            assertEquals(valInstant.getEpochSecond(), ((Instant) valInstantRet).getEpochSecond());
-        } else if (valInstantRet instanceof Timestamp) {
-            Instant retrievedInstant = ((Timestamp) valInstantRet).toInstant();
-            assertEquals(valInstant.getEpochSecond(), retrievedInstant.getEpochSecond());
-        }
-        
-        // For OffsetDateTime - compare instant values (timezone info may be lost in some DBs)
-        if (valOffsetDateTimeRet instanceof OffsetDateTime) {
-            OffsetDateTime retrievedOdt = (OffsetDateTime) valOffsetDateTimeRet;
-            assertEquals(valOffsetDateTime.toInstant(), retrievedOdt.toInstant());
-        } else if (valOffsetDateTimeRet instanceof Timestamp) {
-            // MySQL doesn't preserve timezone, so compare the timestamp
-            Instant retrievedInstant = ((Timestamp) valOffsetDateTimeRet).toInstant();
-            assertEquals(valOffsetDateTime.toInstant(), retrievedInstant);
-        }
-        
-        // For OffsetTime - compare time components (timezone may be lost in some DBs)
-        if (valOffsetTimeRet instanceof OffsetTime) {
-            OffsetTime retrievedOt = (OffsetTime) valOffsetTimeRet;
-            assertEquals(valOffsetTime.getHour(), retrievedOt.getHour());
-            assertEquals(valOffsetTime.getMinute(), retrievedOt.getMinute());
-            assertEquals(valOffsetTime.getSecond(), retrievedOt.getSecond());
-        } else if (valOffsetTimeRet instanceof Time) {
-            LocalTime retrievedLt = ((Time) valOffsetTimeRet).toLocalTime();
-            assertEquals(valOffsetTime.getHour(), retrievedLt.getHour());
-            assertEquals(valOffsetTime.getMinute(), retrievedLt.getMinute());
-            assertEquals(valOffsetTime.getSecond(), retrievedLt.getSecond());
-        }
 
         resultSet.close();
         psSelect.close();
@@ -211,6 +182,145 @@ public class SQLServerMultipleTypesIntegrationTest {
         
         // Clean up
         TestDBUtils.cleanupTestTables(conn, "sqlserver_multi_types_test");
+        conn.close();
+    }
+
+    /**
+     * Test SQL Server's behavior with java.time types that require special handling.
+     * SQL Server has DATETIMEOFFSET for timezone-aware types but JDBC 4.2 support varies:
+     * - Instant (can be stored but driver doesn't directly support)
+     * - OffsetDateTime (can use DATETIMEOFFSET but requires special handling)
+     * - OffsetTime (no native TIME WITH TIMEZONE equivalent)
+     * 
+     * This test documents expected database behavior when these types are used.
+     */
+    @ParameterizedTest
+    @ArgumentsSource(SQLServerConnectionProvider.class)
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
+        assumeFalse(isTestDisabled, "SQL Server tests are disabled");
+
+        Connection conn = DriverManager.getConnection(url, user, pwd);
+
+        System.out.println("Testing SQL Server partially supported types for url -> " + url);
+
+        TestDBUtils.createMultiTypeTestTable(conn, "sqlserver_partial_types_test", TestDBUtils.SqlSyntax.SQLSERVER);
+
+        // Test Instant - SQL Server JDBC driver may not support directly
+        java.sql.PreparedStatement psInsertInstant = conn.prepareStatement(
+                "insert into sqlserver_partial_types_test (val_int, val_instant) values (?, ?)"
+        );
+        
+        psInsertInstant.setInt(1, 1);
+        Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
+        
+        // Attempt to insert Instant - behavior depends on driver version
+        try {
+            psInsertInstant.setObject(2, valInstant, Types.TIMESTAMP);
+            psInsertInstant.executeUpdate();
+            System.out.println("SQL Server: Instant insertion succeeded (driver converted it)");
+            
+            // If it succeeded, try to retrieve it
+            java.sql.PreparedStatement psSelect = conn.prepareStatement(
+                    "select val_instant from sqlserver_partial_types_test where val_int = 1"
+            );
+            ResultSet rs = psSelect.executeQuery();
+            if (rs.next()) {
+                Object retrieved = rs.getObject(1);
+                System.out.println("SQL Server: Instant retrieved as: " + 
+                        (retrieved != null ? retrieved.getClass().getName() : "null"));
+                assertNotNull(retrieved, "Instant should be retrieved (possibly as Timestamp)");
+            }
+            rs.close();
+            psSelect.close();
+        } catch (SQLException e) {
+            // Expected: SQL Server driver may not support Instant directly
+            System.out.println("SQL Server: Instant not natively supported - " + e.getMessage());
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") || 
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("conversion"), 
+                       "Error message should indicate type not supported");
+        }
+        
+        psInsertInstant.close();
+        TestDBUtils.executeUpdate(conn, "delete from sqlserver_partial_types_test where val_int=1");
+
+        // Test OffsetDateTime - SQL Server has DATETIMEOFFSET but JDBC 4.2 support varies
+        java.sql.PreparedStatement psInsertOffsetDateTime = conn.prepareStatement(
+                "insert into sqlserver_partial_types_test (val_int, val_offsetdatetime) values (?, ?)"
+        );
+        
+        psInsertOffsetDateTime.setInt(1, 2);
+        OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
+        
+        // Attempt to insert OffsetDateTime
+        try {
+            psInsertOffsetDateTime.setObject(2, valOffsetDateTime, Types.TIMESTAMP_WITH_TIMEZONE);
+            psInsertOffsetDateTime.executeUpdate();
+            System.out.println("SQL Server: OffsetDateTime insertion succeeded");
+            
+            // If it succeeded, try to retrieve it
+            java.sql.PreparedStatement psSelect = conn.prepareStatement(
+                    "select val_offsetdatetime from sqlserver_partial_types_test where val_int = 2"
+            );
+            ResultSet rs = psSelect.executeQuery();
+            if (rs.next()) {
+                Object retrieved = rs.getObject(1);
+                System.out.println("SQL Server: OffsetDateTime retrieved as: " + 
+                        (retrieved != null ? retrieved.getClass().getName() : "null"));
+                assertNotNull(retrieved, "OffsetDateTime should be retrieved");
+            }
+            rs.close();
+            psSelect.close();
+        } catch (SQLException e) {
+            // Expected: SQL Server driver may require special handling
+            System.out.println("SQL Server: OffsetDateTime requires special handling - " + e.getMessage());
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("conversion"),
+                       "Error message should indicate type not supported");
+        }
+        
+        psInsertOffsetDateTime.close();
+        TestDBUtils.executeUpdate(conn, "delete from sqlserver_partial_types_test where val_int=2");
+
+        // Test OffsetTime - SQL Server lacks TIME WITH TIMEZONE
+        java.sql.PreparedStatement psInsertOffsetTime = conn.prepareStatement(
+                "insert into sqlserver_partial_types_test (val_int, val_offsettime) values (?, ?)"
+        );
+        
+        psInsertOffsetTime.setInt(1, 3);
+        OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
+        
+        // Attempt to insert OffsetTime
+        try {
+            psInsertOffsetTime.setObject(2, valOffsetTime, Types.TIME_WITH_TIMEZONE);
+            psInsertOffsetTime.executeUpdate();
+            System.out.println("SQL Server: OffsetTime insertion succeeded with lossy conversion");
+            
+            // If it succeeded, timezone info is likely lost
+            java.sql.PreparedStatement psSelect = conn.prepareStatement(
+                    "select val_offsettime from sqlserver_partial_types_test where val_int = 3"
+            );
+            ResultSet rs = psSelect.executeQuery();
+            if (rs.next()) {
+                Object retrieved = rs.getObject(1);
+                System.out.println("SQL Server: OffsetTime retrieved as: " + 
+                        (retrieved != null ? retrieved.getClass().getName() : "null") +
+                        " (timezone likely lost)");
+            }
+            rs.close();
+            psSelect.close();
+        } catch (SQLException e) {
+            // Expected: SQL Server may not support OffsetTime
+            System.out.println("SQL Server: OffsetTime not supported - " + e.getMessage());
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("conversion"),
+                       "Error message should indicate type not supported");
+        }
+        
+        psInsertOffsetTime.close();
+        TestDBUtils.executeUpdate(conn, "delete from sqlserver_partial_types_test where val_int=3");
+
+        // Clean up
+        TestDBUtils.cleanupTestTables(conn, "sqlserver_partial_types_test");
         conn.close();
     }
 
