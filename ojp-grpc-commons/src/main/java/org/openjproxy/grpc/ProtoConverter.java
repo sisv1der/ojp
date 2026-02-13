@@ -108,9 +108,12 @@ public class ProtoConverter {
                 } else if (targetSqlType == java.sql.Types.DATE) {
                     // For DATE type, use toParameterValueDate
                     builder.addValues(toParameterValueDate(value));
-                } else if (targetSqlType == java.sql.Types.TIME || targetSqlType == java.sql.Types.TIME_WITH_TIMEZONE) {
-                    // For TIME types, use toParameterValueTime
+                } else if (targetSqlType == java.sql.Types.TIME) {
+                    // For plain TIME type, use toParameterValueTime (handles Time and LocalTime only)
                     builder.addValues(toParameterValueTime(value));
+                } else if (targetSqlType == java.sql.Types.TIME_WITH_TIMEZONE) {
+                    // For TIME_WITH_TIMEZONE, use toParameterValue which handles OffsetTime
+                    builder.addValues(toParameterValue(value));
                 } else {
                     // For other types, just convert the value directly
                     builder.addValues(toParameterValue(value));
