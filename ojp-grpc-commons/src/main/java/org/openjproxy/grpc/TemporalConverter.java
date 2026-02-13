@@ -38,6 +38,50 @@ import java.util.TimeZone;
 public class TemporalConverter {
 
     /**
+     * Helper method to build a google.protobuf.Timestamp from an Instant.
+     */
+    private static Timestamp buildProtoTimestamp(Instant instant) {
+        return Timestamp.newBuilder()
+            .setSeconds(instant.getEpochSecond())
+            .setNanos(instant.getNano())
+            .build();
+    }
+
+    /**
+     * Helper method to convert a proto Timestamp to an Instant.
+     */
+    private static Instant protoTimestampToInstant(Timestamp protoTimestamp) {
+        return Instant.ofEpochSecond(
+            protoTimestamp.getSeconds(),
+            protoTimestamp.getNanos()
+        );
+    }
+
+    /**
+     * Helper method to validate and parse timezone from TimestampWithZone.
+     * 
+     * @param timestampWithZone The proto message containing timezone
+     * @return Parsed ZoneId
+     * @throws IllegalArgumentException if timezone is missing, empty, or invalid
+     */
+    private static ZoneId parseAndValidateTimezone(TimestampWithZone timestampWithZone) {
+        String timezone = timestampWithZone.getTimezone();
+        if (timezone == null || timezone.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                "Timezone must not be empty or missing in TimestampWithZone. " +
+                "Server requires timezone to be set by the client."
+            );
+        }
+        
+        try {
+            return ZoneId.of(timezone);
+        } catch (Exception e) {
+            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
+            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
+        }
+    }
+
+    /**
      * Convert java.sql.Timestamp and ZoneId to TimestampWithZone proto message.
      * Sets original_type to TIMESTAMP.
      * 
@@ -58,14 +102,9 @@ public class TemporalConverter {
             );
         }
         
-        // Convert timestamp to Instant to get epoch seconds and nanos
+        // Convert timestamp to Instant and build proto timestamp
         Instant instant = timestamp.toInstant();
-        
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with timezone string and original type
         return TimestampWithZone.newBuilder()
@@ -91,14 +130,9 @@ public class TemporalConverter {
         java.sql.Timestamp timestamp = new java.sql.Timestamp(calendar.getTimeInMillis());
         ZoneId zoneId = calendar.getTimeZone().toZoneId();
         
-        // Convert timestamp to Instant to get epoch seconds and nanos
+        // Convert timestamp to Instant and build proto timestamp
         Instant instant = timestamp.toInstant();
-        
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with timezone string and original type
         return TimestampWithZone.newBuilder()
@@ -123,29 +157,11 @@ public class TemporalConverter {
             return null;
         }
         
-        // Validate timezone is present (server-side requirement)
-        String timezone = timestampWithZone.getTimezone();
-        if (timezone == null || timezone.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Timezone must not be empty or missing in TimestampWithZone. " +
-                "Server requires timezone to be set by the client."
-            );
-        }
-        
-        // Parse timezone to validate it (will throw DateTimeException if invalid)
-        try {
-            ZoneId.of(timezone);
-        } catch (Exception e) {
-            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
-            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
-        }
+        // Validate and parse timezone
+        parseAndValidateTimezone(timestampWithZone);
         
         // Convert proto timestamp to Instant and then to java.sql.Timestamp
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        Instant instant = Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        Instant instant = protoTimestampToInstant(timestampWithZone.getInstant());
         
         // Preserve exact epoch seconds + nanos
         return java.sql.Timestamp.from(instant);
@@ -208,30 +224,11 @@ public class TemporalConverter {
             return null;
         }
         
-        // Validate timezone is present
-        String timezone = timestampWithZone.getTimezone();
-        if (timezone == null || timezone.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Timezone must not be empty or missing in TimestampWithZone. " +
-                "Server requires timezone to be set by the client."
-            );
-        }
-        
-        // Parse timezone
-        ZoneId zoneId;
-        try {
-            zoneId = ZoneId.of(timezone);
-        } catch (Exception e) {
-            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
-            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
-        }
+        // Validate and parse timezone
+        ZoneId zoneId = parseAndValidateTimezone(timestampWithZone);
         
         // Convert proto timestamp to Instant
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        Instant instant = Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        Instant instant = protoTimestampToInstant(timestampWithZone.getInstant());
         
         // Create Calendar with the correct timezone
         Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone(zoneId));
@@ -380,14 +377,9 @@ public class TemporalConverter {
             return null;
         }
         
-        // Convert to Instant to get epoch seconds and nanos
+        // Convert to Instant and build proto timestamp
         Instant instant = offsetDateTime.toInstant();
-        
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with timezone string and original type
         return TimestampWithZone.newBuilder()
@@ -409,30 +401,11 @@ public class TemporalConverter {
             return null;
         }
         
-        // Validate timezone is present
-        String timezone = timestampWithZone.getTimezone();
-        if (timezone == null || timezone.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Timezone must not be empty or missing in TimestampWithZone. " +
-                "Server requires timezone to be set by the client."
-            );
-        }
-        
-        // Parse timezone - it could be a ZoneId or an offset string
-        ZoneId zoneId;
-        try {
-            zoneId = ZoneId.of(timezone);
-        } catch (Exception e) {
-            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
-            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
-        }
+        // Validate and parse timezone
+        ZoneId zoneId = parseAndValidateTimezone(timestampWithZone);
         
         // Convert proto timestamp to Instant
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        Instant instant = Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        Instant instant = protoTimestampToInstant(timestampWithZone.getInstant());
         
         // Create OffsetDateTime from Instant and ZoneId
         return OffsetDateTime.ofInstant(instant, zoneId);
@@ -455,11 +428,8 @@ public class TemporalConverter {
         ZoneId systemZone = ZoneId.systemDefault();
         Instant instant = localDateTime.atZone(systemZone).toInstant();
         
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        // Build proto timestamp
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with system timezone and original type
         return TimestampWithZone.newBuilder()
@@ -482,30 +452,11 @@ public class TemporalConverter {
             return null;
         }
         
-        // Validate timezone is present
-        String timezone = timestampWithZone.getTimezone();
-        if (timezone == null || timezone.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Timezone must not be empty or missing in TimestampWithZone. " +
-                "Server requires timezone to be set by the client."
-            );
-        }
-        
-        // Parse timezone
-        ZoneId zoneId;
-        try {
-            zoneId = ZoneId.of(timezone);
-        } catch (Exception e) {
-            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
-            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
-        }
+        // Validate and parse timezone
+        ZoneId zoneId = parseAndValidateTimezone(timestampWithZone);
         
         // Convert proto timestamp to Instant
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        Instant instant = Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        Instant instant = protoTimestampToInstant(timestampWithZone.getInstant());
         
         // Convert to LocalDateTime using the timezone
         return java.time.LocalDateTime.ofInstant(instant, zoneId);
@@ -524,11 +475,8 @@ public class TemporalConverter {
             return null;
         }
         
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        // Build proto timestamp
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with UTC timezone and original type
         return TimestampWithZone.newBuilder()
@@ -551,11 +499,7 @@ public class TemporalConverter {
         }
         
         // Convert proto timestamp to Instant
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        return Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        return protoTimestampToInstant(timestampWithZone.getInstant());
     }
     
     /**
@@ -649,11 +593,8 @@ public class TemporalConverter {
         java.time.OffsetDateTime offsetDateTime = offsetTime.atDate(LocalDate.of(1970, 1, 1));
         Instant instant = offsetDateTime.toInstant();
         
-        // Build google.protobuf.Timestamp
-        Timestamp protoTimestamp = Timestamp.newBuilder()
-            .setSeconds(instant.getEpochSecond())
-            .setNanos(instant.getNano())
-            .build();
+        // Build proto timestamp
+        Timestamp protoTimestamp = buildProtoTimestamp(instant);
         
         // Build TimestampWithZone with offset and original type
         return TimestampWithZone.newBuilder()
@@ -675,30 +616,11 @@ public class TemporalConverter {
             return null;
         }
         
-        // Validate timezone is present
-        String timezone = timestampWithZone.getTimezone();
-        if (timezone == null || timezone.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Timezone must not be empty or missing in TimestampWithZone. " +
-                "Server requires timezone to be set by the client."
-            );
-        }
-        
-        // Parse timezone - it should be an offset string for OffsetTime
-        ZoneId zoneId;
-        try {
-            zoneId = ZoneId.of(timezone);
-        } catch (Exception e) {
-            log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
-            throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
-        }
+        // Validate and parse timezone
+        ZoneId zoneId = parseAndValidateTimezone(timestampWithZone);
         
         // Convert proto timestamp to Instant
-        Timestamp protoTimestamp = timestampWithZone.getInstant();
-        Instant instant = Instant.ofEpochSecond(
-            protoTimestamp.getSeconds(),
-            protoTimestamp.getNanos()
-        );
+        Instant instant = protoTimestampToInstant(timestampWithZone.getInstant());
         
         // Create OffsetTime from Instant and ZoneId (extract time component only)
         return java.time.OffsetTime.ofInstant(instant, zoneId);
