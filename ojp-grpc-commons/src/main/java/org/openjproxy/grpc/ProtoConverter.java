@@ -94,6 +94,27 @@ public class ProtoConverter {
                 // TIME: convert using typed proto field
                 Object firstValue = parameter.getValues().get(0);
                 builder.addValues(toParameterValueTime(firstValue));
+            } else if (parameter.getType() == ParameterType.OBJECT && parameter.getValues().size() == 2
+                    && parameter.getValues().get(1) instanceof Integer) {
+                // OBJECT with targetSqlType: first value is the object, second value is java.sql.Types constant
+                // This happens when setObject(index, value, targetSqlType) is called
+                Object value = parameter.getValues().get(0);
+                Integer targetSqlType = (Integer) parameter.getValues().get(1);
+                
+                // Convert based on targetSqlType using java.sql.Types constants
+                if (targetSqlType == java.sql.Types.TIMESTAMP || targetSqlType == java.sql.Types.TIMESTAMP_WITH_TIMEZONE) {
+                    // For TIMESTAMP types, use toParameterValue which handles java.time types
+                    builder.addValues(toParameterValue(value));
+                } else if (targetSqlType == java.sql.Types.DATE) {
+                    // For DATE type, use toParameterValueDate
+                    builder.addValues(toParameterValueDate(value));
+                } else if (targetSqlType == java.sql.Types.TIME || targetSqlType == java.sql.Types.TIME_WITH_TIMEZONE) {
+                    // For TIME types, use toParameterValueTime
+                    builder.addValues(toParameterValueTime(value));
+                } else {
+                    // For other types, just convert the value directly
+                    builder.addValues(toParameterValue(value));
+                }
             } else {
                 // For all other types, use standard conversion
                 for (Object value : parameter.getValues()) {
