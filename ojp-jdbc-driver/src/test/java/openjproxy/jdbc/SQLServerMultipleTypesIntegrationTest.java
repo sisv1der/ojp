@@ -93,7 +93,7 @@ public class SQLServerMultipleTypesIntegrationTest {
         psInsert.setObject(19, valOffsetDateTime, Types.TIMESTAMP);
 
         OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
-        psInsert.setObject(20, valOffsetTime, Types.TIME);
+        psInsert.setObject(20, valOffsetTime, Types.TIME_WITH_TIMEZONE);
         
         psInsert.executeUpdate();
 
