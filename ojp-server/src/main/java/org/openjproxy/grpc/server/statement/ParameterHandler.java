@@ -171,43 +171,6 @@ public class ParameterHandler {
                 }
                 break;
             }
-            case OBJECT: {
-                // Handle OBJECT type parameters, which may contain java.time types
-                // These need to be converted to java.sql types for database compatibility
-                Object value = param.getValues().get(0);
-                
-                // Convert java.time types to java.sql types for database compatibility
-                if (value instanceof java.time.LocalDateTime) {
-                    // Convert LocalDateTime to Timestamp
-                    java.time.LocalDateTime ldt = (java.time.LocalDateTime) value;
-                    ps.setTimestamp(idx, Timestamp.valueOf(ldt));
-                } else if (value instanceof java.time.Instant) {
-                    // Convert Instant to Timestamp
-                    java.time.Instant instant = (java.time.Instant) value;
-                    ps.setTimestamp(idx, Timestamp.from(instant));
-                } else if (value instanceof java.time.OffsetDateTime) {
-                    // Convert OffsetDateTime to Timestamp
-                    java.time.OffsetDateTime odt = (java.time.OffsetDateTime) value;
-                    ps.setTimestamp(idx, Timestamp.from(odt.toInstant()));
-                } else if (value instanceof java.time.OffsetTime) {
-                    // Convert OffsetTime to Time
-                    // Note: timezone information is lost, but this is expected for TIME type
-                    java.time.OffsetTime ot = (java.time.OffsetTime) value;
-                    ps.setTime(idx, Time.valueOf(ot.toLocalTime()));
-                } else if (value instanceof java.time.LocalDate) {
-                    // Convert LocalDate to Date
-                    java.time.LocalDate ld = (java.time.LocalDate) value;
-                    ps.setDate(idx, Date.valueOf(ld));
-                } else if (value instanceof java.time.LocalTime) {
-                    // Convert LocalTime to Time
-                    java.time.LocalTime lt = (java.time.LocalTime) value;
-                    ps.setTime(idx, Time.valueOf(lt));
-                } else {
-                    // For all other types, use setObject directly
-                    ps.setObject(idx, value);
-                }
-                break;
-            }
             default:
                 ps.setObject(idx, param.getValues().get(0));
                 break;
