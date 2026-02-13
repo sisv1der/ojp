@@ -55,8 +55,8 @@ class H2MultipleTypesIntegrationTest {
         java.sql.PreparedStatement psInsert = conn.prepareStatement(
                 "insert into h2_multi_types_test (val_int, val_varchar, val_double_precision, val_bigint, val_tinyint, " +
                         "val_smallint, val_boolean, val_decimal, val_float, val_byte, val_binary, val_date, val_time, " +
-                        "val_timestamp, val_localdatetime, val_localdate, val_localtime, val_offsetdatetime, val_offsettime) " +
-                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "val_timestamp, val_localdatetime, val_localdate, val_localtime, val_instant, val_offsetdatetime, val_offsettime) " +
+                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
         psInsert.setInt(1, 1);
@@ -87,13 +87,17 @@ class H2MultipleTypesIntegrationTest {
         LocalTime valLocalTime = LocalTime.of(15, 45, 30);
         psInsert.setObject(17, valLocalTime, Types.TIME);
 
+        // Instant - will be tested in partial support test
+        Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
+        psInsert.setObject(18, valInstant, Types.TIMESTAMP);
+
         // H2 supports OffsetDateTime via TIMESTAMP WITH TIME ZONE
         OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
-        psInsert.setObject(18, valOffsetDateTime, Types.TIMESTAMP_WITH_TIMEZONE);
+        psInsert.setObject(19, valOffsetDateTime, Types.TIMESTAMP_WITH_TIMEZONE);
 
         // H2 supports OffsetTime via TIME WITH TIME ZONE
         OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
-        psInsert.setObject(19, valOffsetTime, Types.TIME_WITH_TIMEZONE);
+        psInsert.setObject(20, valOffsetTime, Types.TIME_WITH_TIMEZONE);
         
         psInsert.executeUpdate();
 
@@ -120,12 +124,14 @@ class H2MultipleTypesIntegrationTest {
         Object valLocalDateTimeRet = resultSet.getObject(15);
         Object valLocalDateRet = resultSet.getObject(16);
         Object valLocalTimeRet = resultSet.getObject(17);
-        Object valOffsetDateTimeRet = resultSet.getObject(18);
-        Object valOffsetTimeRet = resultSet.getObject(19);
+        Object valInstantRet = resultSet.getObject(18);
+        Object valOffsetDateTimeRet = resultSet.getObject(19);
+        Object valOffsetTimeRet = resultSet.getObject(20);
         
         assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
         assertNotNull(valLocalDateRet, "LocalDate should not be null");
         assertNotNull(valLocalTimeRet, "LocalTime should not be null");
+        assertNotNull(valInstantRet, "Instant should not be null");
         assertNotNull(valOffsetDateTimeRet, "OffsetDateTime should not be null");
         assertNotNull(valOffsetTimeRet, "OffsetTime should not be null");
         
@@ -154,6 +160,14 @@ class H2MultipleTypesIntegrationTest {
             assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
             assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
             assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        }
+        
+        // Instant validation - H2 may return as Timestamp
+        if (valInstantRet instanceof Instant) {
+            assertEquals(valInstant.getEpochSecond(), ((Instant) valInstantRet).getEpochSecond());
+        } else if (valInstantRet instanceof Timestamp) {
+            Instant retrievedInstant = ((Timestamp) valInstantRet).toInstant();
+            assertEquals(valInstant.getEpochSecond(), retrievedInstant.getEpochSecond());
         }
         
         // H2 supports OffsetDateTime via TIMESTAMP WITH TIME ZONE
