@@ -75,7 +75,7 @@ public class TemporalConverter {
         
         try {
             return ZoneId.of(timezone);
-        } catch (Exception e) {
+        } catch (java.time.DateTimeException e) {
             log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
             throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
         }
@@ -256,7 +256,7 @@ public class TemporalConverter {
         
         try {
             return ZoneId.of(timezone);
-        } catch (Exception e) {
+        } catch (java.time.DateTimeException e) {
             log.debug("Failed to parse timezone '{}': {}", timezone, e.getMessage());
             throw new IllegalArgumentException("Invalid timezone string: " + timezone, e);
         }
