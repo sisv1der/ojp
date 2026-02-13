@@ -16,6 +16,13 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -43,8 +50,8 @@ public class PostgresMultipleTypesIntegrationTest {
         java.sql.PreparedStatement psInsert = conn.prepareStatement(
                 "insert into postgres_multi_types_test (val_int, val_varchar, val_double_precision, val_bigint, val_tinyint, " +
                         "val_smallint, val_boolean, val_decimal, val_float, val_byte, val_binary, val_date, val_time, " +
-                        "val_timestamp) " +
-                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "val_timestamp, val_localdatetime, val_localdate, val_localtime, val_instant, val_offsetdatetime, val_offsettime) " +
+                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
         psInsert.setInt(1, 1);
@@ -64,6 +71,26 @@ public class PostgresMultipleTypesIntegrationTest {
         psInsert.setTime(13, new Time(sdfTime.parse("11:12:13").getTime()));
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         psInsert.setTimestamp(14, new Timestamp(sdfTimestamp.parse("30/03/2025 21:22:23").getTime()));
+        
+        // New java.time types
+        LocalDateTime valLocalDateTime = LocalDateTime.of(2024, 12, 1, 14, 30, 45);
+        psInsert.setObject(15, valLocalDateTime);
+
+        LocalDate valLocalDate = LocalDate.of(2024, 12, 15);
+        psInsert.setObject(16, valLocalDate);
+
+        LocalTime valLocalTime = LocalTime.of(15, 45, 30);
+        psInsert.setObject(17, valLocalTime);
+
+        Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
+        psInsert.setObject(18, valInstant);
+
+        OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
+        psInsert.setObject(19, valOffsetDateTime);
+
+        OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
+        psInsert.setObject(20, valOffsetTime);
+        
         psInsert.executeUpdate();
 
         java.sql.PreparedStatement psSelect = conn.prepareStatement("select * from postgres_multi_types_test where val_int = ?");
@@ -97,6 +124,22 @@ public class PostgresMultipleTypesIntegrationTest {
         assertEquals("29/03/2025", sdf.format(resultSet.getDate(12)));
         assertEquals("11:12:13", sdfTime.format(resultSet.getTime(13)));
         assertEquals("30/03/2025 21:22:23", sdfTimestamp.format(resultSet.getTimestamp(14)));
+        
+        // New java.time types - retrieve as Object to get the actual type
+        Object valLocalDateTimeRet = resultSet.getObject(15);
+        Object valLocalDateRet = resultSet.getObject(16);
+        Object valLocalTimeRet = resultSet.getObject(17);
+        Object valInstantRet = resultSet.getObject(18);
+        Object valOffsetDateTimeRet = resultSet.getObject(19);
+        Object valOffsetTimeRet = resultSet.getObject(20);
+        
+        // Validate java.time types
+        assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
+        assertNotNull(valLocalDateRet, "LocalDate should not be null");
+        assertNotNull(valLocalTimeRet, "LocalTime should not be null");
+        assertNotNull(valInstantRet, "Instant should not be null");
+        assertNotNull(valOffsetDateTimeRet, "OffsetDateTime should not be null");
+        assertNotNull(valOffsetTimeRet, "OffsetTime should not be null");
 
         // Test column name access
         assertEquals(1, resultSet.getInt("val_int"));
