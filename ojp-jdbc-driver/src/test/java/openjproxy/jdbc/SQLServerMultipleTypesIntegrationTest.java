@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -75,24 +76,24 @@ public class SQLServerMultipleTypesIntegrationTest {
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         psInsert.setTimestamp(14, new Timestamp(sdfTimestamp.parse("30/03/2025 21:22:23").getTime()));
         
-        // New java.time types
+        // New java.time types - use explicit Types for better database compatibility
         LocalDateTime valLocalDateTime = LocalDateTime.of(2024, 12, 1, 14, 30, 45);
-        psInsert.setObject(15, valLocalDateTime);
+        psInsert.setObject(15, valLocalDateTime, Types.TIMESTAMP);
 
         LocalDate valLocalDate = LocalDate.of(2024, 12, 15);
-        psInsert.setObject(16, valLocalDate);
+        psInsert.setObject(16, valLocalDate, Types.DATE);
 
         LocalTime valLocalTime = LocalTime.of(15, 45, 30);
-        psInsert.setObject(17, valLocalTime);
+        psInsert.setObject(17, valLocalTime, Types.TIME);
 
         Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
-        psInsert.setObject(18, valInstant);
+        psInsert.setObject(18, valInstant, Types.TIMESTAMP);
 
         OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
-        psInsert.setObject(19, valOffsetDateTime);
+        psInsert.setObject(19, valOffsetDateTime, Types.TIMESTAMP);
 
         OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
-        psInsert.setObject(20, valOffsetTime);
+        psInsert.setObject(20, valOffsetTime, Types.TIME);
         
         psInsert.executeUpdate();
 
