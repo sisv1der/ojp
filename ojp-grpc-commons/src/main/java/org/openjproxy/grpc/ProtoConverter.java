@@ -29,6 +29,9 @@ import java.sql.RowId;
 import java.sql.RowIdLifetime;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -364,6 +367,24 @@ public class ProtoConverter {
             // java.time.OffsetDateTime - convert to TimestampWithZone
             // Use offsetDateTimeToTimestampWithZone to preserve original type as OFFSET_DATE_TIME
             builder.setTimestampValue(TemporalConverter.offsetDateTimeToTimestampWithZone((OffsetDateTime) value));
+        } else if (value instanceof java.time.LocalDateTime) {
+            // java.time.LocalDateTime - convert to TimestampWithZone
+            // Use localDateTimeToTimestampWithZone to preserve original type as LOCAL_DATE_TIME
+            builder.setTimestampValue(TemporalConverter.localDateTimeToTimestampWithZone((java.time.LocalDateTime) value));
+        } else if (value instanceof Instant) {
+            // java.time.Instant - convert to TimestampWithZone
+            // Use instantToTimestampWithZone to preserve original type as INSTANT
+            builder.setTimestampValue(TemporalConverter.instantToTimestampWithZone((Instant) value));
+        } else if (value instanceof java.time.OffsetTime) {
+            // java.time.OffsetTime - convert to TimestampWithZone
+            // Use offsetTimeToTimestampWithZone to preserve original type as OFFSET_TIME
+            builder.setTimestampValue(TemporalConverter.offsetTimeToTimestampWithZone((java.time.OffsetTime) value));
+        } else if (value instanceof LocalDate) {
+            // java.time.LocalDate - convert to google.type.Date
+            return toParameterValueLocalDate(value);
+        } else if (value instanceof LocalTime) {
+            // java.time.LocalTime - convert to google.type.TimeOfDay
+            return toParameterValueLocalTime(value);
         } else if (value instanceof Map || value instanceof List || value instanceof java.util.Properties) {
             // For Map, List, and Properties objects, use protobuf serialization
             // instead of Java serialization for language independence
@@ -439,6 +460,48 @@ public class ProtoConverter {
         }
         
         com.google.type.TimeOfDay protoTimeOfDay = TemporalConverter.toProtoTimeOfDay((Time) time);
+        return ParameterValue.newBuilder()
+            .setTimeValue(protoTimeOfDay)
+            .build();
+    }
+    
+    /**
+     * Convert java.time.LocalDate to ParameterValue with google.type.Date.
+     * 
+     * @param localDate The LocalDate to convert (can be null or Object that will be cast)
+     * @return ParameterValue with date_value set, or is_null if localDate is null
+     */
+    public static ParameterValue toParameterValueLocalDate(Object localDate) {
+        if (localDate == null) {
+            return ParameterValue.newBuilder().setIsNull(true).build();
+        }
+        
+        if (!(localDate instanceof LocalDate)) {
+            throw new IllegalArgumentException("Expected java.time.LocalDate but got " + localDate.getClass().getName());
+        }
+        
+        com.google.type.Date protoDate = TemporalConverter.localDateToProtoDate((LocalDate) localDate);
+        return ParameterValue.newBuilder()
+            .setDateValue(protoDate)
+            .build();
+    }
+    
+    /**
+     * Convert java.time.LocalTime to ParameterValue with google.type.TimeOfDay.
+     * 
+     * @param localTime The LocalTime to convert (can be null or Object that will be cast)
+     * @return ParameterValue with time_value set, or is_null if localTime is null
+     */
+    public static ParameterValue toParameterValueLocalTime(Object localTime) {
+        if (localTime == null) {
+            return ParameterValue.newBuilder().setIsNull(true).build();
+        }
+        
+        if (!(localTime instanceof LocalTime)) {
+            throw new IllegalArgumentException("Expected java.time.LocalTime but got " + localTime.getClass().getName());
+        }
+        
+        com.google.type.TimeOfDay protoTimeOfDay = TemporalConverter.localTimeToProtoTimeOfDay((LocalTime) localTime);
         return ParameterValue.newBuilder()
             .setTimeValue(protoTimeOfDay)
             .build();
