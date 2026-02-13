@@ -263,9 +263,9 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         } catch (SQLException e) {
             // Expected: DB2 may reject Instant
             System.out.println("DB2: Instant not supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertInstant.close();
@@ -301,9 +301,9 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         } catch (SQLException e) {
             // Expected: DB2 may reject OffsetDateTime
             System.out.println("DB2: OffsetDateTime not supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertOffsetDateTime.close();
@@ -339,9 +339,9 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         } catch (SQLException e) {
             // Expected: DB2 may reject OffsetTime
             System.out.println("DB2: OffsetTime not supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertOffsetTime.close();

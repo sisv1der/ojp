@@ -276,9 +276,9 @@ public class PostgresMultipleTypesIntegrationTest {
         } catch (SQLException e) {
             // Expected: PostgreSQL driver may not support Instant directly
             System.out.println("PostgreSQL: Instant not natively supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") || 
+                       e.getMessage().contains("Can't infer"), 
+                       "Error message should indicate type not supported");
         }
         
         psInsertInstant.close();
@@ -315,9 +315,9 @@ public class PostgresMultipleTypesIntegrationTest {
         } catch (SQLException e) {
             // Expected: PostgreSQL driver may not support OffsetTime directly
             System.out.println("PostgreSQL: OffsetTime not natively supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertOffsetTime.close();

@@ -269,9 +269,9 @@ public class OracleMultipleTypesIntegrationTest {
         } catch (SQLException e) {
             // Expected: Oracle driver may not support Instant directly
             System.out.println("Oracle: Instant not natively supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") || 
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported type"), 
+                       "Error message should indicate type not supported");
         }
         
         psInsertInstant.close();
@@ -307,9 +307,9 @@ public class OracleMultipleTypesIntegrationTest {
         } catch (SQLException e) {
             // Expected: Oracle driver may require special handling
             System.out.println("Oracle: OffsetDateTime requires special handling - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported type"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertOffsetDateTime.close();
@@ -345,9 +345,9 @@ public class OracleMultipleTypesIntegrationTest {
         } catch (SQLException e) {
             // Expected: Oracle driver may not support OffsetTime
             System.out.println("Oracle: OffsetTime not supported - " + e.getMessage());
-            // JDBC drivers may throw various error messages for unsupported types
-            // Just verify that an SQLException was thrown (which indicates lack of support)
-            assertNotNull(e.getMessage(), "SQLException should have a message");
+            assertTrue(e.getMessage().contains("cannot") || e.getMessage().contains("not supported") ||
+                       e.getMessage().contains("Can't infer") || e.getMessage().contains("Unsupported type"),
+                       "Error message should indicate type not supported");
         }
         
         psInsertOffsetTime.close();
