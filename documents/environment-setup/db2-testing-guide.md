@@ -51,9 +51,13 @@ cp /opt/ibm/db2/V11.5/java/db2jcc4.jar ./ojp-libs/
 # Optional: Add license jar if needed
 cp /opt/ibm/db2/V11.5/java/db2jcc_license_cu.jar ./ojp-libs/
 
-# Option 2: Download from Maven Central (if available)
-# Download db2jcc (version 11.5.9.0 or your desired version) from Maven Central
-# and place it in ojp-libs/
+# Option 2: Download from Maven Central
+# You can download the DB2 JDBC driver from Maven Central:
+# https://mvnrepository.com/artifact/com.ibm.db2/jcc
+# For example, version 11.5.9.0:
+wget -P ojp-libs https://repo1.maven.org/maven2/com/ibm/db2/jcc/11.5.9.0/jcc-11.5.9.0.jar
+# Or using curl:
+# curl -o ojp-libs/jcc-11.5.9.0.jar https://repo1.maven.org/maven2/com/ibm/db2/jcc/11.5.9.0/jcc-11.5.9.0.jar
 
 # Verify the files are in place
 ls -lh ojp-libs/db2jcc*.jar
