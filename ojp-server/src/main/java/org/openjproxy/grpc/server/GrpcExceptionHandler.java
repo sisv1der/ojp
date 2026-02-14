@@ -50,6 +50,9 @@ public class GrpcExceptionHandler {
         } catch (RuntimeException re) {
             log.error("Failed while sending error to client: " + re.getMessage() + ": " + e.getMessage(), e);
         }
-        streamObserver.onError(Status.CANCELLED.asRuntimeException(metadata));
+        // Use UNKNOWN status for SQL exceptions instead of CANCELLED
+        // CANCELLED implies client cancellation, which causes connection-level error handling
+        // UNKNOWN is appropriate for database errors that should be converted to SQLException
+        streamObserver.onError(Status.UNKNOWN.withDescription(e.getMessage()).asRuntimeException(metadata));
     }
 }
