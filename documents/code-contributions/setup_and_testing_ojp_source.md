@@ -89,7 +89,7 @@ DB2 integration tests use the IBM JDBC driver which is not included in OJP depen
 For detailed DB2 instructions, see [DB2 Testing Guide](../../documents/environment-setup/db2-testing-guide.md).
 
 ### CockroachDB Database Setup (Optional)
-CockroachDB integration tests use the PostgreSQL JDBC driver which is already included in OJP dependencies.
+CockroachDB integration tests use the PostgreSQL JDBC driver. Starting from version 0.4.0-beta, you must download drivers and place them in the `ojp-libs` folder.
 For detailed CockroachDB setup instructions, see [CockroachDB Testing Guide](../../documents/environment-setup/cockroachdb-testing-guide.md).
 
 
