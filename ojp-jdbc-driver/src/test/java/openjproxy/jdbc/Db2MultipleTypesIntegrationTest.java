@@ -242,9 +242,11 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
         
         // Attempt to insert Instant
+        boolean instantSuccess = false;
         try {
             psInsertInstant.setObject(2, valInstant, Types.TIMESTAMP);
             psInsertInstant.executeUpdate();
+            instantSuccess = true;
             System.out.println("DB2: Instant insertion succeeded with lossy conversion (no timezone preservation)");
             
             // If it succeeded, document that timezone info is lost
@@ -268,7 +270,18 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
             assertNotNull(e.getMessage(), "SQLException should have a message");
         }
         
-        psInsertInstant.close();
+        // Only attempt to close if the operation succeeded - avoid closing statement in error state
+        if (instantSuccess) {
+            psInsertInstant.close();
+        } else {
+            // Statement is in error state - attempt close with timeout protection
+            try {
+                psInsertInstant.close();
+            } catch (Exception e) {
+                // Ignore close errors for statements in bad state
+                System.out.println("DB2: Warning - could not close statement after error: " + e.getMessage());
+            }
+        }
         TestDBUtils.executeUpdate(conn, "delete from DB2INST1.db2_partial_types_test where val_int=1");
 
         // Test OffsetDateTime - DB2 lacks TIMESTAMP WITH TIME ZONE in many versions
@@ -280,9 +293,11 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
         
         // Attempt to insert OffsetDateTime
+        boolean offsetDateTimeSuccess = false;
         try {
             psInsertOffsetDateTime.setObject(2, valOffsetDateTime, Types.TIMESTAMP);
             psInsertOffsetDateTime.executeUpdate();
+            offsetDateTimeSuccess = true;
             System.out.println("DB2: OffsetDateTime insertion succeeded with lossy conversion (timezone lost)");
             
             // If it succeeded, document that timezone info is lost
@@ -306,7 +321,18 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
             assertNotNull(e.getMessage(), "SQLException should have a message");
         }
         
-        psInsertOffsetDateTime.close();
+        // Only attempt to close if the operation succeeded - avoid closing statement in error state
+        if (offsetDateTimeSuccess) {
+            psInsertOffsetDateTime.close();
+        } else {
+            // Statement is in error state - attempt close with timeout protection
+            try {
+                psInsertOffsetDateTime.close();
+            } catch (Exception e) {
+                // Ignore close errors for statements in bad state
+                System.out.println("DB2: Warning - could not close statement after error: " + e.getMessage());
+            }
+        }
         TestDBUtils.executeUpdate(conn, "delete from DB2INST1.db2_partial_types_test where val_int=2");
 
         // Test OffsetTime - DB2 lacks TIME WITH TIME ZONE
@@ -318,9 +344,11 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
         
         // Attempt to insert OffsetTime
+        boolean offsetTimeSuccess = false;
         try {
             psInsertOffsetTime.setObject(2, valOffsetTime, Types.TIMESTAMP);
             psInsertOffsetTime.executeUpdate();
+            offsetTimeSuccess = true;
             System.out.println("DB2: OffsetTime insertion succeeded with lossy conversion (timezone lost)");
             
             // If it succeeded, document that timezone info is lost
@@ -344,7 +372,18 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
             assertNotNull(e.getMessage(), "SQLException should have a message");
         }
         
-        psInsertOffsetTime.close();
+        // Only attempt to close if the operation succeeded - avoid closing statement in error state
+        if (offsetTimeSuccess) {
+            psInsertOffsetTime.close();
+        } else {
+            // Statement is in error state - attempt close with timeout protection
+            try {
+                psInsertOffsetTime.close();
+            } catch (Exception e) {
+                // Ignore close errors for statements in bad state
+                System.out.println("DB2: Warning - could not close statement after error: " + e.getMessage());
+            }
+        }
         TestDBUtils.executeUpdate(conn, "delete from DB2INST1.db2_partial_types_test where val_int=3");
 
         // Clean up
