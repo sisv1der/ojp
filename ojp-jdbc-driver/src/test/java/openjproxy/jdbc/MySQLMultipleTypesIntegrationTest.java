@@ -307,7 +307,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         
         // Attempt to insert OffsetTime
         try {
-            psInsertOffsetTime.setObject(2, valOffsetTime, Types.TIME);
+            psInsertOffsetTime.setObject(2, valOffsetTime, Types.TIMESTAMP);
             psInsertOffsetTime.executeUpdate();
             System.out.println(dbType + ": OffsetTime insertion succeeded with lossy conversion (timezone lost)");
             
