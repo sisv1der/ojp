@@ -17,6 +17,9 @@ import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.concurrent.*;
+
+
 
 /**
  * Handles parameter setting for prepared statements.
@@ -24,6 +27,17 @@ import java.util.List;
  */
 @Slf4j
 public class ParameterHandler {
+
+    // Timeout for parameter setting operations (5 seconds)
+    private static final int PARAMETER_TIMEOUT_SECONDS = 5;
+    
+    // Executor for timeout operations
+    private static final ExecutorService timeoutExecutor = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r);
+        thread.setDaemon(true);
+        thread.setName("ParameterSetter-Timeout-" + System.currentTimeMillis());
+        return thread;
+    });
 
     /**
      * Adds parameters to a prepared statement.
@@ -55,6 +69,44 @@ public class ParameterHandler {
     public static void addParam(SessionManager sessionManager, SessionInfo session, int idx, 
                                PreparedStatement ps, Parameter param) throws SQLException {
         log.info("Adding parameter idx {} type {}", idx, param.getType().toString());
+        
+        // Execute parameter setting with timeout to prevent JDBC driver hangs
+        Future<Void> future = timeoutExecutor.submit(() -> {
+            setParameterInternal(sessionManager, session, idx, ps, param);
+            return null;
+        });
+        
+        try {
+            future.get(PARAMETER_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            String errorMsg = String.format(
+                "OJP timeout (%d seconds) while trying to set parameter at index %d with type %s and value %s. " +
+                "This might be caused because the JDBC driver does not support this parameter type. " +
+                "Consider using a different data type that is natively supported by your database.",
+                PARAMETER_TIMEOUT_SECONDS, idx, param.getType(), 
+                param.getValues().isEmpty() ? "null" : param.getValues().get(0));
+            log.error(errorMsg);
+            throw new SQLException(errorMsg, "HY000", 1234);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SQLException) {
+                throw (SQLException) cause;
+            } else {
+                throw new SQLException("Error setting parameter: " + cause.getMessage(), cause);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SQLException("Parameter setting was interrupted", e);
+        }
+    }
+    
+    /**
+     * Internal method that actually sets the parameter without timeout.
+     * This is called by addParam within a timeout wrapper.
+     */
+    private static void setParameterInternal(SessionManager sessionManager, SessionInfo session, int idx, 
+                                            PreparedStatement ps, Parameter param) throws SQLException {
         switch (param.getType()) {
             case INT:
                 ps.setInt(idx, (int) param.getValues().get(0));
