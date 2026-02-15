@@ -76,6 +76,19 @@ public class GrpcExceptionHandler {
             StatusRuntimeException statusException = (StatusRuntimeException) exception;
             Status.Code code = statusException.getStatus().getCode();
             
+            // CRITICAL: Check for SQL error metadata first
+            // If an exception has SQL error metadata, it's a database error, not a connection error
+            // This prevents SQL exceptions (sent with Status.UNKNOWN) from being misclassified
+            // as connection errors just because their message happens to contain "connection"
+            Metadata metadata = Status.trailersFromThrowable(statusException);
+            if (metadata != null) {
+                SqlErrorResponse errorResponse = metadata.get(ProtoUtils.keyForProto(SqlErrorResponse.getDefaultInstance()));
+                if (errorResponse != null) {
+                    // This is a database-level SQL error, not a connection error
+                    return false;
+                }
+            }
+            
             // Only these status codes indicate connection-level failures
             return code == Status.Code.UNAVAILABLE ||
                    code == Status.Code.DEADLINE_EXCEEDED ||
