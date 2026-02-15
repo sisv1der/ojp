@@ -18,14 +18,19 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 
 /**
  * Handles parameter setting for prepared statements.
  * Extracted from StatementServiceImpl to improve modularity.
+ * 
+ * Note: TIMEOUT_EXECUTOR is intentionally not shut down as it's a shared resource
+ * for the lifetime of the application. Daemon threads will be terminated on JVM shutdown.
  */
 @Slf4j
+@SuppressWarnings("java:S2142") // InterruptedException handling is appropriate for timeout scenarios
 public class ParameterHandler {
 
     // Timeout for parameter setting operations (5 seconds)
@@ -34,11 +39,14 @@ public class ParameterHandler {
     // SQL error code for timeout errors
     private static final int SQL_ERROR_CODE_TIMEOUT = 1234;
     
-    // Executor for timeout operations
+    // Thread counter for unique thread names
+    private static final AtomicLong THREAD_COUNTER = new AtomicLong(0);
+    
+    // Executor for timeout operations (intentionally not shut down - application-lifetime resource)
     private static final ExecutorService TIMEOUT_EXECUTOR = Executors.newCachedThreadPool(r -> {
         Thread thread = new Thread(r);
         thread.setDaemon(true);
-        thread.setName("ParameterSetter-Timeout-" + System.currentTimeMillis());
+        thread.setName("ParameterSetter-Timeout-" + THREAD_COUNTER.incrementAndGet());
         return thread;
     });
 
