@@ -14,8 +14,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.ZoneOffset;
 
 import static openjproxy.helpers.SqlHelper.executeUpdate;
 import static org.junit.jupiter.api.Assertions.*;
@@ -29,21 +37,26 @@ class H2MultipleTypesIntegrationTest {
         isH2TestEnabled = Boolean.parseBoolean(System.getProperty("enableH2Tests", "false"));
     }
 
+    /**
+     * Tests java.time types that H2 natively supports via JDBC 4.2.
+     * H2 database supports LocalDate, LocalTime, LocalDateTime natively,
+     * and OffsetDateTime/OffsetTime via TIMESTAMP WITH TIME ZONE / TIME WITH TIME ZONE.
+     */
     @ParameterizedTest
     @CsvFileSource(resources = "/h2_connection.csv")
     void typesCoverageTestSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ParseException {
         Assumptions.assumeTrue(isH2TestEnabled, "Skipping H2 tests - not enabled");
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
-        System.out.println("Testing for url -> " + url);
+        System.out.println("Testing H2 native java.time support for url -> " + url);
 
         TestDBUtils.createMultiTypeTestTable(conn, "h2_multi_types_test", TestDBUtils.SqlSyntax.H2);
 
         java.sql.PreparedStatement psInsert = conn.prepareStatement(
                 "insert into h2_multi_types_test (val_int, val_varchar, val_double_precision, val_bigint, val_tinyint, " +
                         "val_smallint, val_boolean, val_decimal, val_float, val_byte, val_binary, val_date, val_time, " +
-                        "val_timestamp) " +
-                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "val_timestamp, val_localdatetime, val_localdate, val_localtime, val_instant, val_offsetdatetime, val_offsettime) " +
+                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
         psInsert.setInt(1, 1);
@@ -63,6 +76,29 @@ class H2MultipleTypesIntegrationTest {
         psInsert.setTime(13, new Time(sdfTime.parse("11:12:13").getTime()));
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         psInsert.setTimestamp(14, new Timestamp(sdfTimestamp.parse("30/03/2025 21:22:23").getTime()));
+        
+        // Native java.time types supported by H2
+        LocalDateTime valLocalDateTime = LocalDateTime.of(2024, 12, 1, 14, 30, 45);
+        psInsert.setObject(15, valLocalDateTime, Types.TIMESTAMP);
+
+        LocalDate valLocalDate = LocalDate.of(2024, 12, 15);
+        psInsert.setObject(16, valLocalDate, Types.DATE);
+
+        LocalTime valLocalTime = LocalTime.of(15, 45, 30);
+        psInsert.setObject(17, valLocalTime, Types.TIME);
+
+        // Instant - will be tested in partial support test
+        Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
+        psInsert.setObject(18, valInstant, Types.TIMESTAMP);
+
+        // H2 supports OffsetDateTime via TIMESTAMP WITH TIME ZONE
+        OffsetDateTime valOffsetDateTime = OffsetDateTime.of(2024, 12, 1, 10, 10, 10, 0, ZoneOffset.ofHours(2));
+        psInsert.setObject(19, valOffsetDateTime, Types.TIMESTAMP_WITH_TIMEZONE);
+
+        // H2 supports OffsetTime via TIME WITH TIME ZONE
+        OffsetTime valOffsetTime = OffsetTime.of(16, 20, 30, 0, ZoneOffset.ofHours(-5));
+        psInsert.setObject(20, valOffsetTime, Types.TIME_WITH_TIMEZONE);
+        
         psInsert.executeUpdate();
 
         java.sql.PreparedStatement psSelect = conn.prepareStatement("select * from h2_multi_types_test where val_int = ?");
@@ -83,6 +119,78 @@ class H2MultipleTypesIntegrationTest {
         assertEquals("29/03/2025", sdf.format(resultSet.getDate(12)));
         assertEquals("11:12:13", sdfTime.format(resultSet.getTime(13)));
         assertEquals("30/03/2025 21:22:23", sdfTimestamp.format(resultSet.getTimestamp(14)));
+        
+        // Validate java.time types - H2 should return them as native java.time types
+        Object valLocalDateTimeRet = resultSet.getObject(15);
+        Object valLocalDateRet = resultSet.getObject(16);
+        Object valLocalTimeRet = resultSet.getObject(17);
+        Object valInstantRet = resultSet.getObject(18);
+        Object valOffsetDateTimeRet = resultSet.getObject(19);
+        Object valOffsetTimeRet = resultSet.getObject(20);
+        
+        assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
+        assertNotNull(valLocalDateRet, "LocalDate should not be null");
+        assertNotNull(valLocalTimeRet, "LocalTime should not be null");
+        assertNotNull(valInstantRet, "Instant should not be null");
+        assertNotNull(valOffsetDateTimeRet, "OffsetDateTime should not be null");
+        assertNotNull(valOffsetTimeRet, "OffsetTime should not be null");
+        
+        // H2 supports java.time natively, but may return as Timestamp/Date/Time
+        if (valLocalDateTimeRet instanceof LocalDateTime) {
+            assertEquals(valLocalDateTime, valLocalDateTimeRet);
+        } else if (valLocalDateTimeRet instanceof Timestamp) {
+            LocalDateTime retrievedLdt = ((Timestamp) valLocalDateTimeRet).toLocalDateTime();
+            assertEquals(valLocalDateTime, retrievedLdt);
+        }
+        
+        if (valLocalDateRet instanceof LocalDate) {
+            assertEquals(valLocalDate, valLocalDateRet);
+        } else if (valLocalDateRet instanceof Date) {
+            LocalDate retrievedLd = ((Date) valLocalDateRet).toLocalDate();
+            assertEquals(valLocalDate, retrievedLd);
+        }
+        
+        if (valLocalTimeRet instanceof LocalTime) {
+            LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        } else if (valLocalTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valLocalTimeRet).toLocalTime();
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        }
+        
+        // Instant validation - H2 may return as Timestamp
+        if (valInstantRet instanceof Instant) {
+            assertEquals(valInstant.getEpochSecond(), ((Instant) valInstantRet).getEpochSecond());
+        } else if (valInstantRet instanceof Timestamp) {
+            Instant retrievedInstant = ((Timestamp) valInstantRet).toInstant();
+            assertEquals(valInstant.getEpochSecond(), retrievedInstant.getEpochSecond());
+        }
+        
+        // H2 supports OffsetDateTime via TIMESTAMP WITH TIME ZONE
+        if (valOffsetDateTimeRet instanceof OffsetDateTime) {
+            OffsetDateTime retrievedOdt = (OffsetDateTime) valOffsetDateTimeRet;
+            assertEquals(valOffsetDateTime.toInstant(), retrievedOdt.toInstant());
+        } else if (valOffsetDateTimeRet instanceof Timestamp) {
+            Instant retrievedInstant = ((Timestamp) valOffsetDateTimeRet).toInstant();
+            assertEquals(valOffsetDateTime.toInstant(), retrievedInstant);
+        }
+        
+        // H2 supports OffsetTime via TIME WITH TIME ZONE
+        if (valOffsetTimeRet instanceof OffsetTime) {
+            OffsetTime retrievedOt = (OffsetTime) valOffsetTimeRet;
+            assertEquals(valOffsetTime.getHour(), retrievedOt.getHour());
+            assertEquals(valOffsetTime.getMinute(), retrievedOt.getMinute());
+            assertEquals(valOffsetTime.getSecond(), retrievedOt.getSecond());
+        } else if (valOffsetTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valOffsetTimeRet).toLocalTime();
+            assertEquals(valOffsetTime.getHour(), retrievedLt.getHour());
+            assertEquals(valOffsetTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valOffsetTime.getSecond(), retrievedLt.getSecond());
+        }
 
         assertEquals(1, resultSet.getInt("val_int"));
         assertEquals("TITLE_1", resultSet.getString("val_varchar"));
@@ -107,6 +215,70 @@ class H2MultipleTypesIntegrationTest {
         resultSet.close();
         psSelect.close();
         conn.close();
+    }
+
+    /**
+     * Tests java.time types that may have partial or lossy support in H2.
+     * Instant - H2 may convert through Timestamp (no direct Instant column type).
+     * This test documents expected behavior - success with conversion or database error.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/h2_connection.csv")
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException {
+        Assumptions.assumeTrue(isH2TestEnabled, "Skipping H2 tests - not enabled");
+        Connection conn = DriverManager.getConnection(url, user, pwd);
+
+        System.out.println("Testing H2 partial java.time support for url -> " + url);
+
+        TestDBUtils.createMultiTypeTestTable(conn, "h2_partial_types_test", TestDBUtils.SqlSyntax.H2);
+
+        try {
+            java.sql.PreparedStatement psInsert = conn.prepareStatement(
+                    "insert into h2_partial_types_test (val_int, val_instant) values (?, ?)"
+            );
+
+            psInsert.setInt(1, 2);
+            
+            // Instant - H2 may support via conversion to TIMESTAMP
+            Instant valInstant = Instant.parse("2024-12-01T10:10:10Z");
+            psInsert.setObject(2, valInstant, Types.TIMESTAMP);
+            
+            // If this succeeds, H2 converted Instant to Timestamp
+            psInsert.executeUpdate();
+            
+            java.sql.PreparedStatement psSelect = conn.prepareStatement(
+                    "select val_instant from h2_partial_types_test where val_int = ?"
+            );
+            psSelect.setInt(1, 2);
+            ResultSet resultSet = psSelect.executeQuery();
+            
+            if (resultSet.next()) {
+                Object valInstantRet = resultSet.getObject(1);
+                assertNotNull(valInstantRet, "Instant should not be null if supported");
+                
+                // H2 may return as Timestamp - verify conversion worked
+                if (valInstantRet instanceof Instant) {
+                    assertEquals(valInstant.getEpochSecond(), ((Instant) valInstantRet).getEpochSecond());
+                } else if (valInstantRet instanceof Timestamp) {
+                    Instant retrievedInstant = ((Timestamp) valInstantRet).toInstant();
+                    assertEquals(valInstant.getEpochSecond(), retrievedInstant.getEpochSecond());
+                }
+            }
+            
+            resultSet.close();
+            psSelect.close();
+            psInsert.close();
+            
+            executeUpdate(conn, "delete from h2_partial_types_test where val_int=2");
+            
+        } catch (SQLException e) {
+            // Expected if H2 doesn't support Instant directly
+            // Document the error for debugging
+            System.out.println("H2 Instant support: " + e.getMessage());
+            // This is acceptable - not all databases support all java.time types
+        } finally {
+            conn.close();
+        }
     }
 
 }

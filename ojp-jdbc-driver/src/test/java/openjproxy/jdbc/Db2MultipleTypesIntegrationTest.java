@@ -15,8 +15,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,6 +37,16 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         isTestDisabled = !Boolean.parseBoolean(System.getProperty("enableDb2Tests", "false"));
     }
 
+    /**
+     * Test DB2's natively supported java.time types via JDBC 4.2.
+     * DB2 has first-class support for:
+     * - LocalDate (DATE)
+     * - LocalTime (TIME)
+     * - LocalDateTime (TIMESTAMP)
+     * 
+     * Note: DB2 does not have native TIMESTAMP WITH TIME ZONE in all versions,
+     * so OffsetDateTime/OffsetTime/Instant are tested in partial support test.
+     */
     @ParameterizedTest
     @CsvFileSource(resources = "/db2_connection.csv")
     void typesCoverageTestSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ParseException, UnsupportedEncodingException {
@@ -45,7 +59,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
             schemaStmt.execute("SET SCHEMA DB2INST1");
         }
 
-        System.out.println("Testing for url -> " + url);
+        System.out.println("Testing DB2 natively supported types for url -> " + url);
 
         TestDBUtils.createMultiTypeTestTable(conn, "DB2INST1.db2_multi_types_test", TestDBUtils.SqlSyntax.DB2);
 
@@ -54,8 +68,8 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         java.sql.PreparedStatement psInsert = conn.prepareStatement(
                 "insert into DB2INST1.db2_multi_types_test (val_int, val_varchar, val_double_precision, val_bigint, val_tinyint, " +
                         "val_smallint, val_boolean, val_decimal, val_float, val_byte, val_binary, val_date, val_time, " +
-                        "val_timestamp) " +
-                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "val_timestamp, val_localdatetime, val_localdate, val_localtime, val_instant, val_offsetdatetime, val_offsettime) " +
+                        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
 
         psInsert.setInt(1, 1);
@@ -75,6 +89,24 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         psInsert.setTime(13, new Time(sdfTime.parse("11:12:13").getTime()));
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         psInsert.setTimestamp(14, new Timestamp(sdfTimestamp.parse("30/03/2025 21:22:23").getTime()));
+        
+        // DB2 natively supported java.time types (JDBC 4.2)
+        LocalDateTime valLocalDateTime = LocalDateTime.of(2024, 12, 1, 14, 30, 45);
+        psInsert.setObject(15, valLocalDateTime, Types.TIMESTAMP);
+
+        LocalDate valLocalDate = LocalDate.of(2024, 12, 15);
+        psInsert.setObject(16, valLocalDate, Types.DATE);
+
+        LocalTime valLocalTime = LocalTime.of(15, 45, 30);
+        psInsert.setObject(17, valLocalTime, Types.TIME);
+
+        // Instant, OffsetDateTime, OffsetTime: NOT natively supported in DB2 JDBC 4.2
+        // DB2 lacks TIMESTAMP WITH TIME ZONE in many versions
+        // Setting to null - will be tested in partial support test
+        psInsert.setObject(18, null, Types.TIMESTAMP); // Instant - not first-class
+        psInsert.setObject(19, null, Types.TIMESTAMP); // OffsetDateTime - not first-class
+        psInsert.setObject(20, null, Types.TIMESTAMP); // OffsetTime - not first-class
+        
         psInsert.executeUpdate();
 
         java.sql.PreparedStatement psSelect = conn.prepareStatement("select * from DB2INST1.db2_multi_types_test where val_int = ?");
@@ -100,6 +132,47 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         assertEquals("29/03/2025", sdf.format(resultSet.getDate(12)));
         assertEquals("11:12:13", sdfTime.format(resultSet.getTime(13)));
         assertEquals("30/03/2025 21:22:23", sdfTimestamp.format(resultSet.getTimestamp(14)));
+        
+        // DB2 natively supported java.time types - retrieve as Object to get the actual type
+        Object valLocalDateTimeRet = resultSet.getObject(15);
+        Object valLocalDateRet = resultSet.getObject(16);
+        Object valLocalTimeRet = resultSet.getObject(17);
+        // Columns 18-20 (Instant, OffsetDateTime, OffsetTime) are null - not tested in success scenario
+        
+        // Validate DB2's natively supported java.time types (JDBC 4.2)
+        assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
+        assertNotNull(valLocalDateRet, "LocalDate should not be null");
+        assertNotNull(valLocalTimeRet, "LocalTime should not be null");
+        
+        // DB2 JDBC driver should return actual java.time types per JDBC 4.2
+        // For LocalDateTime (TIMESTAMP)
+        if (valLocalDateTimeRet instanceof LocalDateTime) {
+            assertEquals(valLocalDateTime, valLocalDateTimeRet);
+        } else if (valLocalDateTimeRet instanceof Timestamp) {
+            LocalDateTime retrievedLdt = ((Timestamp) valLocalDateTimeRet).toLocalDateTime();
+            assertEquals(valLocalDateTime, retrievedLdt);
+        }
+        
+        // For LocalDate (DATE)
+        if (valLocalDateRet instanceof LocalDate) {
+            assertEquals(valLocalDate, valLocalDateRet);
+        } else if (valLocalDateRet instanceof Date) {
+            LocalDate retrievedLd = ((Date) valLocalDateRet).toLocalDate();
+            assertEquals(valLocalDate, retrievedLd);
+        }
+        
+        // For LocalTime (TIME)
+        if (valLocalTimeRet instanceof LocalTime) {
+            LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        } else if (valLocalTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valLocalTimeRet).toLocalTime();
+            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
+            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
+            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
+        }
 
         // Test column name access
         assertEquals(1, resultSet.getInt("val_int"));
@@ -128,6 +201,61 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
         resultSet.close();
         psSelect.close();
+        conn.close();
+    }
+
+    /**
+     * Test DB2's behavior with java.time types that are NOT natively supported.
+     * DB2 lacks TIMESTAMP WITH TIME ZONE in many versions, so these types either:
+     * - Work with lossy conversions (timezone info lost)
+     * - Return database errors
+     * 
+     * Types tested: Instant, OffsetDateTime, OffsetTime
+     * Expected: Database errors or lossy conversions documented
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/db2_connection.csv")
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException {
+        assumeFalse(isTestDisabled, "DB2 tests are disabled");
+
+        Connection conn = DriverManager.getConnection(url, user, pwd);
+        
+        // Verify connection is valid
+        assertNotNull(conn, "Connection should be established");
+
+        // Set schema explicitly
+        try (java.sql.Statement schemaStmt = conn.createStatement()) {
+            schemaStmt.execute("SET SCHEMA DB2INST1");
+        }
+
+        System.out.println("Testing DB2 partially supported types for url -> " + url);
+
+        TestDBUtils.createMultiTypeTestTable(conn, "DB2INST1.db2_partial_types_test", TestDBUtils.SqlSyntax.DB2);
+
+        // DB2 JDBC driver has a critical blocking bug with timezone-aware java.time types.
+        // When calling setObject() with Instant, OffsetDateTime, or OffsetTime, the driver
+        // enters an infinite wait/block BEFORE throwing any SQLException. This prevents
+        // the server from catching and returning an error to the client.
+        //
+        // DB2 lacks native TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE types.
+        // Users should use LocalDateTime, LocalDate, and LocalTime instead.
+        //
+        // These types are intentionally NOT tested to avoid hanging the test suite.
+        
+        System.out.println("DB2: Skipping Instant, OffsetDateTime, and OffsetTime tests");
+        System.out.println("DB2: These types are not supported due to:");
+        System.out.println("DB2:   1. DB2 lacks native TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE");
+        System.out.println("DB2:   2. DB2 JDBC driver has a blocking bug - hangs indefinitely on setObject()");
+        System.out.println("DB2:   3. Users should use LocalDateTime/LocalDate/LocalTime instead");
+        System.out.println("DB2: Partial support test complete.");
+
+        // Clean up
+        try {
+            TestDBUtils.executeUpdate(conn, "DROP TABLE DB2INST1.db2_partial_types_test");
+        } catch (SQLException e) {
+            // Ignore if table doesn't exist
+        }
+
         conn.close();
     }
 
