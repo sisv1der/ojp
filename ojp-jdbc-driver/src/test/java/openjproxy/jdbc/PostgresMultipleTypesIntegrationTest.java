@@ -236,7 +236,7 @@ public class PostgresMultipleTypesIntegrationTest {
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/postgres_connection.csv")
-    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, ParseException {
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(!isTestEnabled, "Postgres tests are disabled");
 
         Connection conn = DriverManager.getConnection(url, user, pwd);

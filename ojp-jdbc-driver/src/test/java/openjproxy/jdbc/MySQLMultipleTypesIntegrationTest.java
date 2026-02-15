@@ -27,7 +27,6 @@ import java.time.ZoneOffset;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
  class MySQLMultipleTypesIntegrationTest {
@@ -127,22 +126,6 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         ResultSet resultSet = psSelect.executeQuery();
         resultSet.next();
 
-        // Validate all data types
-        int valInt = resultSet.getInt(1);
-        String valVarchar = resultSet.getString(2);
-        double valDoublePrecision = resultSet.getDouble(3);
-        long valBigint = resultSet.getLong(4);
-        int valTinyint = resultSet.getInt(5);
-        int valSmallint = resultSet.getInt(6);
-        boolean valBoolean = resultSet.getBoolean(7);
-        BigDecimal valDecimal = resultSet.getBigDecimal(8);
-        float valFloat = resultSet.getFloat(9);
-        byte valByte = resultSet.getByte(10);
-        byte[] valBinary = resultSet.getBytes(11);
-        Date valDateRet = resultSet.getDate(12);
-        Time valTimeRet = resultSet.getTime(13);
-        Timestamp valTimestampRet = resultSet.getTimestamp(14);
-        
         // New java.time types - retrieve as Object to get the actual type
         // MySQL/MariaDB natively supported java.time types - retrieve and validate
         Object valLocalDateTimeRet = resultSet.getObject(15);
@@ -202,7 +185,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/mysql_mariadb_connection.csv")
-    void typesUnsupportedTest(String driverClass, String url, String user, String pwd) throws SQLException, ParseException {
+    void typesUnsupportedTest(String driverClass, String url, String user, String pwd) throws SQLException {
         // Skip MySQL tests if not enabled
         if (url.toLowerCase().contains("mysql") && !isMySQLTestEnabled) {
             assumeFalse(true, "Skipping MySQL tests");

@@ -119,15 +119,8 @@ public class SQLServerMultipleTypesIntegrationTest {
         assertEquals(new BigDecimal("10.00"), resultSet.getBigDecimal(8));
         assertEquals(20.20f+"", ""+resultSet.getFloat(9));
         
-        // SQL Server VARBINARY columns 
-        byte[] byteValue = resultSet.getBytes(10);
-        Assertions.assertNotNull( byteValue,"VARBINARY column should not be null");
-        assertEquals(1, byteValue.length);
-        assertEquals((byte) 1, byteValue[0]);
-        
-        byte[] binaryValue = resultSet.getBytes(11);
-        Assertions.assertNotNull(binaryValue,"VARBINARY column should not be null");
-        assertEquals("AAAA", new String(binaryValue));
+        // Validate binary columns
+        validateSQLServerBinaryColumns(resultSet);
         
         assertEquals("29/03/2025", sdf.format(resultSet.getDate(12)));
         // SQL Server TIME type
@@ -135,46 +128,8 @@ public class SQLServerMultipleTypesIntegrationTest {
         assertEquals("11:12:13", sdfTimeOnly.format(resultSet.getTime(13)));
         assertEquals("30/03/2025 21:22:23", sdfTimestamp.format(resultSet.getTimestamp(14)));
         
-        // SQL Server natively supported java.time types - retrieve as Object to get the actual type
-        Object valLocalDateTimeRet = resultSet.getObject(15);
-        Object valLocalDateRet = resultSet.getObject(16);
-        Object valLocalTimeRet = resultSet.getObject(17);
-        // Columns 18-20 (Instant, OffsetDateTime, OffsetTime) are null - not tested in success scenario
-        
-        // Validate SQL Server's natively supported java.time types (JDBC 4.2)
-        assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
-        assertNotNull(valLocalDateRet, "LocalDate should not be null");
-        assertNotNull(valLocalTimeRet, "LocalTime should not be null");
-        
-        // SQL Server JDBC driver should return actual java.time types per JDBC 4.2
-        // For LocalDateTime (DATETIME2/TIMESTAMP)
-        if (valLocalDateTimeRet instanceof LocalDateTime) {
-            assertEquals(valLocalDateTime, valLocalDateTimeRet);
-        } else if (valLocalDateTimeRet instanceof Timestamp) {
-            LocalDateTime retrievedLdt = ((Timestamp) valLocalDateTimeRet).toLocalDateTime();
-            assertEquals(valLocalDateTime, retrievedLdt);
-        }
-        
-        // For LocalDate (DATE)
-        if (valLocalDateRet instanceof LocalDate) {
-            assertEquals(valLocalDate, valLocalDateRet);
-        } else if (valLocalDateRet instanceof Date) {
-            LocalDate retrievedLd = ((Date) valLocalDateRet).toLocalDate();
-            assertEquals(valLocalDate, retrievedLd);
-        }
-        
-        // For LocalTime (TIME)
-        if (valLocalTimeRet instanceof LocalTime) {
-            LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
-            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
-            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
-            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
-        } else if (valLocalTimeRet instanceof Time) {
-            LocalTime retrievedLt = ((Time) valLocalTimeRet).toLocalTime();
-            assertEquals(valLocalTime.getHour(), retrievedLt.getHour());
-            assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
-            assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
-        }
+        // Validate SQL Server's natively supported java.time types
+        validateSQLServerJavaTimeTypes(resultSet, valLocalDateTime, valLocalDate, valLocalTime);
 
         resultSet.close();
         psSelect.close();
@@ -196,7 +151,7 @@ public class SQLServerMultipleTypesIntegrationTest {
      */
     @ParameterizedTest
     @ArgumentsSource(SQLServerConnectionProvider.class)
-    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
@@ -518,5 +473,68 @@ public class SQLServerMultipleTypesIntegrationTest {
         // Clean up
         TestDBUtils.cleanupTestTables(conn, "sqlserver_large_types_test");
         conn.close();
+    }
+    
+    /**
+     * Helper method to validate SQL Server VARBINARY columns.
+     * Extracts assertion logic to reduce cognitive complexity.
+     */
+    private void validateSQLServerBinaryColumns(ResultSet resultSet) throws SQLException {
+        byte[] byteValue = resultSet.getBytes(10);
+        Assertions.assertNotNull(byteValue, "VARBINARY column should not be null");
+        assertEquals(1, byteValue.length);
+        assertEquals((byte) 1, byteValue[0]);
+        
+        byte[] binaryValue = resultSet.getBytes(11);
+        Assertions.assertNotNull(binaryValue, "VARBINARY column should not be null");
+        assertEquals("AAAA", new String(binaryValue));
+    }
+    
+    /**
+     * Helper method to validate SQL Server java.time types.
+     * Extracts assertion logic to reduce cognitive complexity.
+     */
+    private void validateSQLServerJavaTimeTypes(ResultSet resultSet, LocalDateTime expectedLdt, 
+                                                LocalDate expectedLd, LocalTime expectedLt) throws SQLException {
+        // SQL Server natively supported java.time types - retrieve as Object to get the actual type
+        Object valLocalDateTimeRet = resultSet.getObject(15);
+        Object valLocalDateRet = resultSet.getObject(16);
+        Object valLocalTimeRet = resultSet.getObject(17);
+        // Columns 18-20 (Instant, OffsetDateTime, OffsetTime) are null - not tested in success scenario
+        
+        // Validate SQL Server's natively supported java.time types (JDBC 4.2)
+        assertNotNull(valLocalDateTimeRet, "LocalDateTime should not be null");
+        assertNotNull(valLocalDateRet, "LocalDate should not be null");
+        assertNotNull(valLocalTimeRet, "LocalTime should not be null");
+        
+        // SQL Server JDBC driver should return actual java.time types per JDBC 4.2
+        // For LocalDateTime (DATETIME2/TIMESTAMP)
+        if (valLocalDateTimeRet instanceof LocalDateTime) {
+            assertEquals(expectedLdt, valLocalDateTimeRet);
+        } else if (valLocalDateTimeRet instanceof Timestamp) {
+            LocalDateTime retrievedLdt = ((Timestamp) valLocalDateTimeRet).toLocalDateTime();
+            assertEquals(expectedLdt, retrievedLdt);
+        }
+        
+        // For LocalDate (DATE)
+        if (valLocalDateRet instanceof LocalDate) {
+            assertEquals(expectedLd, valLocalDateRet);
+        } else if (valLocalDateRet instanceof Date) {
+            LocalDate retrievedLd = ((Date) valLocalDateRet).toLocalDate();
+            assertEquals(expectedLd, retrievedLd);
+        }
+        
+        // For LocalTime (TIME)
+        if (valLocalTimeRet instanceof LocalTime) {
+            LocalTime retrievedLt = (LocalTime) valLocalTimeRet;
+            assertEquals(expectedLt.getHour(), retrievedLt.getHour());
+            assertEquals(expectedLt.getMinute(), retrievedLt.getMinute());
+            assertEquals(expectedLt.getSecond(), retrievedLt.getSecond());
+        } else if (valLocalTimeRet instanceof Time) {
+            LocalTime retrievedLt = ((Time) valLocalTimeRet).toLocalTime();
+            assertEquals(expectedLt.getHour(), retrievedLt.getHour());
+            assertEquals(expectedLt.getMinute(), retrievedLt.getMinute());
+            assertEquals(expectedLt.getSecond(), retrievedLt.getSecond());
+        }
     }
 }

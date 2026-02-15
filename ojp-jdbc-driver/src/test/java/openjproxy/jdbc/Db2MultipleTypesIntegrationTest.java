@@ -18,13 +18,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.OffsetTime;
-import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -223,6 +219,9 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         assumeFalse(isTestDisabled, "DB2 tests are disabled");
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
+        
+        // Verify connection is valid
+        assertNotNull(conn, "Connection should be established");
 
         // Set schema explicitly
         try (java.sql.Statement schemaStmt = conn.createStatement()) {

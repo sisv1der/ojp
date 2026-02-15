@@ -230,7 +230,7 @@ public class OracleMultipleTypesIntegrationTest {
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/oracle_connections.csv")
-    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
+    void typesPartialSupportTest(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "Oracle tests are disabled");
 
         Connection conn = DriverManager.getConnection(url, user, pwd);

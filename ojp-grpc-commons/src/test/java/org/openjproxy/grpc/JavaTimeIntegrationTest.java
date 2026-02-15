@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Integration test to verify that java.time types work end-to-end through the Parameter DTO to ParameterProto conversion.
  * This test simulates what happens when a user passes java.time types to a PreparedStatement.
  */
-public class JavaTimeIntegrationTest {
+class JavaTimeIntegrationTest {
 
     @Test
     void testLocalDateTimeEndToEnd() {

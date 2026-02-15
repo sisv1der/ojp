@@ -123,7 +123,6 @@ public class ParameterHandler {
                 ps.setInt(idx, (int) param.getValues().get(0));
                 break;
             case SHORT:
-                // Short comes as Integer from proto, needs to be cast
                 ps.setShort(idx, ((Integer) param.getValues().get(0)).shortValue());
                 break;
             case DOUBLE:
@@ -148,17 +147,7 @@ public class ParameterHandler {
                 ps.setBytes(idx, (byte[]) param.getValues().get(0));
                 break;
             case BYTE:
-                if (param.getValues().get(0) instanceof byte[]) {
-                    byte[] byteArray = (byte[]) param.getValues().get(0);
-                    if (byteArray.length > 0) {
-                        ps.setByte(idx, byteArray[0]);
-                    } else {
-                        ps.setByte(idx, (byte) 0);
-                    }
-                } else {
-                    // Byte comes as Integer from proto, needs to be cast
-                    ps.setByte(idx, ((Integer) param.getValues().get(0)).byteValue());
-                }
+                setByteParameter(ps, idx, param);
                 break;
             case DATE:
                 ps.setDate(idx, (Date) param.getValues().get(0));
@@ -169,74 +158,113 @@ public class ParameterHandler {
             case TIMESTAMP:
                 ps.setTimestamp(idx, (Timestamp) param.getValues().get(0));
                 break;
-            //LOB types
             case BLOB:
-                Object blobUUID = param.getValues().get(0);
-                if (blobUUID == null) {
-                    ps.setBlob(idx, (Blob) null);
-                } else {
-                    ps.setBlob(idx, sessionManager.<Blob>getLob(session, (String) blobUUID));
-                }
+                setBlobParameter(sessionManager, session, ps, idx, param);
                 break;
-            case CLOB: {
-                Object clobUUID = param.getValues().get(0);
-                if (clobUUID == null) {
-                    ps.setBlob(idx, (Blob) null);
-                } else {
-                    ps.setBlob(idx, sessionManager.<Blob>getLob(session, (String) clobUUID));
-                }
-                Clob clob = sessionManager.getLob(session, (String) param.getValues().get(0));
-                ps.setClob(idx, clob.getCharacterStream());
+            case CLOB:
+                setClobParameter(sessionManager, session, ps, idx, param);
                 break;
-            }
-            case BINARY_STREAM: {
-                Object inputStreamValue = param.getValues().get(0);
-                if (inputStreamValue == null) {
-                    ps.setBinaryStream(idx, null);
-                } else if (inputStreamValue instanceof byte[]) {
-                    //DB2 require the full binary stream to be sent at once.
-                    ps.setBinaryStream(idx, new ByteArrayInputStream((byte[]) inputStreamValue));
-                } else {
-                    InputStream is = (InputStream) inputStreamValue;
-                    if (param.getValues().size() > 1) {
-                        Long size = (Long) param.getValues().get(1);
-                        ps.setBinaryStream(idx, is, size);
-                    } else {
-                        ps.setBinaryStream(idx, is);
-                    }
-                }
+            case BINARY_STREAM:
+                setBinaryStreamParameter(ps, idx, param);
                 break;
-            }
-            case NULL: {
-                int sqlType = (int) param.getValues().get(0);
-                ps.setNull(idx, sqlType);
+            case NULL:
+                ps.setNull(idx, (int) param.getValues().get(0));
                 break;
-            }
-            case URL: {
-                // URL is now transmitted as java.net.URL object (string-based encoding in proto)
-                Object urlValue = param.getValues().get(0);
-                if (urlValue == null) {
-                    ps.setURL(idx, null);
-                } else {
-                    ps.setURL(idx, (URL) urlValue);
-                }
+            case URL:
+                setUrlParameter(ps, idx, param);
                 break;
-            }
-            case ROW_ID: {
-                // RowId is transmitted as opaque byte array (base64 in proto)
-                // Cannot reconstruct java.sql.RowId from bytes - use setBytes instead
-                // This matches JDBC behavior where RowId bytes are vendor-specific
-                Object rowIdBytes = param.getValues().get(0);
-                if (rowIdBytes == null) {
-                    ps.setBytes(idx, null);
-                } else {
-                    ps.setBytes(idx, (byte[]) rowIdBytes);
-                }
+            case ROW_ID:
+                setRowIdParameter(ps, idx, param);
                 break;
-            }
             default:
                 ps.setObject(idx, param.getValues().get(0));
                 break;
+        }
+    }
+    
+    /**
+     * Handles BYTE parameter setting with proper type conversion.
+     */
+    private static void setByteParameter(PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object value = param.getValues().get(0);
+        if (value instanceof byte[]) {
+            byte[] byteArray = (byte[]) value;
+            ps.setByte(idx, byteArray.length > 0 ? byteArray[0] : (byte) 0);
+        } else {
+            ps.setByte(idx, ((Integer) value).byteValue());
+        }
+    }
+    
+    /**
+     * Handles BLOB parameter setting with session management.
+     */
+    private static void setBlobParameter(SessionManager sessionManager, SessionInfo session, 
+                                        PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object blobUUID = param.getValues().get(0);
+        if (blobUUID == null) {
+            ps.setBlob(idx, (Blob) null);
+        } else {
+            ps.setBlob(idx, sessionManager.<Blob>getLob(session, (String) blobUUID));
+        }
+    }
+    
+    /**
+     * Handles CLOB parameter setting with session management.
+     */
+    private static void setClobParameter(SessionManager sessionManager, SessionInfo session,
+                                        PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object clobUUID = param.getValues().get(0);
+        if (clobUUID == null) {
+            ps.setClob(idx, (Clob) null);
+        } else {
+            Clob clob = sessionManager.getLob(session, (String) clobUUID);
+            ps.setClob(idx, clob.getCharacterStream());
+        }
+    }
+    
+    /**
+     * Handles BINARY_STREAM parameter setting with appropriate stream handling.
+     */
+    private static void setBinaryStreamParameter(PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object inputStreamValue = param.getValues().get(0);
+        if (inputStreamValue == null) {
+            ps.setBinaryStream(idx, null);
+        } else if (inputStreamValue instanceof byte[]) {
+            // DB2 requires the full binary stream to be sent at once
+            ps.setBinaryStream(idx, new ByteArrayInputStream((byte[]) inputStreamValue));
+        } else {
+            InputStream is = (InputStream) inputStreamValue;
+            if (param.getValues().size() > 1) {
+                Long size = (Long) param.getValues().get(1);
+                ps.setBinaryStream(idx, is, size);
+            } else {
+                ps.setBinaryStream(idx, is);
+            }
+        }
+    }
+    
+    /**
+     * Handles URL parameter setting with null safety.
+     */
+    private static void setUrlParameter(PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object urlValue = param.getValues().get(0);
+        if (urlValue == null) {
+            ps.setURL(idx, null);
+        } else {
+            ps.setURL(idx, (URL) urlValue);
+        }
+    }
+    
+    /**
+     * Handles ROW_ID parameter setting as byte array.
+     * RowId is transmitted as opaque byte array - cannot reconstruct java.sql.RowId from bytes.
+     */
+    private static void setRowIdParameter(PreparedStatement ps, int idx, Parameter param) throws SQLException {
+        Object rowIdBytes = param.getValues().get(0);
+        if (rowIdBytes == null) {
+            ps.setBytes(idx, null);
+        } else {
+            ps.setBytes(idx, (byte[]) rowIdBytes);
         }
     }
 }
