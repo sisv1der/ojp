@@ -31,8 +31,11 @@ public class ParameterHandler {
     // Timeout for parameter setting operations (5 seconds)
     private static final int PARAMETER_TIMEOUT_SECONDS = 5;
     
+    // SQL error code for timeout errors
+    private static final int SQL_ERROR_CODE_TIMEOUT = 1234;
+    
     // Executor for timeout operations
-    private static final ExecutorService timeoutExecutor = Executors.newCachedThreadPool(r -> {
+    private static final ExecutorService TIMEOUT_EXECUTOR = Executors.newCachedThreadPool(r -> {
         Thread thread = new Thread(r);
         thread.setDaemon(true);
         thread.setName("ParameterSetter-Timeout-" + System.currentTimeMillis());
@@ -71,7 +74,7 @@ public class ParameterHandler {
         log.info("Adding parameter idx {} type {}", idx, param.getType().toString());
         
         // Execute parameter setting with timeout to prevent JDBC driver hangs
-        Future<Void> future = timeoutExecutor.submit(() -> {
+        Future<Void> future = TIMEOUT_EXECUTOR.submit(() -> {
             setParameterInternal(sessionManager, session, idx, ps, param);
             return null;
         });
@@ -87,7 +90,7 @@ public class ParameterHandler {
                 PARAMETER_TIMEOUT_SECONDS, idx, param.getType(), 
                 param.getValues().isEmpty() ? "null" : param.getValues().get(0));
             log.error(errorMsg);
-            throw new SQLException(errorMsg, "HY000", 1234);
+            throw new SQLException(errorMsg, "HY000", SQL_ERROR_CODE_TIMEOUT);
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof SQLException) {
