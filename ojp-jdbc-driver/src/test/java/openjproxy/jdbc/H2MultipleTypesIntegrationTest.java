@@ -244,9 +244,13 @@ class H2MultipleTypesIntegrationTest {
         assertEquals("AAAA", new String(resultSet.getBytes("val_binary")));
         
         // SimpleDateFormat variables for validation using column names (lines 245-247)
+        // Set explicit UTC timezone to ensure consistent behavior across different JVM timezone settings
         SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
         SimpleDateFormat sdfTime = new SimpleDateFormat("hh:mm:ss");
+        sdfTime.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
         SimpleDateFormat sdfTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        sdfTimestamp.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
         
         assertEquals("29/03/2025", sdf.format(resultSet.getDate("val_date")));
         assertEquals("11:12:13", sdfTime.format(resultSet.getTime("val_time")));
