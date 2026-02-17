@@ -58,7 +58,7 @@ cd ..
 docker run --rm -d \
   --network host \
   -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 **Alternative: Runnable JAR (No Docker)**
@@ -77,7 +77,7 @@ java -jar ojp-server-0.3.2-snapshot-shaded.jar
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 

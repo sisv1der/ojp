@@ -77,7 +77,7 @@ bash download-drivers.sh ../ojp-libs
 cd ..
 
 # Step 2: Pull the OJP image
-docker pull rrobetti/ojp:0.3.1-beta
+docker pull rrobetti/ojp:0.3.2-beta
 
 # Step 3: Run OJP Server with drivers mounted
 docker run -d \
@@ -85,7 +85,7 @@ docker run -d \
   -p 1059:1059 \
   -p 9159:9159 \
   -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 
 # Step 4: Check logs to verify driver loading
 docker logs ojp-server | grep "driver"
@@ -130,7 +130,7 @@ docker run -d \
   -p 1059:1059 \
   -p 9159:9159 \
   -v $(pwd)/my-drivers:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 
 # Step 5: Verify your drivers loaded
 docker logs ojp-server | grep "driver"
@@ -155,7 +155,7 @@ docker logs ojp-server | grep "driver"
 For production deployments where you want to bake drivers into your container image permanently:
 
 ```dockerfile
-FROM rrobetti/ojp:0.3.1-beta
+FROM rrobetti/ojp:0.3.2-beta
 
 # Remove bundled drivers
 RUN rm -rf /opt/ojp/ojp-libs/*.jar
@@ -346,7 +346,7 @@ ls -lh ojp-libs/ojdbc11.jar
 **Runnable JAR with Oracle**:
 
 ```bash
-java -jar ojp-server-0.3.1-beta-shaded.jar
+java -jar ojp-server-0.3.2-beta-shaded.jar
 # Server will automatically load ojdbc11.jar from ./ojp-libs
 ```
 
@@ -362,7 +362,7 @@ docker run -d \
   --name ojp-server \
   -p 1059:1059 \
   -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 #### Oracle with UCP (Optional - Advanced)
@@ -665,7 +665,7 @@ java -jar ojp-server.jar
 # Mount external directory
 docker run -d \
   -v /host/path/to/libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 **Kubernetes ConfigMap** (for small JARs):
@@ -780,7 +780,7 @@ version: '3.8'
 
 services:
   ojp-server:
-    image: rrobetti/ojp:0.3.1-beta
+    image: rrobetti/ojp:0.3.2-beta
     ports:
       - "1059:1059"
       - "9159:9159"

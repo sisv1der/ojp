@@ -43,7 +43,7 @@ The integration starts with your Maven or Gradle build file. You'll add the OJP 
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 
 <!-- Spring JDBC Starter WITHOUT HikariCP -->
@@ -123,7 +123,7 @@ Start with the Maven dependency for OJP's JDBC driver:
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 
@@ -216,7 +216,7 @@ The first step remains familiar—add the OJP JDBC driver dependency:
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 

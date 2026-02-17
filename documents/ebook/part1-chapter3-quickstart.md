@@ -89,7 +89,7 @@ The fastest way to get started is using the pre-built Docker image that includes
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 This command accomplishes several things in one step. It downloads the OJP Server image (approximately 50MB), which includes drivers for H2, PostgreSQL, MySQL, and MariaDB out of the box. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
@@ -122,7 +122,7 @@ docker run --rm -d \
   -e OJP_SERVER_PORT=9059 \
   -e OJP_PROMETHEUS_PORT=9090 \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 **For Proprietary Databases** (Oracle, SQL Server, DB2):
@@ -133,7 +133,7 @@ docker run --rm -d \
   --name ojp-server \
   --network host \
   -v /path/to/drivers:/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 Place your proprietary JDBC driver JARs in `/path/to/drivers` on your host machine.
@@ -157,7 +157,8 @@ If Docker isn't available, use the standalone executable JAR.
 
 ```bash
 # Option A: Download pre-built JAR (when available)
-# wget https://github.com/Open-J-Proxy/ojp/releases/download/v0.3.1-beta/ojp-server.jar
+# wget https://github.com/Open-J-Proxy/ojp/releases/download/v0.3.2-beta/ojp-server.jar
+# This is a placeholder OJP does not currently release ojp server jars. 
 
 # Option B: Build from source
 git clone https://github.com/Open-J-Proxy/ojp.git
@@ -271,7 +272,7 @@ Professional code documentation style
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 
@@ -279,7 +280,7 @@ Professional code documentation style
 
 ```groovy
 dependencies {
-    implementation 'org.openjproxy:ojp-jdbc-driver:0.3.1-beta'
+    implementation 'org.openjproxy:ojp-jdbc-driver:0.3.2-beta'
 }
 ```
 
@@ -287,7 +288,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("org.openjproxy:ojp-jdbc-driver:0.3.1-beta")
+    implementation("org.openjproxy:ojp-jdbc-driver:0.3.2-beta")
 }
 ```
 
@@ -659,7 +660,7 @@ docker network create ojp-network
 docker run --network ojp-network --name postgres postgres:15
 
 # Start OJP Server
-docker run --network ojp-network --name ojp-server rrobetti/ojp:0.3.1-beta
+docker run --network ojp-network --name ojp-server rrobetti/ojp:0.3.2-beta
 
 # Application connects to: ojp-server:1059
 # OJP connects to: postgres:5432
