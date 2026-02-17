@@ -278,6 +278,7 @@
                         </ports>
                         <jvmFlags>
                             <jvmFlag>-Dojp.libs.path=/opt/ojp/ojp-libs</jvmFlag>
+                            <jvmFlag>-Duser.timezone=UTC</jvmFlag>
                         </jvmFlags>
                     </container>
                     <!-- Include open source JDBC drivers in Docker image ("batteries included") -->
