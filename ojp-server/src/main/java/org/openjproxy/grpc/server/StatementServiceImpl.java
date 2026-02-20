@@ -17,9 +17,6 @@ import com.openjproxy.grpc.SessionTerminationStatus;
 import com.openjproxy.grpc.SqlErrorType;
 import com.openjproxy.grpc.StatementRequest;
 import com.openjproxy.grpc.StatementServiceGrpc;
-import com.openjproxy.grpc.TransactionInfo;
-import com.openjproxy.grpc.TransactionStatus;
-import com.zaxxer.hikari.HikariDataSource;
 import io.grpc.stub.StreamObserver;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,15 +29,15 @@ import org.openjproxy.database.DatabaseUtils;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
+import org.openjproxy.grpc.server.action.transaction.StartTransactionAction;
+import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
 import org.openjproxy.grpc.server.lob.LobProcessor;
-import org.openjproxy.grpc.server.pool.ConnectionPoolConfigurer;
 import org.openjproxy.grpc.server.resultset.ResultSetWrapper;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.utils.DateTimeUtils;
 import org.openjproxy.grpc.server.utils.MethodNameGenerator;
 import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
-import org.openjproxy.grpc.server.utils.SessionInfoUtils;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
 import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.action.xa.XaStartAction;
@@ -160,57 +157,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     }
 
     /**
-     * Creates and configures the SQL enhancer engine based on server configuration.
-     * Parses mode to determine conversion and optimization settings.
-     * Initializes schema cache and loader for query validation.
-     *
-     * @param config Server configuration
-     * @return Configured SqlEnhancerEngine instance
-     */
-    private org.openjproxy.grpc.server.sql.SqlEnhancerEngine createSqlEnhancerEngine(ServerConfiguration config) {
-        // Parse mode to determine conversion and optimization settings
-        org.openjproxy.grpc.server.sql.SqlEnhancerMode mode =
-                org.openjproxy.grpc.server.sql.SqlEnhancerMode.fromString(config.getSqlEnhancerMode());
-
-        // Parse rules if specified, otherwise use defaults
-        java.util.List<String> enabledRules = null;
-        if (config.getSqlEnhancerRules() != null && !config.getSqlEnhancerRules().trim().isEmpty()) {
-            enabledRules = java.util.Arrays.asList(config.getSqlEnhancerRules().split(","))
-                    .stream()
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .collect(java.util.stream.Collectors.toList());
-        }
-
-        // Initialize schema cache and loader if SQL enhancer is enabled with conversion
-        org.openjproxy.grpc.server.sql.SchemaCache schemaCache = null;
-        org.openjproxy.grpc.server.sql.SchemaLoader schemaLoader = null;
-
-        if (config.isSqlEnhancerEnabled() && mode.isConversionEnabled()) {
-            log.info("Initializing schema cache and loader for SQL enhancer");
-            schemaCache = new org.openjproxy.grpc.server.sql.SchemaCache();
-            schemaLoader = new org.openjproxy.grpc.server.sql.SchemaLoader();
-            // Note: Schema will be loaded on first query execution when datasource is available
-        }
-
-        // Create engine with full configuration including schema support
-        return new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
-                config.isSqlEnhancerEnabled(),
-                config.getSqlEnhancerDialect(),
-                config.getSqlEnhancerTargetDialect(),
-                mode.isConversionEnabled(),
-                mode.isOptimizationEnabled(),
-                enabledRules,
-                schemaCache,
-                schemaLoader,
-                null,  // DataSource will be provided during query execution
-                null,  // Catalog name will be determined from connection
-                null,  // Schema name will be determined from connection
-                0      // No automatic refresh (will refresh on-demand)
-        );
-    }
-
-    /**
      * Initialize XA Pool Provider if XA pooling is enabled in configuration.
      * Loads the provider via ServiceLoader (Commons Pool 2 by default).
      */
@@ -253,101 +199,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         }
     }
 
-    /**
-     * Gets the target server identifier from the incoming request.
-     * Simply echoes back what the client sent without any override.
-     */
-    private String getTargetServer(SessionInfo incomingSessionInfo) {
-        // Echo back the targetServer from incoming request, or return empty string if
-        // not present
-        if (incomingSessionInfo != null &&
-                incomingSessionInfo.getTargetServer() != null &&
-                !incomingSessionInfo.getTargetServer().isEmpty()) {
-            return incomingSessionInfo.getTargetServer();
-        }
-
-        // Return empty string if client didn't send targetServer
-        return "";
-    }
-
-    /**
-     * Processes cluster health from the client request and triggers pool
-     * rebalancing if needed.
-     * This should be called for every request that includes SessionInfo with
-     * cluster health.
-     */
-    private void processClusterHealth(SessionInfo sessionInfo) {
-        if (sessionInfo == null) {
-            log.debug("[XA-REBALANCE-DEBUG] processClusterHealth: sessionInfo is null");
-            return;
-        }
-
-        String clusterHealth = sessionInfo.getClusterHealth();
-        String connHash = sessionInfo.getConnHash();
-
-        log.debug(
-                "[XA-REBALANCE] processClusterHealth called: connHash={}, clusterHealth='{}', isXA={}, hasXARegistry={}",
-                connHash, clusterHealth, sessionInfo.getIsXA(), xaRegistries.containsKey(connHash));
-
-        if (clusterHealth != null && !clusterHealth.isEmpty() &&
-                connHash != null && !connHash.isEmpty()) {
-
-            // Check if cluster health has changed
-            boolean healthChanged = clusterHealthTracker.hasHealthChanged(connHash, clusterHealth);
-
-            log.debug("[XA-REBALANCE] Cluster health check for {}: changed={}, current health='{}', isXA={}",
-                    connHash, healthChanged, clusterHealth, sessionInfo.getIsXA());
-
-            if (healthChanged) {
-                int healthyServerCount = clusterHealthTracker.countHealthyServers(clusterHealth);
-                log.info(
-                        "[XA-REBALANCE] Cluster health changed for {}, healthy servers: {}, triggering pool rebalancing, isXA={}",
-                        connHash, healthyServerCount, sessionInfo.getIsXA());
-
-                // Update the pool coordinator with new healthy server count
-                ConnectionPoolConfigurer.getPoolCoordinator().updateHealthyServers(connHash, healthyServerCount);
-
-                // Apply pool size changes to non-XA HikariDataSource if present
-                DataSource ds = datasourceMap.get(connHash);
-                if (ds instanceof HikariDataSource) {
-                    log.info("[XA-REBALANCE-DEBUG] Applying size changes to HikariDataSource for {}", connHash);
-                    ConnectionPoolConfigurer.applyPoolSizeChanges(connHash, (HikariDataSource) ds);
-                } else {
-                    log.info("[XA-REBALANCE-DEBUG] No HikariDataSource found for {}", connHash);
-                }
-
-                // Apply pool size changes to XA registry if present
-                XATransactionRegistry xaRegistry = xaRegistries.get(connHash);
-                if (xaRegistry != null) {
-                    log.info("[XA-REBALANCE-DEBUG] Found XA registry for {}, resizing", connHash);
-                    MultinodePoolCoordinator.PoolAllocation allocation = ConnectionPoolConfigurer.getPoolCoordinator()
-                            .getPoolAllocation(connHash);
-
-                    if (allocation != null) {
-                        int newMaxPoolSize = allocation.getCurrentMaxPoolSize();
-                        int newMinIdle = allocation.getCurrentMinIdle();
-
-                        log.info("[XA-REBALANCE-DEBUG] Resizing XA backend pool for {}: maxPoolSize={}, minIdle={}",
-                                connHash, newMaxPoolSize, newMinIdle);
-
-                        xaRegistry.resizeBackendPool(newMaxPoolSize, newMinIdle);
-                    } else {
-                        log.warn("[XA-REBALANCE-DEBUG] No pool allocation found for {}", connHash);
-                    }
-                } else if (sessionInfo.getIsXA()) {
-                    // Only log missing XA registry for actual XA connections
-                    log.info("[XA-REBALANCE-DEBUG] No XA registry found for XA connection {}", connHash);
-                }
-            } else {
-                log.debug("[XA-REBALANCE-DEBUG] Cluster health unchanged for {}", connHash);
-            }
-        } else {
-            log.info("[XA-REBALANCE-DEBUG] Skipping cluster health processing: clusterHealth={}, connHash={}",
-                    clusterHealth != null && !clusterHealth.isEmpty() ? "present" : "empty",
-                    connHash != null && !connHash.isEmpty() ? "present" : "empty");
-        }
-    }
-
     @Override
     public void connect(ConnectionDetails connectionDetails, StreamObserver<SessionInfo> responseObserver) {
         org.openjproxy.grpc.server.action.connection.ConnectAction.getInstance()
@@ -381,7 +232,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
         // Process cluster health from the request
-        processClusterHealth(request.getSession());
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
 
         try {
             circuitBreaker.preCheck(stmtHash);
@@ -526,7 +377,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
         // Process cluster health from the request
-        processClusterHealth(request.getSession());
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
 
         try {
             circuitBreaker.preCheck(stmtHash);
@@ -641,7 +492,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         updateSessionActivity(request.getSession());
 
         // Process cluster health from the request
-        processClusterHealth(request.getSession());
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
 
         try {
             ConnectionSessionDTO dto = this.sessionConnection(request.getSession(), false);
@@ -682,43 +533,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void startTransaction(SessionInfo sessionInfo, StreamObserver<SessionInfo> responseObserver) {
-        log.info("Starting transaction");
-
-        // Process cluster health from the request
-        processClusterHealth(sessionInfo);
-
-        try {
-            SessionInfo activeSessionInfo = sessionInfo;
-
-            // Start a session if none started yet.
-            if (StringUtils.isEmpty(sessionInfo.getSessionUUID())) {
-                Connection conn = this.datasourceMap.get(sessionInfo.getConnHash()).getConnection();
-                activeSessionInfo = sessionManager.createSession(sessionInfo.getClientUUID(), conn);
-                // Preserve targetServer from incoming request
-                activeSessionInfo = SessionInfoUtils.withTargetServer(activeSessionInfo, getTargetServer(sessionInfo));
-            }
-            Connection sessionConnection = sessionManager.getConnection(activeSessionInfo);
-            // Start a transaction
-            sessionConnection.setAutoCommit(Boolean.FALSE);
-
-            TransactionInfo transactionInfo = TransactionInfo.newBuilder()
-                    .setTransactionStatus(TransactionStatus.TRX_ACTIVE)
-                    .setTransactionUUID(UUID.randomUUID().toString())
-                    .build();
-
-            SessionInfo.Builder sessionInfoBuilder = SessionInfoUtils.newBuilderFrom(activeSessionInfo);
-            sessionInfoBuilder.setTransactionInfo(transactionInfo);
-            // Server echoes back targetServer from incoming request (preserved by
-            // newBuilderFrom)
-
-            responseObserver.onNext(sessionInfoBuilder.build());
-            responseObserver.onCompleted();
-        } catch (SQLException se) {
-            sendSQLExceptionMetadata(se, responseObserver);
-        } catch (Exception e) {
-            sendSQLExceptionMetadata(new SQLException("Unable to start transaction: " + e.getMessage()),
-                    responseObserver);
-        }
+        StartTransactionAction.getInstance()
+                .execute(actionContext, sessionInfo, responseObserver);
     }
 
     @Override
