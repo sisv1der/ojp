@@ -294,6 +294,27 @@ docker run -e OJP_SERVER_PORT=8080 \
            rrobetti/ojp:latest
 ```
 
+### 4. Docker with JVM Parameters (JAVA_TOOL_OPTIONS)
+
+Pass JVM parameters (heap size, system properties, GC options) using the `JAVA_TOOL_OPTIONS` environment variable:
+
+```bash
+docker run -e JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g -Dfile.encoding=UTF-8 -Duser.timezone=UTC" \
+           -e OJP_SERVER_PORT=1059 \
+           -e OJP_SERVER_LOGLEVEL=INFO \
+           -p 1059:1059 \
+           -p 9159:9159 \
+           rrobetti/ojp:latest
+```
+
+The JVM automatically recognizes and applies parameters set in `JAVA_TOOL_OPTIONS`. This allows you to configure:
+- **Memory settings**: `-Xmx4g`, `-Xms2g`, `-XX:MaxMetaspaceSize=512m`
+- **System properties**: `-Dfile.encoding=UTF-8`, `-Duser.timezone=UTC`
+- **Garbage collection**: `-XX:+UseG1GC`, `-XX:MaxGCPauseMillis=200`
+- **Debugging**: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005`
+
+For comprehensive Docker deployment examples and best practices, see **[Docker Deployment Guide](DOCKER_DEPLOYMENT.md)**.
+
 ## IP Whitelist Configuration
 
 The server supports IP-based access control for both the gRPC server and Prometheus endpoints.

@@ -37,7 +37,7 @@ import org.testcontainers.utility.DockerImageName;
 public class OjpContainer extends GenericContainer<OjpContainer> {
 
     private static final DockerImageName DEFAULT_IMAGE_NAME = 
-        DockerImageName.parse("rrobetti/ojp:0.3.1-beta");
+        DockerImageName.parse("rrobetti/ojp:0.3.2-beta");
     
     /**
      * Default OJP Server port (internal container port).
@@ -72,7 +72,7 @@ public class OjpContainer extends GenericContainer<OjpContainer> {
     /**
      * Creates an OjpContainer with a custom Docker image tag.
      *
-     * @param imageTag the Docker image tag (e.g., "0.3.1-beta")
+     * @param imageTag the Docker image tag (e.g., "0.3.2-beta")
      */
     public OjpContainer(String imageTag) {
         this(DockerImageName.parse("rrobetti/ojp:" + imageTag));

@@ -5,7 +5,10 @@
 
 [![security status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/security?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp) [![stability status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/stability?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp)
 
-[openjproxy.com](https://openjproxy.com) 
+Website 👉 [openjproxy.com](https://openjproxy.com) 
+
+Follow us on LinkedIn 👉 [Open J Proxy](https://www.linkedin.com/company/open-j-proxy) 
+
 ---
 
 A type 3 JDBC Driver and Layer 7 Proxy Server to decouple applications from relational database connection management.
@@ -55,7 +58,7 @@ cd ..
 docker run --rm -d \
   --network host \
   -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.1-beta
+  rrobetti/ojp:0.3.2-beta
 ```
 
 **Alternative: Runnable JAR (No Docker)**
@@ -74,7 +77,7 @@ java -jar ojp-server-0.3.2-snapshot-shaded.jar
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 
@@ -126,6 +129,7 @@ If Docker is not available in your environment, you can build and run OJP Server
 * **SQL Query Enhancement**: ⚠️ **EXPERIMENTAL (NOT RECOMMENDED)** - Optional SQL enhancer with Apache Calcite for query optimization. **Disabled by default.** Has known limitations with traditional JDBC databases (PostgreSQL, MySQL, Oracle, SQL Server). See [configuration documentation](documents/configuration/ojp-server-configuration.md#sql-enhancer-and-schema-loader-settings) for details.
 
 ### Further documents
+- [Docker Deployment Guide](documents/configuration/DOCKER_DEPLOYMENT.md) - Comprehensive guide for deploying OJP Server with Docker, including JVM parameter configuration, production examples, and troubleshooting.
 - [Drop-In External Libraries Support](documents/configuration/DRIVERS_AND_LIBS.md) - Add proprietary database drivers and libraries (Oracle JDBC, Oracle UCP, SQL Server, DB2) without recompiling.
 - [SSL/TLS Certificate Configuration Guide](documents/configuration/ssl-tls-certificate-placeholders.md) - Configure SSL/TLS certificates with server-side property placeholders for PostgreSQL, MySQL, Oracle, SQL Server, and DB2.
 - [Architectural decision records (ADRs)](documents/ADRs) - Technical decisions and rationale behind OJP's architecture.

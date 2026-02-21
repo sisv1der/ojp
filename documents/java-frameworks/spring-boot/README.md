@@ -7,7 +7,7 @@ To integrate OJP into your Spring Boot project follow the steps:
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.3.2-beta</version>
 </dependency>
 ```
 
@@ -57,7 +57,7 @@ As of OJP version 0.3.2, the logging implementation has been updated to be compa
 
 For detailed information about configuring OJP Server logging (log levels, file locations, rotation policies), see the [OJP Server Configuration Guide](../../configuration/ojp-server-configuration.md#logging-settings).
 
-**For older versions (0.3.1-beta and earlier):**
+**For older versions (0.3.2-beta and earlier):**
 
 If you're using an older version of OJP, you may encounter a conflict because the OJP JDBC driver bundled SLF4J Simple, which conflicts with Spring Boot's default Logback implementation.
 

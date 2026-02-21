@@ -32,9 +32,14 @@ FROM rrobetti/ojp:0.3.2-snapshot
 # The ojp-libs directory should contain your proprietary JDBC driver JARs and any additional libraries
 COPY ojp-libs/*.jar /opt/ojp/ojp-libs/
 
-# Optional: Set any additional environment variables or JVM flags
-# ENV OJP_LIBS_PATH=/opt/ojp/ojp-libs
-# ENV JAVA_OPTS="-Xmx2g -Xms512m"
+# Optional: Set JVM parameters using JAVA_TOOL_OPTIONS environment variable
+# The JVM automatically recognizes this variable and applies the parameters at startup
+# Examples:
+#   ENV JAVA_TOOL_OPTIONS="-Xmx2g -Xms512m -Dfile.encoding=UTF-8 -Duser.timezone=UTC"
+#   ENV JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+#
+# You can also pass JAVA_TOOL_OPTIONS at runtime:
+#   docker run -e JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g" my-company/ojp:1.0.0
 
 # The base image already exposes port 1059 and sets the entrypoint
 # No additional configuration needed

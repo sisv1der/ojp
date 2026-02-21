@@ -58,7 +58,7 @@ public class MyIntegrationTest {
 
 ```java
 @Container
-public static OjpContainer ojpContainer = new OjpContainer("0.3.1-beta");
+public static OjpContainer ojpContainer = new OjpContainer("0.3.2-beta");
 ```
 
 Or with full image name:
@@ -92,7 +92,7 @@ If you want to use a custom Docker image (e.g., from a private registry or with 
 
 ```java
 DockerImageName customImage = DockerImageName.parse("myregistry.com/my-ojp:1.0.0")
-        .asCompatibleSubstituteFor("rrobetti/ojp:0.3.1-beta");
+        .asCompatibleSubstituteFor("rrobetti/ojp:0.3.2-beta");
         
 OjpContainer ojpContainer = new OjpContainer(customImage);
 ```
