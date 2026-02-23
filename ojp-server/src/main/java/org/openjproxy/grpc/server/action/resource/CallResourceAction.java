@@ -5,16 +5,12 @@ import com.openjproxy.grpc.CallResourceResponse;
 import com.openjproxy.grpc.CallType;
 import com.openjproxy.grpc.DbName;
 import com.openjproxy.grpc.ResourceType;
-import com.openjproxy.grpc.SessionInfo;
-import com.openjproxy.grpc.TransactionInfo;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.openjproxy.constants.CommonConstants;
-import org.openjproxy.database.DatabaseUtils;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.server.ConnectionSessionDTO;
-import org.openjproxy.grpc.server.UnpooledConnectionDetails;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
@@ -22,14 +18,10 @@ import org.openjproxy.grpc.server.utils.MethodNameGenerator;
 import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
 import org.openjproxy.grpc.server.JavaSqlInterfacesConverter;
 
-import javax.sql.DataSource;
-import javax.sql.XAConnection;
-import javax.sql.XADataSource;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.Array;
 import java.sql.CallableStatement;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -42,6 +34,7 @@ import java.util.UUID;
 import static org.openjproxy.grpc.server.Constants.EMPTY_LIST;
 import static org.openjproxy.grpc.server.Constants.EMPTY_MAP;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
+import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
 
 /**
  * Action to call a resource operation.
@@ -88,7 +81,7 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
                 case RES_STATEMENT: {
                     ConnectionSessionDTO csDto = sessionConnection(context, request.getSession(), true);
                     responseBuilder.setSession(csDto.getSession());
-                    java.sql.Statement statement = null;
+                    java.sql.Statement statement;
                     if (!request.getResourceUUID().isBlank()) {
                         statement = context.getSessionManager().getStatement(csDto.getSession(), request.getResourceUUID());
                     } else {
@@ -102,7 +95,7 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
                 case RES_PREPARED_STATEMENT: {
                     ConnectionSessionDTO csDto = sessionConnection(context, request.getSession(), true);
                     responseBuilder.setSession(csDto.getSession());
-                    PreparedStatement ps = null;
+                    PreparedStatement ps;
                     if (!request.getResourceUUID().isBlank()) {
                         ps = context.getSessionManager().getPreparedStatement(request.getSession(), request.getResourceUUID());
                     } else {
@@ -140,7 +133,7 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
             List<Object> paramsReceived = (request.getTarget().getParamsCount() > 0) ?
                     ProtoConverter.parameterValuesToObjectList(request.getTarget().getParamsList()) : EMPTY_LIST;
             Class<?> clazz = resource.getClass();
-            if ((paramsReceived != null && !paramsReceived.isEmpty()) &&
+            if ((!paramsReceived.isEmpty()) &&
                     ((CallType.CALL_RELEASE.equals(request.getTarget().getCallType()) &&
                             "Savepoint".equalsIgnoreCase(request.getTarget().getResourceName())) ||
                             (CallType.CALL_ROLLBACK.equals(request.getTarget().getCallType()))
@@ -153,27 +146,23 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
             Method method = MethodReflectionUtils.findMethodByName(JavaSqlInterfacesConverter.interfaceClass(clazz),
                     MethodNameGenerator.methodName(request.getTarget()), paramsReceived);
             java.lang.reflect.Parameter[] params = method.getParameters();
-            Object resultFirstLevel = null;
+            Object resultFirstLevel;
             if (params != null && params.length > 0) {
                 resultFirstLevel = method.invoke(resource, paramsReceived.toArray());
-                if (resultFirstLevel instanceof CallableStatement) {
-                    CallableStatement cs = (CallableStatement) resultFirstLevel;
+                if (resultFirstLevel instanceof CallableStatement cs) {
                     resultFirstLevel = context.getSessionManager().registerCallableStatement(responseBuilder.getSession(), cs);
                 }
             } else {
                 resultFirstLevel = method.invoke(resource);
-                if (resultFirstLevel instanceof ResultSet) {
-                    ResultSet rs = (ResultSet) resultFirstLevel;
+                if (resultFirstLevel instanceof ResultSet rs) {
                     resultFirstLevel = context.getSessionManager().registerResultSet(responseBuilder.getSession(), rs);
-                } else if (resultFirstLevel instanceof Array) {
-                    Array array = (Array) resultFirstLevel;
+                } else if (resultFirstLevel instanceof Array array) {
                     String arrayUUID = UUID.randomUUID().toString();
                     context.getSessionManager().registerAttr(responseBuilder.getSession(), arrayUUID, array);
                     resultFirstLevel = arrayUUID;
                 }
             }
-            if (resultFirstLevel instanceof Savepoint) {
-                Savepoint sp = (Savepoint) resultFirstLevel;
+            if (resultFirstLevel instanceof Savepoint sp) {
                 String uuid = UUID.randomUUID().toString();
                 resultFirstLevel = uuid;
                 context.getSessionManager().registerAttr(responseBuilder.getSession(), uuid, sp);
@@ -188,14 +177,13 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
                         MethodNameGenerator.methodName(request.getTarget().getNextCall()),
                         paramsReceived2);
                 params = methodNext.getParameters();
-                Object resultSecondLevel = null;
+                Object resultSecondLevel;
                 if (params != null && params.length > 0) {
                     resultSecondLevel = methodNext.invoke(resultFirstLevel, paramsReceived2.toArray());
                 } else {
                     resultSecondLevel = methodNext.invoke(resultFirstLevel);
                 }
-                if (resultSecondLevel instanceof ResultSet) {
-                    ResultSet rs = (ResultSet) resultSecondLevel;
+                if (resultSecondLevel instanceof ResultSet rs) {
                     resultSecondLevel = context.getSessionManager().registerResultSet(responseBuilder.getSession(), rs);
                 }
                 responseBuilder.addValues(ProtoConverter.toParameterValue(resultSecondLevel));
@@ -208,8 +196,7 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
         } catch (SQLException se) {
             sendSQLExceptionMetadata(se, responseObserver);
         } catch (InvocationTargetException e) {
-            if (e.getTargetException() instanceof SQLException) {
-                SQLException sqlException = (SQLException) e.getTargetException();
+            if (e.getTargetException() instanceof SQLException sqlException) {
                 sendSQLExceptionMetadata(sqlException, responseObserver);
             } else {
                 sendSQLExceptionMetadata(new SQLException("Unable to call resource: " + e.getTargetException().getMessage()),
@@ -246,98 +233,5 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
             }
         }
         return false;
-    }
-
-    private ConnectionSessionDTO sessionConnection(ActionContext context, SessionInfo sessionInfo, boolean startSessionIfNone) throws SQLException {
-        ConnectionSessionDTO.ConnectionSessionDTOBuilder dtoBuilder = ConnectionSessionDTO.builder();
-        dtoBuilder.session(sessionInfo);
-        Connection conn;
-
-        if (StringUtils.isNotEmpty(sessionInfo.getSessionUUID())) {
-            // Session already exists, reuse its connection
-            conn = context.getSessionManager().getConnection(sessionInfo);
-            if (conn == null) {
-                throw new SQLException("Connection not found for this sessionInfo");
-            }
-            dtoBuilder.dbName(DatabaseUtils.resolveDbName(conn.getMetaData().getURL()));
-            if (conn.isClosed()) {
-                throw new SQLException("Connection is closed");
-            }
-        } else {
-            // Lazy allocation: check if this is an XA or regular connection
-            String connHash = sessionInfo.getConnHash();
-            boolean isXA = sessionInfo.getIsXA();
-
-            if (isXA) {
-                // XA connection - check if unpooled or pooled mode
-                XADataSource xaDataSource = context.getXaDataSourceMap().get(connHash);
-
-                if (xaDataSource != null) {
-                    // Unpooled XA mode: create XAConnection on demand
-                    try {
-                        log.debug("Creating unpooled XAConnection for hash: {}", connHash);
-                        XAConnection xaConnection = xaDataSource.getXAConnection();
-                        conn = xaConnection.getConnection();
-
-                        // Store the XAConnection in session for XA operations
-                        if (startSessionIfNone) {
-                            SessionInfo updatedSession = context.getSessionManager().createSession(sessionInfo.getClientUUID(), conn);
-                            // Store XAConnection as an attribute for XA operations
-                            context.getSessionManager().registerAttr(updatedSession, "xaConnection", xaConnection);
-                            dtoBuilder.session(updatedSession);
-                        }
-                        log.debug("Successfully created unpooled XAConnection for hash: {}", connHash);
-                    } catch (SQLException e) {
-                        log.error("Failed to create unpooled XAConnection for hash: {}. Error: {}",
-                                connHash, e.getMessage());
-                        throw e;
-                    }
-                } else {
-                    // Pooled XA mode - should already have a session created in connect()
-                    // This shouldn't happen as XA sessions are created eagerly
-                    throw new SQLException("XA session should already exist. Session UUID is missing.");
-                }
-            } else {
-                // Regular connection - check if pooled or unpooled mode
-                UnpooledConnectionDetails unpooledDetails = context.getUnpooledConnectionDetailsMap().get(connHash);
-
-                if (unpooledDetails != null) {
-                    // Unpooled mode: create direct connection without pooling
-                    try {
-                        log.debug("Creating unpooled (passthrough) connection for hash: {}", connHash);
-                        conn = java.sql.DriverManager.getConnection(
-                                unpooledDetails.getUrl(),
-                                unpooledDetails.getUsername(),
-                                unpooledDetails.getPassword());
-                        log.debug("Successfully created unpooled connection for hash: {}", connHash);
-
-                        if (startSessionIfNone) {
-                            SessionInfo updatedSession = context.getSessionManager().createSession(sessionInfo.getClientUUID(), conn);
-                            dtoBuilder.session(updatedSession);
-                        }
-                    } catch (SQLException e) {
-                        log.error("Failed to create unpooled connection for hash: {}. Error: {}",
-                                connHash, e.getMessage());
-                        throw e;
-                    }
-                } else {
-                    // Pooled mode: get connection from Hikari datasource
-                    DataSource ds = context.getDatasourceMap().get(connHash);
-                    if (ds == null) {
-                        throw new SQLException("DataSource not found for connection hash: " + connHash);
-                    }
-                    conn = ds.getConnection();
-                    log.debug("Successfully got pooled connection for hash: {}", connHash);
-
-                    if (startSessionIfNone) {
-                        SessionInfo updatedSession = context.getSessionManager().createSession(sessionInfo.getClientUUID(), conn);
-                        dtoBuilder.session(updatedSession);
-                    }
-                }
-                dtoBuilder.dbName(DatabaseUtils.resolveDbName(conn.getMetaData().getURL()));
-            }
-        }
-        dtoBuilder.connection(conn);
-        return dtoBuilder.build();
     }
 }
