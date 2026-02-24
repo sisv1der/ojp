@@ -10,6 +10,7 @@ This document outlines the planned releases and key milestones for the Open J Pr
 
 - Full implementation of OJP Service Provider Interfaces (SPIs), enabling custom connection pool providers and extensibility hooks
 - Experimental integration with [Apache Calcite](https://calcite.apache.org/) for SQL query optimization (disabled by default)
+- Expanded observability: additional OpenTelemetry metrics and distributed tracing spans
 - Improved developer experience: refined configuration, better error messages, and expanded documentation
 - Enhanced test coverage and integration testing infrastructure
 
@@ -44,7 +45,6 @@ Items under consideration for future releases:
 
 - Native reactive/non-blocking driver support
 - gRPC streaming improvements for high-throughput workloads
-- Expanded observability: additional OpenTelemetry metrics and distributed tracing spans
 - Kubernetes operator for automated OJP cluster management
 - Support for additional connection pool providers via SPI
 
