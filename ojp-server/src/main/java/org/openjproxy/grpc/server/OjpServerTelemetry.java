@@ -141,6 +141,9 @@ public class OjpServerTelemetry {
 					.build();
 			tracerProviderBuilder.addSpanProcessor(BatchSpanProcessor.builder(otlpExporter).build());
 		} else {
+			if (!"zipkin".equalsIgnoreCase(exporterType)) {
+				logger.warn("Unrecognized tracing exporter type '{}'. Valid values are 'zipkin' and 'otlp'. Falling back to Zipkin.", exporterType);
+			}
 			logger.info("Configuring Zipkin trace exporter with endpoint: {}", endpoint);
 			ZipkinSpanExporter zipkinExporter = ZipkinSpanExporter.builder()
 					.setEndpoint(endpoint)
