@@ -7,9 +7,11 @@ import io.opentelemetry.exporter.zipkin.ZipkinSpanExporter;
 import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.OpenTelemetrySdkBuilder;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
 import org.slf4j.Logger;
@@ -98,7 +100,7 @@ public class OjpServerTelemetry {
 				.setPort(prometheusPort)
 				.build();
 
-		OpenTelemetrySdk.Builder sdkBuilder = OpenTelemetrySdk.builder()
+		OpenTelemetrySdkBuilder sdkBuilder = OpenTelemetrySdk.builder()
 				.setMeterProvider(
 						SdkMeterProvider.builder()
 								.registerMetricReader(prometheusServer)
@@ -128,7 +130,7 @@ public class OjpServerTelemetry {
 				? Sampler.alwaysOn()
 				: Sampler.traceIdRatioBased(sampleRate);
 
-		SdkTracerProvider.Builder tracerProviderBuilder = SdkTracerProvider.builder()
+		SdkTracerProviderBuilder tracerProviderBuilder = SdkTracerProvider.builder()
 				.setResource(resource)
 				.setSampler(sampler);
 
