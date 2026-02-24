@@ -27,11 +27,18 @@ class PerDatasourceSlowQuerySegregationTest {
 
     @BeforeEach
     void setUp() {
+        // Explicitly enable slow query segregation for per-datasource tests
+        System.setProperty("ojp.server.slowQuerySegregation.enabled", "true");
         serverConfiguration = new ServerConfiguration();
         SessionManager sessionManager = mock(SessionManager.class);
         CircuitBreaker circuitBreaker = mock(CircuitBreaker.class);
 
         statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        System.clearProperty("ojp.server.slowQuerySegregation.enabled");
     }
 
     @Test
