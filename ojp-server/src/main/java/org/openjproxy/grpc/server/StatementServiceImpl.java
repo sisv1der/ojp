@@ -2,14 +2,12 @@ package org.openjproxy.grpc.server;
 
 import com.openjproxy.grpc.CallResourceRequest;
 import com.openjproxy.grpc.CallResourceResponse;
-import com.openjproxy.grpc.CallType;
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.DbName;
 import com.openjproxy.grpc.LobDataBlock;
 import com.openjproxy.grpc.LobReference;
 import com.openjproxy.grpc.OpResult;
 import com.openjproxy.grpc.ReadLobRequest;
-import com.openjproxy.grpc.ResourceType;
 import com.openjproxy.grpc.ResultSetFetchRequest;
 import com.openjproxy.grpc.ResultType;
 import com.openjproxy.grpc.SessionInfo;
@@ -29,32 +27,37 @@ import org.openjproxy.database.DatabaseUtils;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
+import org.openjproxy.grpc.server.action.resource.CallResourceAction;
+import org.openjproxy.grpc.server.action.session.TerminateSessionAction;
+import org.openjproxy.grpc.server.action.transaction.CommitTransactionAction;
+import org.openjproxy.grpc.server.action.transaction.RollbackTransactionAction;
 import org.openjproxy.grpc.server.action.transaction.StartTransactionAction;
 import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
+import org.openjproxy.grpc.server.action.xa.XaCommitAction;
+import org.openjproxy.grpc.server.action.xa.XaEndAction;
+import org.openjproxy.grpc.server.action.xa.XaPrepareAction;
+import org.openjproxy.grpc.server.action.xa.XaRecoverAction;
+import org.openjproxy.grpc.server.action.xa.XaRollbackAction;
+import org.openjproxy.grpc.server.action.xa.XaStartAction;
 import org.openjproxy.grpc.server.lob.LobProcessor;
 import org.openjproxy.grpc.server.resultset.ResultSetWrapper;
+import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.utils.DateTimeUtils;
-import org.openjproxy.grpc.server.utils.MethodNameGenerator;
-import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
-import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
-import org.openjproxy.grpc.server.action.xa.XaStartAction;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
-import org.openjproxy.grpc.server.action.transaction.RollbackTransactionAction;
+
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.sql.Clob;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -69,17 +72,7 @@ import java.util.ServiceLoader;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.openjproxy.grpc.server.Constants.EMPTY_LIST;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
-
-import org.openjproxy.grpc.server.action.xa.XaEndAction;
-import org.openjproxy.grpc.server.action.transaction.CommitTransactionAction;
-import org.openjproxy.grpc.server.action.session.TerminateSessionAction;
-import org.openjproxy.grpc.server.action.resource.CallResourceAction;
-import org.openjproxy.grpc.server.action.xa.XaPrepareAction;
-import org.openjproxy.grpc.server.action.xa.XaCommitAction;
-import org.openjproxy.grpc.server.action.xa.XaRollbackAction;
-import org.openjproxy.grpc.server.action.xa.XaRecoverAction;
 
 @Slf4j
 public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
@@ -481,42 +474,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void callResource(CallResourceRequest request, StreamObserver<CallResourceResponse> responseObserver) {
         CallResourceAction.getInstance().execute(actionContext, request, responseObserver);
-    }
-
-    /**
-     * As DB2 eagerly closes result sets in multiple situations the result set
-     * metadata is saved a priori in a session
-     * attribute and has to be read in a special manner treated in this method.
-     *
-     * @param request
-     * @param responseObserver
-     * @return boolean
-     * @throws SQLException
-     */
-    @SneakyThrows
-    private boolean db2SpecialResultSetMetadata(CallResourceRequest request,
-            StreamObserver<CallResourceResponse> responseObserver) throws SQLException {
-        if (DbName.DB2.equals(this.dbNameMap.get(request.getSession().getConnHash())) &&
-                ResourceType.RES_RESULT_SET.equals(request.getResourceType()) &&
-                CallType.CALL_GET.equals(request.getTarget().getCallType()) &&
-                "Metadata".equalsIgnoreCase(request.getTarget().getResourceName())) {
-            ResultSetMetaData resultSetMetaData = (ResultSetMetaData) this.sessionManager.getAttr(request.getSession(),
-                    RESULT_SET_METADATA_ATTR_PREFIX + request.getResourceUUID());
-            List<Object> paramsReceived = (request.getTarget().getNextCall().getParamsCount() > 0)
-                    ? ProtoConverter.parameterValuesToObjectList(request.getTarget().getNextCall().getParamsList())
-                    : EMPTY_LIST;
-            Method methodNext = MethodReflectionUtils.findMethodByName(ResultSetMetaData.class,
-                    MethodNameGenerator.methodName(request.getTarget().getNextCall()),
-                    paramsReceived);
-            Object metadataResult = methodNext.invoke(resultSetMetaData, paramsReceived.toArray());
-            responseObserver.onNext(CallResourceResponse.newBuilder()
-                    .setSession(request.getSession())
-                    .addValues(ProtoConverter.toParameterValue(metadataResult))
-                    .build());
-            responseObserver.onCompleted();
-            return true;
-        }
-        return false;
     }
 
     /**
