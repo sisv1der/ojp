@@ -624,15 +624,20 @@ public class CommonsPool2XADataSource implements XADataSource {
             log.info("Using virtual threads for housekeeping tasks (Java 21+)");
             return factory;
             
+        } catch (NoSuchMethodException e) {
+            // Virtual threads not available (Java < 21), fall back to regular threads
+            log.debug("Virtual threads not available (Java < 21), using regular daemon threads");
         } catch (Exception e) {
-            // Virtual threads not available, fall back to regular threads
-            log.debug("Virtual threads not available, using regular daemon threads: {}", e.getMessage());
-            return r -> {
-                Thread t = new Thread(r, "ojp-xa-housekeeping");
-                t.setDaemon(true);
-                return t;
-            };
+            // Unexpected error in reflection, log as warning
+            log.warn("Failed to create virtual thread factory, falling back to regular daemon threads: {}", e.toString());
         }
+        
+        // Fallback: regular daemon threads
+        return r -> {
+            Thread t = new Thread(r, "ojp-xa-housekeeping");
+            t.setDaemon(true);
+            return t;
+        };
     }
     
     private void initializeHousekeeping() {
