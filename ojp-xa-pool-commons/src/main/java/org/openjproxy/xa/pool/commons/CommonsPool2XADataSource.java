@@ -597,47 +597,16 @@ public class CommonsPool2XADataSource implements XADataSource {
     }
     
     /**
-     * Creates a ThreadFactory that uses virtual threads if available (Java 21+),
-     * otherwise falls back to regular daemon threads.
+     * Creates a ThreadFactory that uses virtual threads.
      * <p>
-     * This method uses reflection to maintain compatibility with Java 11 while
-     * taking advantage of virtual threads when running on Java 21+.
+     * This module runs only on ojp-server which is guaranteed to be running on Java 21+,
+     * so we can directly use virtual threads without reflection.
      * </p>
      *
-     * @return a ThreadFactory for housekeeping tasks
+     * @return a ThreadFactory for housekeeping tasks using virtual threads
      */
     private java.util.concurrent.ThreadFactory createThreadFactory() {
-        // Try to use virtual threads if available (Java 21+)
-        try {
-            // Check if Thread.ofVirtual() exists (Java 21+)
-            java.lang.reflect.Method ofVirtualMethod = Thread.class.getMethod("ofVirtual");
-            Object builder = ofVirtualMethod.invoke(null);
-            
-            // Call name() method on the builder
-            java.lang.reflect.Method nameMethod = builder.getClass().getMethod("name", String.class, long.class);
-            Object namedBuilder = nameMethod.invoke(builder, "ojp-xa-housekeeping-", 0L);
-            
-            // Call factory() method to get ThreadFactory
-            java.lang.reflect.Method factoryMethod = namedBuilder.getClass().getMethod("factory");
-            java.util.concurrent.ThreadFactory factory = (java.util.concurrent.ThreadFactory) factoryMethod.invoke(namedBuilder);
-            
-            log.info("Using virtual threads for housekeeping tasks (Java 21+)");
-            return factory;
-            
-        } catch (NoSuchMethodException e) {
-            // Virtual threads not available (Java < 21), fall back to regular threads
-            log.debug("Virtual threads not available (Java < 21), using regular daemon threads");
-        } catch (Exception e) {
-            // Unexpected error in reflection, log as warning
-            log.warn("Failed to create virtual thread factory, falling back to regular daemon threads: {}", e.toString());
-        }
-        
-        // Fallback: regular daemon threads
-        return r -> {
-            Thread t = new Thread(r, "ojp-xa-housekeeping");
-            t.setDaemon(true);
-            return t;
-        };
+        return Thread.ofVirtual().name("ojp-xa-housekeeping-", 0).factory();
     }
     
     private void initializeHousekeeping() {
