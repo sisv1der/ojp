@@ -9,6 +9,7 @@ import org.openjproxy.xa.pool.commons.housekeeping.HousekeepingConfig;
 import org.openjproxy.xa.pool.commons.housekeeping.HousekeepingListener;
 import org.openjproxy.xa.pool.commons.housekeeping.LeakDetectionTask;
 import org.openjproxy.xa.pool.commons.housekeeping.LoggingHousekeepingListener;
+import org.openjproxy.xa.pool.commons.metrics.NoOpPoolMetrics;
 import org.openjproxy.xa.pool.commons.metrics.PoolMetrics;
 import org.openjproxy.xa.pool.commons.metrics.PoolMetricsFactory;
 import org.slf4j.Logger;
@@ -100,10 +101,16 @@ public class CommonsPool2XADataSource implements XADataSource {
         // Parse housekeeping configuration
         this.housekeepingConfig = HousekeepingConfig.parseFromProperties(config);
         
-        // Create housekeeping listener with metrics support
+        // Create housekeeping listener with metrics support only if metrics are enabled
         HousekeepingListener baseListener = new LoggingHousekeepingListener();
-        this.housekeepingListener = new org.openjproxy.xa.pool.commons.housekeeping.MetricsAwareHousekeepingListener(
-            baseListener, poolMetrics, poolName);
+        if (poolMetrics instanceof NoOpPoolMetrics) {
+            // Metrics disabled, use base listener directly
+            this.housekeepingListener = baseListener;
+        } else {
+            // Metrics enabled, wrap with metrics-aware listener
+            this.housekeepingListener = new org.openjproxy.xa.pool.commons.housekeeping.MetricsAwareHousekeepingListener(
+                baseListener, poolMetrics, poolName);
+        }
         
         // Initialize leak detection tracking
         this.borrowedSessions = new ConcurrentHashMap<>();
@@ -589,16 +596,52 @@ public class CommonsPool2XADataSource implements XADataSource {
         }
     }
     
+    /**
+     * Creates a ThreadFactory that uses virtual threads if available (Java 21+),
+     * otherwise falls back to regular daemon threads.
+     * <p>
+     * This method uses reflection to maintain compatibility with Java 11 while
+     * taking advantage of virtual threads when running on Java 21+.
+     * </p>
+     *
+     * @return a ThreadFactory for housekeeping tasks
+     */
+    private java.util.concurrent.ThreadFactory createThreadFactory() {
+        // Try to use virtual threads if available (Java 21+)
+        try {
+            // Check if Thread.ofVirtual() exists (Java 21+)
+            java.lang.reflect.Method ofVirtualMethod = Thread.class.getMethod("ofVirtual");
+            Object builder = ofVirtualMethod.invoke(null);
+            
+            // Call name() method on the builder
+            java.lang.reflect.Method nameMethod = builder.getClass().getMethod("name", String.class, long.class);
+            Object namedBuilder = nameMethod.invoke(builder, "ojp-xa-housekeeping-", 0L);
+            
+            // Call factory() method to get ThreadFactory
+            java.lang.reflect.Method factoryMethod = namedBuilder.getClass().getMethod("factory");
+            java.util.concurrent.ThreadFactory factory = (java.util.concurrent.ThreadFactory) factoryMethod.invoke(namedBuilder);
+            
+            log.info("Using virtual threads for housekeeping tasks (Java 21+)");
+            return factory;
+            
+        } catch (Exception e) {
+            // Virtual threads not available, fall back to regular threads
+            log.debug("Virtual threads not available, using regular daemon threads: {}", e.getMessage());
+            return r -> {
+                Thread t = new Thread(r, "ojp-xa-housekeeping");
+                t.setDaemon(true);
+                return t;
+            };
+        }
+    }
+    
     private void initializeHousekeeping() {
         boolean needsExecutor = housekeepingConfig.isLeakDetectionEnabled() || housekeepingConfig.isDiagnosticsEnabled();
         
         if (needsExecutor) {
             // Create executor for housekeeping tasks
-            housekeepingExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "ojp-xa-housekeeping");
-                t.setDaemon(true);
-                return t;
-            });
+            // Use virtual threads if available (Java 21+), otherwise use regular threads
+            housekeepingExecutor = Executors.newSingleThreadScheduledExecutor(createThreadFactory());
         }
         
         // Initialize leak detection if enabled
