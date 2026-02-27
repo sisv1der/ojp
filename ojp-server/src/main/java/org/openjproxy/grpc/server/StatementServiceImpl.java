@@ -2,14 +2,12 @@ package org.openjproxy.grpc.server;
 
 import com.openjproxy.grpc.CallResourceRequest;
 import com.openjproxy.grpc.CallResourceResponse;
-import com.openjproxy.grpc.CallType;
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.DbName;
 import com.openjproxy.grpc.LobDataBlock;
 import com.openjproxy.grpc.LobReference;
 import com.openjproxy.grpc.OpResult;
 import com.openjproxy.grpc.ReadLobRequest;
-import com.openjproxy.grpc.ResourceType;
 import com.openjproxy.grpc.ResultSetFetchRequest;
 import com.openjproxy.grpc.ResultType;
 import com.openjproxy.grpc.SessionInfo;
@@ -17,9 +15,6 @@ import com.openjproxy.grpc.SessionTerminationStatus;
 import com.openjproxy.grpc.SqlErrorType;
 import com.openjproxy.grpc.StatementRequest;
 import com.openjproxy.grpc.StatementServiceGrpc;
-import com.openjproxy.grpc.TransactionInfo;
-import com.openjproxy.grpc.TransactionStatus;
-import com.zaxxer.hikari.HikariDataSource;
 import io.grpc.stub.StreamObserver;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,32 +27,37 @@ import org.openjproxy.database.DatabaseUtils;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
+import org.openjproxy.grpc.server.action.resource.CallResourceAction;
+import org.openjproxy.grpc.server.action.session.TerminateSessionAction;
+import org.openjproxy.grpc.server.action.transaction.CommitTransactionAction;
+import org.openjproxy.grpc.server.action.transaction.RollbackTransactionAction;
+import org.openjproxy.grpc.server.action.transaction.StartTransactionAction;
+import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
+import org.openjproxy.grpc.server.action.xa.XaCommitAction;
+import org.openjproxy.grpc.server.action.xa.XaEndAction;
+import org.openjproxy.grpc.server.action.xa.XaPrepareAction;
+import org.openjproxy.grpc.server.action.xa.XaRecoverAction;
+import org.openjproxy.grpc.server.action.xa.XaRollbackAction;
+import org.openjproxy.grpc.server.action.xa.XaStartAction;
 import org.openjproxy.grpc.server.lob.LobProcessor;
-import org.openjproxy.grpc.server.pool.ConnectionPoolConfigurer;
 import org.openjproxy.grpc.server.resultset.ResultSetWrapper;
+import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.utils.DateTimeUtils;
-import org.openjproxy.grpc.server.utils.MethodNameGenerator;
-import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
-import org.openjproxy.grpc.server.utils.SessionInfoUtils;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
-import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
-import org.openjproxy.grpc.server.action.xa.XaStartAction;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
-import org.openjproxy.grpc.server.action.transaction.RollbackTransactionAction;
+
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.sql.Clob;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -72,17 +72,7 @@ import java.util.ServiceLoader;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.openjproxy.grpc.server.Constants.EMPTY_LIST;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
-
-import org.openjproxy.grpc.server.action.xa.XaEndAction;
-import org.openjproxy.grpc.server.action.transaction.CommitTransactionAction;
-import org.openjproxy.grpc.server.action.session.TerminateSessionAction;
-import org.openjproxy.grpc.server.action.resource.CallResourceAction;
-import org.openjproxy.grpc.server.action.xa.XaPrepareAction;
-import org.openjproxy.grpc.server.action.xa.XaCommitAction;
-import org.openjproxy.grpc.server.action.xa.XaRollbackAction;
-import org.openjproxy.grpc.server.action.xa.XaRecoverAction;
 
 @Slf4j
 public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
@@ -96,7 +86,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // management)
     private final Map<String, XATransactionRegistry> xaRegistries = new ConcurrentHashMap<>();
     private final SessionManager sessionManager;
-    private final CircuitBreaker circuitBreaker;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     // Per-datasource slow query segregation managers
     private final Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers = new ConcurrentHashMap<>();
@@ -122,10 +112,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
-    public StatementServiceImpl(SessionManager sessionManager, CircuitBreaker circuitBreaker,
+    public StatementServiceImpl(SessionManager sessionManager, CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
         this.sessionManager = sessionManager;
-        this.circuitBreaker = circuitBreaker;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
         // Server configuration for creating segregation managers
         this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
                 serverConfiguration.isSqlEnhancerEnabled());
@@ -143,7 +133,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 xaCoordinator,
                 clusterHealthTracker,
                 sessionManager,
-                circuitBreaker,
+                circuitBreakerRegistry,
                 serverConfiguration);
     }
 
@@ -202,101 +192,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         }
     }
 
-    /**
-     * Gets the target server identifier from the incoming request.
-     * Simply echoes back what the client sent without any override.
-     */
-    private String getTargetServer(SessionInfo incomingSessionInfo) {
-        // Echo back the targetServer from incoming request, or return empty string if
-        // not present
-        if (incomingSessionInfo != null &&
-                incomingSessionInfo.getTargetServer() != null &&
-                !incomingSessionInfo.getTargetServer().isEmpty()) {
-            return incomingSessionInfo.getTargetServer();
-        }
-
-        // Return empty string if client didn't send targetServer
-        return "";
-    }
-
-    /**
-     * Processes cluster health from the client request and triggers pool
-     * rebalancing if needed.
-     * This should be called for every request that includes SessionInfo with
-     * cluster health.
-     */
-    private void processClusterHealth(SessionInfo sessionInfo) {
-        if (sessionInfo == null) {
-            log.debug("[XA-REBALANCE-DEBUG] processClusterHealth: sessionInfo is null");
-            return;
-        }
-
-        String clusterHealth = sessionInfo.getClusterHealth();
-        String connHash = sessionInfo.getConnHash();
-
-        log.debug(
-                "[XA-REBALANCE] processClusterHealth called: connHash={}, clusterHealth='{}', isXA={}, hasXARegistry={}",
-                connHash, clusterHealth, sessionInfo.getIsXA(), xaRegistries.containsKey(connHash));
-
-        if (clusterHealth != null && !clusterHealth.isEmpty() &&
-                connHash != null && !connHash.isEmpty()) {
-
-            // Check if cluster health has changed
-            boolean healthChanged = clusterHealthTracker.hasHealthChanged(connHash, clusterHealth);
-
-            log.debug("[XA-REBALANCE] Cluster health check for {}: changed={}, current health='{}', isXA={}",
-                    connHash, healthChanged, clusterHealth, sessionInfo.getIsXA());
-
-            if (healthChanged) {
-                int healthyServerCount = clusterHealthTracker.countHealthyServers(clusterHealth);
-                log.info(
-                        "[XA-REBALANCE] Cluster health changed for {}, healthy servers: {}, triggering pool rebalancing, isXA={}",
-                        connHash, healthyServerCount, sessionInfo.getIsXA());
-
-                // Update the pool coordinator with new healthy server count
-                ConnectionPoolConfigurer.getPoolCoordinator().updateHealthyServers(connHash, healthyServerCount);
-
-                // Apply pool size changes to non-XA HikariDataSource if present
-                DataSource ds = datasourceMap.get(connHash);
-                if (ds instanceof HikariDataSource) {
-                    log.info("[XA-REBALANCE-DEBUG] Applying size changes to HikariDataSource for {}", connHash);
-                    ConnectionPoolConfigurer.applyPoolSizeChanges(connHash, (HikariDataSource) ds);
-                } else {
-                    log.info("[XA-REBALANCE-DEBUG] No HikariDataSource found for {}", connHash);
-                }
-
-                // Apply pool size changes to XA registry if present
-                XATransactionRegistry xaRegistry = xaRegistries.get(connHash);
-                if (xaRegistry != null) {
-                    log.info("[XA-REBALANCE-DEBUG] Found XA registry for {}, resizing", connHash);
-                    MultinodePoolCoordinator.PoolAllocation allocation = ConnectionPoolConfigurer.getPoolCoordinator()
-                            .getPoolAllocation(connHash);
-
-                    if (allocation != null) {
-                        int newMaxPoolSize = allocation.getCurrentMaxPoolSize();
-                        int newMinIdle = allocation.getCurrentMinIdle();
-
-                        log.info("[XA-REBALANCE-DEBUG] Resizing XA backend pool for {}: maxPoolSize={}, minIdle={}",
-                                connHash, newMaxPoolSize, newMinIdle);
-
-                        xaRegistry.resizeBackendPool(newMaxPoolSize, newMinIdle);
-                    } else {
-                        log.warn("[XA-REBALANCE-DEBUG] No pool allocation found for {}", connHash);
-                    }
-                } else if (sessionInfo.getIsXA()) {
-                    // Only log missing XA registry for actual XA connections
-                    log.info("[XA-REBALANCE-DEBUG] No XA registry found for XA connection {}", connHash);
-                }
-            } else {
-                log.debug("[XA-REBALANCE-DEBUG] Cluster health unchanged for {}", connHash);
-            }
-        } else {
-            log.info("[XA-REBALANCE-DEBUG] Skipping cluster health processing: clusterHealth={}, connHash={}",
-                    clusterHealth != null && !clusterHealth.isEmpty() ? "present" : "empty",
-                    connHash != null && !connHash.isEmpty() ? "present" : "empty");
-        }
-    }
-
     @Override
     public void connect(ConnectionDetails connectionDetails, StreamObserver<SessionInfo> responseObserver) {
         org.openjproxy.grpc.server.action.connection.ConnectAction.getInstance()
@@ -323,48 +218,12 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void executeUpdate(StatementRequest request, StreamObserver<OpResult> responseObserver) {
         log.info("Executing update {}", request.getSql());
-        
-        // Update session activity
-        updateSessionActivity(request.getSession());
-        
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
-        // Process cluster health from the request
-        processClusterHealth(request.getSession());
-
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Get the appropriate slow query segregation manager for this datasource
-            String connHash = request.getSession().getConnHash();
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
-
-            // Execute with slow query segregation
-            OpResult result = manager.executeWithSegregation(stmtHash, () -> executeUpdateInternal(request));
-
+        executeWithResilience(request, responseObserver, () -> {
+            OpResult result = executeUpdateInternal(request);
             responseObserver.onNext(result);
             responseObserver.onCompleted();
-            circuitBreaker.onSuccess(stmtHash);
-
-        } catch (SQLDataException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL data failure during update execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver, SqlErrorType.SQL_DATA_EXCEPTION);
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("Failure during update execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during update execution: " + e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        }
+        }, SqlErrorType.SQL_DATA_EXCEPTION, "update");
     }
 
     /**
@@ -468,44 +327,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void executeQuery(StatementRequest request, StreamObserver<OpResult> responseObserver) {
         log.info("Executing query for {}", request.getSql());
-        
-        // Update session activity
-        updateSessionActivity(request.getSession());
-        
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
 
-        // Process cluster health from the request
-        processClusterHealth(request.getSession());
-
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Get the appropriate slow query segregation manager for this datasource
-            String connHash = request.getSession().getConnHash();
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
-
-            // Execute with slow query segregation
-            manager.executeWithSegregation(stmtHash, () -> {
-                executeQueryInternal(request, responseObserver);
-                return null; // Void return for query execution
-            });
-
-            circuitBreaker.onSuccess(stmtHash);
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("Failure during query execution: " + e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during query execution: " + e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        }
+        executeWithResilience(request, responseObserver, () -> {
+            executeQueryInternal(request, responseObserver);
+        }, null, "query");
     }
 
     /**
@@ -525,6 +350,36 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         long enhancementStartTime = System.currentTimeMillis();
 
         if (sqlEnhancerEngine.isEnabled()) {
+            // Ensure schema is loaded before enhancement (on-demand, only once)
+            try {
+                // Get the DataSource for this connection
+                String dsKey = dto.getSession().getConnHash();
+                DataSource dataSource = datasourceMap.get(dsKey);
+
+                if (dataSource != null) {
+                    // Get catalog and schema from the connection
+                    Connection connection = dto.getConnection();
+                    String catalogName = connection.getCatalog();
+                    String schemaName = connection.getSchema();
+
+                    // PostgreSQL: Use "public" schema if schema name is null or empty
+                    // This ensures tables created in the default schema are visible to Calcite
+                    if ((schemaName == null || schemaName.isEmpty()) &&
+                        connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("PostgreSQL")) {
+                        schemaName = "public";
+                        log.debug("Using default PostgreSQL 'public' schema for schema loading");
+                    }
+
+                    // Ensure schema is loaded (thread-safe, idempotent)
+                    sqlEnhancerEngine.ensureSchemaLoaded(dataSource, catalogName, schemaName);
+                } else {
+                    log.debug("No DataSource found for connection hash: {}", dsKey);
+                }
+            } catch (Exception e) {
+                // Log but don't fail - enhancement can proceed without schema
+                log.warn("Failed to ensure schema loaded: {}", e.getMessage());
+            }
+
             org.openjproxy.grpc.server.sql.SqlEnhancementResult result = sqlEnhancerEngine.enhance(sql);
             sql = result.getEnhancedSql();
 
@@ -560,7 +415,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         updateSessionActivity(request.getSession());
 
         // Process cluster health from the request
-        processClusterHealth(request.getSession());
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
 
         try {
             ConnectionSessionDTO dto = this.sessionConnection(request.getSession(), false);
@@ -601,43 +456,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void startTransaction(SessionInfo sessionInfo, StreamObserver<SessionInfo> responseObserver) {
-        log.info("Starting transaction");
-
-        // Process cluster health from the request
-        processClusterHealth(sessionInfo);
-
-        try {
-            SessionInfo activeSessionInfo = sessionInfo;
-
-            // Start a session if none started yet.
-            if (StringUtils.isEmpty(sessionInfo.getSessionUUID())) {
-                Connection conn = this.datasourceMap.get(sessionInfo.getConnHash()).getConnection();
-                activeSessionInfo = sessionManager.createSession(sessionInfo.getClientUUID(), conn);
-                // Preserve targetServer from incoming request
-                activeSessionInfo = SessionInfoUtils.withTargetServer(activeSessionInfo, getTargetServer(sessionInfo));
-            }
-            Connection sessionConnection = sessionManager.getConnection(activeSessionInfo);
-            // Start a transaction
-            sessionConnection.setAutoCommit(Boolean.FALSE);
-
-            TransactionInfo transactionInfo = TransactionInfo.newBuilder()
-                    .setTransactionStatus(TransactionStatus.TRX_ACTIVE)
-                    .setTransactionUUID(UUID.randomUUID().toString())
-                    .build();
-
-            SessionInfo.Builder sessionInfoBuilder = SessionInfoUtils.newBuilderFrom(activeSessionInfo);
-            sessionInfoBuilder.setTransactionInfo(transactionInfo);
-            // Server echoes back targetServer from incoming request (preserved by
-            // newBuilderFrom)
-
-            responseObserver.onNext(sessionInfoBuilder.build());
-            responseObserver.onCompleted();
-        } catch (SQLException se) {
-            sendSQLExceptionMetadata(se, responseObserver);
-        } catch (Exception e) {
-            sendSQLExceptionMetadata(new SQLException("Unable to start transaction: " + e.getMessage()),
-                    responseObserver);
-        }
+        StartTransactionAction.getInstance()
+                .execute(actionContext, sessionInfo, responseObserver);
     }
 
     @Override
@@ -654,42 +474,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void callResource(CallResourceRequest request, StreamObserver<CallResourceResponse> responseObserver) {
         CallResourceAction.getInstance().execute(actionContext, request, responseObserver);
-    }
-
-    /**
-     * As DB2 eagerly closes result sets in multiple situations the result set
-     * metadata is saved a priori in a session
-     * attribute and has to be read in a special manner treated in this method.
-     *
-     * @param request
-     * @param responseObserver
-     * @return boolean
-     * @throws SQLException
-     */
-    @SneakyThrows
-    private boolean db2SpecialResultSetMetadata(CallResourceRequest request,
-            StreamObserver<CallResourceResponse> responseObserver) throws SQLException {
-        if (DbName.DB2.equals(this.dbNameMap.get(request.getSession().getConnHash())) &&
-                ResourceType.RES_RESULT_SET.equals(request.getResourceType()) &&
-                CallType.CALL_GET.equals(request.getTarget().getCallType()) &&
-                "Metadata".equalsIgnoreCase(request.getTarget().getResourceName())) {
-            ResultSetMetaData resultSetMetaData = (ResultSetMetaData) this.sessionManager.getAttr(request.getSession(),
-                    RESULT_SET_METADATA_ATTR_PREFIX + request.getResourceUUID());
-            List<Object> paramsReceived = (request.getTarget().getNextCall().getParamsCount() > 0)
-                    ? ProtoConverter.parameterValuesToObjectList(request.getTarget().getNextCall().getParamsList())
-                    : EMPTY_LIST;
-            Method methodNext = MethodReflectionUtils.findMethodByName(ResultSetMetaData.class,
-                    MethodNameGenerator.methodName(request.getTarget().getNextCall()),
-                    paramsReceived);
-            Object metadataResult = methodNext.invoke(resultSetMetaData, paramsReceived.toArray());
-            responseObserver.onNext(CallResourceResponse.newBuilder()
-                    .setSession(request.getSession())
-                    .addValues(ProtoConverter.toParameterValue(metadataResult))
-                    .build());
-            responseObserver.onCompleted();
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -940,6 +724,75 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 resultSetUUID, new HydratedResultSetMetadata(rs.getMetaData()));
     }
 
+    /**
+     * Helper method to centralize session validation, activity updates, cluster health processing,
+     * circuit breaker checks, and slow query segregation for statement execution.
+     * This resolves SonarQube duplication issues.
+     */
+    private void executeWithResilience(StatementRequest request, StreamObserver<OpResult> responseObserver,
+                                       StatementExecution executionLogic, SqlErrorType sqlDataExceptionType, String operationName) {
+
+        // Ensure session isn't null
+        if (request.getSession() == null || StringUtils.isBlank(request.getSession().getConnHash())) {
+            sendSQLExceptionMetadata(new SQLException("Invalid request: Session or ConnHash is missing"), responseObserver);
+            log.error("Invalid {} request: Session or ConnHash is missing", operationName);
+            return;
+        }
+
+        // Update session activity
+        updateSessionActivity(request.getSession());
+
+        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
+        // Process cluster health from the request
+        ProcessClusterHealthAction.getInstance().execute(actionContext, request.getSession());
+
+
+        String connHash = request.getSession().getConnHash();
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.get(connHash);
+
+        try {
+            circuitBreaker.preCheck(stmtHash);
+
+            // Get the appropriate slow query segregation manager for this datasource
+            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
+
+            // Execute with slow query segregation
+            manager.executeWithSegregation(stmtHash, () -> {
+                executionLogic.execute();
+                return null;
+            });
+
+            circuitBreaker.onSuccess(stmtHash);
+
+        } catch(SQLDataException e) {
+            circuitBreaker.onFailure(stmtHash, e);
+            log.error("SQL data failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            SqlErrorType type = sqlDataExceptionType != null
+                    ? sqlDataExceptionType
+                    : SqlErrorType.SQL_EXCEPTION;
+
+            sendSQLExceptionMetadata(e, responseObserver, type);
+
+        } catch (SQLException e) {
+            circuitBreaker.onFailure(stmtHash, e);
+            log.error("SQL failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            sendSQLExceptionMetadata(e, responseObserver);
+        } catch (Exception e) {
+            log.error("Unexpected failure during {} execution: {}",
+                    operationName, e.getMessage(), e);
+            if (e.getCause() instanceof SQLException sqlException) {
+                circuitBreaker.onFailure(stmtHash, sqlException);
+                sendSQLExceptionMetadata(sqlException, responseObserver);
+            } else {
+                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
+                circuitBreaker.onFailure(stmtHash, sqlException);
+                sendSQLExceptionMetadata(sqlException, responseObserver);
+            }
+        }
+    }
+
     // ===== XA Transaction Operations =====
 
     @Override
@@ -1006,5 +859,21 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             StreamObserver<com.openjproxy.grpc.XaIsSameRMResponse> responseObserver) {
         org.openjproxy.grpc.server.action.transaction.XaIsSameRMAction.getInstance()
                 .execute(actionContext, request, responseObserver);
+    }
+
+    /**
+     * Shuts down the SQL enhancer engine and releases associated resources.
+     * This method should be called during server shutdown to ensure proper cleanup.
+     */
+    public void shutdown() {
+        if (sqlEnhancerEngine != null) {
+            log.info("Shutting down SQL enhancer engine");
+            sqlEnhancerEngine.shutdown();
+        }
+    }
+
+    @FunctionalInterface
+    private interface StatementExecution {
+        void execute() throws Exception;
     }
 }

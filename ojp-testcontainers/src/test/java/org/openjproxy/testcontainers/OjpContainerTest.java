@@ -3,7 +3,11 @@ package org.openjproxy.testcontainers;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.utility.DockerImageName;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for OjpContainer.
@@ -22,7 +26,7 @@ class OjpContainerTest {
 
     @Test
     void testConstructorWithImageTag() {
-        try (OjpContainer container = new OjpContainer("0.3.1-beta")) {
+        try (OjpContainer container = new OjpContainer("0.3.2-beta")) {
             assertNotNull(container);
             assertEquals(1, container.getExposedPorts().size());
             assertTrue(container.getExposedPorts().contains(1059));
@@ -31,7 +35,7 @@ class OjpContainerTest {
 
     @Test
     void testConstructorWithDockerImageName() {
-        DockerImageName imageName = DockerImageName.parse("rrobetti/ojp:0.3.1-beta");
+        DockerImageName imageName = DockerImageName.parse("rrobetti/ojp:0.3.2-beta");
         try (OjpContainer container = new OjpContainer(imageName)) {
             assertNotNull(container);
             assertEquals(1, container.getExposedPorts().size());

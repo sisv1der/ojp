@@ -5,15 +5,17 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for ServerConfiguration class.
  */
-public class ServerConfigurationTest {
+class ServerConfigurationTest {
 
     @AfterEach
-    public void cleanup() {
+    void cleanup() {
         // Clear any system properties set during tests
         System.clearProperty("ojp.server.port");
         System.clearProperty("ojp.prometheus.port");
@@ -30,7 +32,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testDefaultConfiguration() {
+    void testDefaultConfiguration() {
         ServerConfiguration config = new ServerConfiguration();
 
         assertEquals(ServerConfiguration.DEFAULT_SERVER_PORT, config.getServerPort());
@@ -49,7 +51,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testJvmSystemPropertiesOverride() {
+    void testJvmSystemPropertiesOverride() {
         // Set JVM system properties
         System.setProperty("ojp.server.port", "8080");
         System.setProperty("ojp.prometheus.port", "9091");
@@ -79,7 +81,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testInvalidIntegerValues() {
+    void testInvalidIntegerValues() {
         System.setProperty("ojp.server.port", "invalid");
         System.setProperty("ojp.prometheus.port", "not-a-number");
         System.setProperty("ojp.server.threadPoolSize", "abc");
@@ -95,7 +97,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testInvalidLongValues() {
+    void testInvalidLongValues() {
         System.setProperty("ojp.server.connectionIdleTimeout", "invalid-long");
         System.setProperty("ojp.server.circuitBreakerTimeout", "not-a-number");
 
@@ -106,7 +108,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testBooleanValues() {
+    void testBooleanValues() {
         System.setProperty("ojp.opentelemetry.enabled", "true");
 
         ServerConfiguration config = new ServerConfiguration();
@@ -115,7 +117,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testListProperties() {
+    void testListProperties() {
         System.setProperty("ojp.server.allowedIps", "192.168.1.1, 10.0.0.0/8 , 172.16.0.1");
         System.setProperty("ojp.prometheus.allowedIps", "127.0.0.1,192.168.0.0/16");
 
@@ -126,7 +128,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testEmptyListProperties() {
+    void testEmptyListProperties() {
         System.setProperty("ojp.server.allowedIps", "");
         System.setProperty("ojp.prometheus.allowedIps", " ");
 
@@ -137,7 +139,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testGettersReturnDefensiveCopies() {
+    void testGettersReturnDefensiveCopies() {
         ServerConfiguration config = new ServerConfiguration();
 
         List<String> allowedIps = config.getAllowedIps();
@@ -152,7 +154,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testDriversPathConfiguration() {
+    void testDriversPathConfiguration() {
         // Test default value
         ServerConfiguration config = new ServerConfiguration();
         assertEquals(ServerConfiguration.DEFAULT_DRIVERS_PATH, config.getDriversPath());
@@ -164,7 +166,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testDefaultSessionCleanupConfiguration() {
+    void testDefaultSessionCleanupConfiguration() {
         ServerConfiguration config = new ServerConfiguration();
 
         assertEquals(ServerConfiguration.DEFAULT_SESSION_CLEANUP_ENABLED, config.isSessionCleanupEnabled());
@@ -173,7 +175,7 @@ public class ServerConfigurationTest {
     }
 
     @Test
-    public void testCustomSessionCleanupConfiguration() {
+    void testCustomSessionCleanupConfiguration() {
         // Set custom properties
         System.setProperty("ojp.server.sessionCleanup.enabled", "false");
         System.setProperty("ojp.server.sessionCleanup.timeoutMinutes", "60");
@@ -189,5 +191,69 @@ public class ServerConfigurationTest {
         System.clearProperty("ojp.server.sessionCleanup.enabled");
         System.clearProperty("ojp.server.sessionCleanup.timeoutMinutes");
         System.clearProperty("ojp.server.sessionCleanup.intervalMinutes");
+    }
+
+    @Test
+    void testDefaultTracingConfiguration() {
+        ServerConfiguration config = new ServerConfiguration();
+
+        assertFalse(config.isTracingEnabled());
+        assertEquals(ServerConfiguration.DEFAULT_TRACING_ENDPOINT, config.getTracingEndpoint());
+        assertEquals(ServerConfiguration.DEFAULT_TRACING_EXPORTER, config.getTracingExporter());
+        assertEquals(ServerConfiguration.DEFAULT_TRACING_SERVICE_NAME, config.getTracingServiceName());
+        assertEquals(ServerConfiguration.DEFAULT_TRACING_SAMPLE_RATE, config.getTracingSampleRate(), 0.001);
+    }
+
+    @Test
+    void testCustomTracingConfiguration() {
+        System.setProperty("ojp.tracing.enabled", "true");
+        System.setProperty("ojp.tracing.endpoint", "http://zipkin:9411/api/v2/spans");
+        System.setProperty("ojp.tracing.exporter", "zipkin");
+        System.setProperty("ojp.tracing.serviceName", "my-ojp");
+        System.setProperty("ojp.tracing.sampleRate", "0.5");
+
+        ServerConfiguration config = new ServerConfiguration();
+
+        assertTrue(config.isTracingEnabled());
+        assertEquals("http://zipkin:9411/api/v2/spans", config.getTracingEndpoint());
+        assertEquals("zipkin", config.getTracingExporter());
+        assertEquals("my-ojp", config.getTracingServiceName());
+        assertEquals(0.5, config.getTracingSampleRate(), 0.001);
+
+        // Cleanup
+        System.clearProperty("ojp.tracing.enabled");
+        System.clearProperty("ojp.tracing.endpoint");
+        System.clearProperty("ojp.tracing.exporter");
+        System.clearProperty("ojp.tracing.serviceName");
+        System.clearProperty("ojp.tracing.sampleRate");
+    }
+
+    @Test
+    void testOtlpTracingExporterConfiguration() {
+        System.setProperty("ojp.tracing.enabled", "true");
+        System.setProperty("ojp.tracing.exporter", "otlp");
+        System.setProperty("ojp.tracing.endpoint", "http://jaeger:4317");
+
+        ServerConfiguration config = new ServerConfiguration();
+
+        assertTrue(config.isTracingEnabled());
+        assertEquals("otlp", config.getTracingExporter());
+        assertEquals("http://jaeger:4317", config.getTracingEndpoint());
+
+        // Cleanup
+        System.clearProperty("ojp.tracing.enabled");
+        System.clearProperty("ojp.tracing.exporter");
+        System.clearProperty("ojp.tracing.endpoint");
+    }
+
+    @Test
+    void testInvalidTracingSampleRate() {
+        System.setProperty("ojp.tracing.sampleRate", "not-a-number");
+
+        ServerConfiguration config = new ServerConfiguration();
+
+        assertEquals(ServerConfiguration.DEFAULT_TRACING_SAMPLE_RATE, config.getTracingSampleRate(), 0.001);
+
+        System.clearProperty("ojp.tracing.sampleRate");
     }
 }

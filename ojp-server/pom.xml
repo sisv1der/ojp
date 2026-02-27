@@ -165,6 +165,22 @@
             <version>1.52.0-alpha</version>
         </dependency>
 
+        <!-- Zipkin trace exporter -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-zipkin -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-zipkin</artifactId>
+            <version>1.58.0</version>
+        </dependency>
+
+        <!-- OTLP trace exporter (alternative to Zipkin, e.g. for Jaeger/Tempo) -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-otlp -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <version>1.58.0</version>
+        </dependency>
+
         <!-- HTTP server for metrics endpoint -->
         <!-- https://mvnrepository.com/artifact/io.prometheus/simpleclient_httpserver -->
         <dependency>
@@ -278,6 +294,7 @@
                         </ports>
                         <jvmFlags>
                             <jvmFlag>-Dojp.libs.path=/opt/ojp/ojp-libs</jvmFlag>
+                            <jvmFlag>-Duser.timezone=UTC</jvmFlag>
                         </jvmFlags>
                     </container>
                     <!-- Include open source JDBC drivers in Docker image ("batteries included") -->

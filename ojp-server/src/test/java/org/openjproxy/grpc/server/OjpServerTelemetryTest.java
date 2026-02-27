@@ -7,18 +7,22 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class OjpServerTelemetryTest {
+	private static final int PROMETHEUS_PORT = 9191;
+	private static final int TIMEOUT = 5000;
+	private static final int RESPONSE_CODE_OK = 200;
 
 	private static GrpcTelemetry grpcTelemetry;
 
 	@BeforeAll
 	static void setUp() {
 		OjpServerTelemetry instrument = new OjpServerTelemetry();
-		grpcTelemetry = instrument.createGrpcTelemetry(9191);
+		grpcTelemetry = instrument.createGrpcTelemetry(PROMETHEUS_PORT);
 	}
 
 	@Test
@@ -32,11 +36,34 @@ class OjpServerTelemetryTest {
 	void shouldExposePrometheusMetricsEndpoint() throws IOException {
 		HttpURLConnection connection = (HttpURLConnection) URI.create("http://localhost:9191/metrics").toURL().openConnection();
 		connection.setRequestMethod("GET");
-		connection.setConnectTimeout(5000);
-		connection.setReadTimeout(5000);
+		connection.setConnectTimeout(TIMEOUT);
+		connection.setReadTimeout(TIMEOUT);
 
-		assertEquals(200, connection.getResponseCode());
+		assertEquals(RESPONSE_CODE_OK, connection.getResponseCode());
 		assertEquals("text/plain; version=0.0.4; charset=utf-8", connection.getContentType());
+	}
+
+	@Test
+	void shouldCreateNoOpGrpcTelemetryWhenDisabled() {
+		OjpServerTelemetry instrument = new OjpServerTelemetry();
+		GrpcTelemetry noOp = instrument.createNoOpGrpcTelemetry();
+
+		assertNotNull(noOp);
+		assertNotNull(noOp.newServerInterceptor());
+		assertNotNull(noOp.newClientInterceptor());
+	}
+
+	@Test
+	void shouldCreateGrpcTelemetryWithTracingDisabledByDefault() {
+		OjpServerTelemetry instrument = new OjpServerTelemetry();
+		// tracing disabled — no exporter is configured; must not throw
+		GrpcTelemetry telemetry = instrument.createGrpcTelemetry(
+				9192,
+				List.of(IpWhitelistValidator.ALLOW_ALL_IPS),
+				false, "zipkin", "http://localhost:9411/api/v2/spans", "ojp-server", 1.0);
+
+		assertNotNull(telemetry);
+		assertNotNull(telemetry.newServerInterceptor());
 	}
 
 }

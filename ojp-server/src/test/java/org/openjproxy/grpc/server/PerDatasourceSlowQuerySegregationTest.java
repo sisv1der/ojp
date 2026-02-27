@@ -1,6 +1,5 @@
 package org.openjproxy.grpc.server;
 
-import com.google.protobuf.ByteString;
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.SessionInfo;
 import io.grpc.stub.StreamObserver;
@@ -16,6 +15,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 /**
  * Test to verify that each datasource gets its own SlowQuerySegregationManager
@@ -27,16 +27,27 @@ public class PerDatasourceSlowQuerySegregationTest {
     private ServerConfiguration serverConfiguration;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
+        // Explicitly enable slow query segregation for per-datasource tests
+        System.setProperty("ojp.server.slowQuerySegregation.enabled", "true");
         serverConfiguration = new ServerConfiguration();
-        SessionManager sessionManager = Mockito.mock(SessionManager.class);
-        CircuitBreaker circuitBreaker = Mockito.mock(CircuitBreaker.class);
-        
-        statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration);
+        SessionManager sessionManager = mock(SessionManager.class);
+        // Create a real Registry using the configuration
+        CircuitBreakerRegistry circuitBreakerRegistry = new CircuitBreakerRegistry(
+                serverConfiguration.getCircuitBreakerTimeout(),
+                serverConfiguration.getCircuitBreakerThreshold()
+        );
+
+        statementService = new StatementServiceImpl(sessionManager, circuitBreakerRegistry, serverConfiguration);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        System.clearProperty("ojp.server.slowQuerySegregation.enabled");
     }
 
     @Test
-    public void testPerDatasourceSlowQuerySegregationManagerCreation() throws Exception {
+    void testPerDatasourceSlowQuerySegregationManagerCreation() throws Exception {
         // Create properties for first connection
         Properties clientProperties1 = new Properties();
         clientProperties1.setProperty("ojp.connection.pool.maximumPoolSize", "10");
@@ -132,7 +143,7 @@ public class PerDatasourceSlowQuerySegregationTest {
     }
 
     @Test
-    public void testManagerRetrievalForExistingConnection() throws Exception {
+    void testManagerRetrievalForExistingConnection() throws Exception {
         // Create properties
         Properties clientProperties = new Properties();
         clientProperties.setProperty("ojp.connection.pool.maximumPoolSize", "15");
@@ -171,7 +182,7 @@ public class PerDatasourceSlowQuerySegregationTest {
     }
 
     @Test
-    public void testFallbackManagerForNonExistentConnection() throws Exception {
+    void testFallbackManagerForNonExistentConnection() throws Exception {
         // Use reflection to call the private method with non-existent connection hash
         java.lang.reflect.Method getManagerMethod = StatementServiceImpl.class
                 .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", String.class);
