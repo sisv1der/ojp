@@ -20,14 +20,9 @@ import java.util.Map;
 public class PoolMetricsFactory {
     private static final Logger log = LoggerFactory.getLogger(PoolMetricsFactory.class);
     
-    // Primary config key
+    // Configuration keys
     private static final String METRICS_ENABLED_KEY = "ojp.telemetry.pool.metrics.enabled";
-    // Legacy keys for backward compatibility
-    private static final String METRICS_ENABLED_KEY_LEGACY_1 = "ojp.xa.metrics.enabled";
-    private static final String METRICS_ENABLED_KEY_LEGACY_2 = "xa.metrics.enabled";
-    
     private static final String POOL_NAME_KEY = "ojp.xa.poolName";
-    private static final String POOL_NAME_KEY_OLD = "xa.poolName";
     private static final String DEFAULT_POOL_NAME = "ojp-xa-pool";
     
     /**
@@ -43,23 +38,11 @@ public class PoolMetricsFactory {
             return NoOpPoolMetrics.INSTANCE;
         }
         
-        // Check if metrics are explicitly disabled (check all keys for backward compatibility)
-        // First check config map, then system properties
+        // Check if metrics are explicitly disabled
+        // Check config map first, then system properties
         String metricsEnabled = config.get(METRICS_ENABLED_KEY);
         if (metricsEnabled == null) {
             metricsEnabled = System.getProperty(METRICS_ENABLED_KEY);
-        }
-        if (metricsEnabled == null) {
-            metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_1);
-        }
-        if (metricsEnabled == null) {
-            metricsEnabled = System.getProperty(METRICS_ENABLED_KEY_LEGACY_1);
-        }
-        if (metricsEnabled == null) {
-            metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_2);
-        }
-        if (metricsEnabled == null) {
-            metricsEnabled = System.getProperty(METRICS_ENABLED_KEY_LEGACY_2);
         }
         if (metricsEnabled != null && "false".equalsIgnoreCase(metricsEnabled.trim())) {
             log.info("XA pool metrics explicitly disabled via configuration");
@@ -74,17 +57,10 @@ public class PoolMetricsFactory {
         // Try to create OpenTelemetry metrics if available
         if (openTelemetry != null) {
             try {
-                // Support both old and new config keys for pool name
-                // Check config map first, then system properties
+                // Get pool name from config (check config map first, then system properties)
                 String poolName = config.get(POOL_NAME_KEY);
                 if (poolName == null) {
                     poolName = System.getProperty(POOL_NAME_KEY);
-                }
-                if (poolName == null) {
-                    poolName = config.get(POOL_NAME_KEY_OLD);
-                }
-                if (poolName == null) {
-                    poolName = System.getProperty(POOL_NAME_KEY_OLD);
                 }
                 if (poolName == null) {
                     poolName = DEFAULT_POOL_NAME;

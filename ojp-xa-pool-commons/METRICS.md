@@ -58,11 +58,6 @@ ojp.telemetry.pool.metrics.enabled=true
 
 # Set a custom pool name for metrics labeling (default: ojp-xa-pool for XA pools)
 ojp.xa.poolName=my-app-xa-pool
-
-# For backward compatibility, legacy config keys are also supported:
-# ojp.xa.metrics.enabled=true
-# xa.metrics.enabled=true
-# xa.poolName=my-app-xa-pool
 ```
 
 ### Java Configuration Example

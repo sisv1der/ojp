@@ -180,7 +180,7 @@ graph LR
 
 Modern observability goes beyond logs. OJP integrates with OpenTelemetry to provide comprehensive metrics through Prometheus, covering both gRPC operations and connection pool behavior. The server automatically instruments gRPC communications and all supported pool types (XA, HikariCP, DBCP), providing deep insights into request processing, pool health, and server performance.
 
-**Note**: Currently, OJP exports metrics via Prometheus but does not export distributed traces. The OpenTelemetry integration focuses on providing operational metrics such as request rates, error rates, latency, and detailed connection pool statistics through the Prometheus endpoint.
+
 
 OpenTelemetry support is enabled by default, making the Prometheus metrics endpoint available at the configured port (default 9159). The server provides separate control over different metric categories, allowing you to enable or disable gRPC and pool metrics independently.
 
@@ -193,14 +193,14 @@ The configuration provides three levels of control:
 -Dojp.telemetry.enabled=true
 
 # Granular control over metric categories (both default to true when telemetry is enabled)
--Dojp.telemetry.grpc.metrics.enabled=true     # gRPC server metrics
--Dojp.telemetry.pool.metrics.enabled=true     # Connection pool metrics (XA, HikariCP, DBCP)
+-Dojp.telemetry.grpc.metrics.enabled=true      # gRPC server metrics
+-Dojp.telemetry.pool.metrics.enabled=true      # Connection pool metrics (XA, HikariCP, DBCP)
 
 # Disable telemetry completely for performance-critical scenarios
 -Dojp.telemetry.enabled=false
 ```
 
-This three-tier approach lets you optimize your observability setup. The master switch (`ojp.telemetry.enabled`) controls whether the OpenTelemetry SDK and Prometheus server initialize at all. When disabled, the system uses no-op telemetry with zero overhead. The granular flags (`grpc.metrics.enabled`, `pool.metrics.enabled`) control which metrics are collected within an already-initialized OpenTelemetry system, allowing you to focus on the metrics that matter most for your deployment.
+This three-tier approach lets you optimize your observability setup. The master switch (`ojp.telemetry.enabled`) controls whether the OpenTelemetry SDK and Prometheus server initialize at all. When disabled, the system uses no-op telemetry with zero overhead. The granular flags (`ojp.telemetry.grpc.metrics.enabled`, `ojp.telemetry.pool.metrics.enabled`) control which metrics are collected within an already-initialized OpenTelemetry system, allowing you to focus on the metrics that matter most for your deployment.
 
 ### Available Metrics
 
