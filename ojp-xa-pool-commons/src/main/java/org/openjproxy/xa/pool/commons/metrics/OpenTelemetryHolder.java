@@ -41,7 +41,13 @@ public class OpenTelemetryHolder {
      * @return the OpenTelemetry instance, or null if not set
      */
     public static OpenTelemetry getInstance() {
-        return instance;
+        OpenTelemetry current = instance;
+        if (current == null) {
+            log.warn("OpenTelemetry instance requested but not yet registered. Pool metrics will not be available.");
+        } else {
+            log.debug("OpenTelemetry instance retrieved for pool metrics");
+        }
+        return current;
     }
     
     /**

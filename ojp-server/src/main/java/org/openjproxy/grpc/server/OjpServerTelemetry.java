@@ -32,14 +32,14 @@ public class OjpServerTelemetry {
 	 * Creates GrpcTelemetry with default configuration.
 	 */
 	public GrpcTelemetry createGrpcTelemetry() {
-		return createGrpcTelemetry(DEFAULT_PROMETHEUS_PORT, List.of(IpWhitelistValidator.ALLOW_ALL_IPS));
+		return createGrpcTelemetry(DEFAULT_PROMETHEUS_PORT, List.of(IpWhitelistValidator.ALLOW_ALL_IPS), true, true);
 	}
 
 	/**
 	 * Creates GrpcTelemetry with specified Prometheus port.
 	 */
 	public GrpcTelemetry createGrpcTelemetry(int prometheusPort) {
-		return createGrpcTelemetry(prometheusPort, List.of(IpWhitelistValidator.ALLOW_ALL_IPS));
+		return createGrpcTelemetry(prometheusPort, List.of(IpWhitelistValidator.ALLOW_ALL_IPS), true, true);
 	}
 
 	/**
@@ -88,10 +88,14 @@ public class OjpServerTelemetry {
 		}
 
 		// Create GrpcTelemetry with or without metrics based on configuration
+		// Note: When gRPC metrics are disabled, we use noop() to prevent gRPC instrumentation
+		// from collecting and exporting metrics. The OpenTelemetry SDK is still initialized
+		// for pool metrics and tracing if enabled.
 		if (grpcMetricsEnabled) {
+			logger.info("gRPC metrics enabled, creating instrumented GrpcTelemetry");
 			return GrpcTelemetry.create(openTelemetry);
 		} else {
-			logger.info("gRPC metrics disabled, using no-op instrumentation");
+			logger.info("gRPC metrics disabled, creating no-op GrpcTelemetry");
 			return GrpcTelemetry.create(OpenTelemetry.noop());
 		}
 	}
@@ -145,10 +149,14 @@ public class OjpServerTelemetry {
 		}
 		
 		// Create GrpcTelemetry with or without metrics based on configuration
+		// Note: When gRPC metrics are disabled, we use noop() to prevent gRPC instrumentation
+		// from collecting and exporting metrics. The OpenTelemetry SDK is still initialized
+		// for pool metrics and tracing if enabled.
 		if (grpcMetricsEnabled) {
+			logger.info("gRPC metrics enabled, creating instrumented GrpcTelemetry");
 			return GrpcTelemetry.create(openTelemetry);
 		} else {
-			logger.info("gRPC metrics disabled, using no-op instrumentation");
+			logger.info("gRPC metrics disabled, creating no-op GrpcTelemetry");
 			return GrpcTelemetry.create(OpenTelemetry.noop());
 		}
 	}
