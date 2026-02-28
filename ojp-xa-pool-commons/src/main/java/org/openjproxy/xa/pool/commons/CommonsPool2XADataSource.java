@@ -64,7 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * should NOT be used directly for getting XAConnections. Use the provider's
  * {@code borrowSession()} method instead.</p>
  */
-public class CommonsPool2XADataSource implements XADataSource {
+public class CommonsPool2XADataSource implements XADataSource, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(CommonsPool2XADataSource.class);
 
     // Counter used to assign a unique, non-sensitive ordinal to each pool instance,
