@@ -73,6 +73,9 @@ public class OjpServerTelemetry {
 								.build())
 				.build();
 
+		// Register OpenTelemetry instance for XA pool metrics
+		org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.setInstance(openTelemetry);
+
 		return GrpcTelemetry.create(openTelemetry);
 	}
 
@@ -113,6 +116,10 @@ public class OjpServerTelemetry {
 		}
 
 		OpenTelemetry openTelemetry = sdkBuilder.build();
+		
+		// Register OpenTelemetry instance for XA pool metrics
+		org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.setInstance(openTelemetry);
+		
 		return GrpcTelemetry.create(openTelemetry);
 	}
 

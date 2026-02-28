@@ -33,14 +33,18 @@ All metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attr
 
 ## Configuration
 
-Metrics can be enabled or disabled through configuration:
+Metrics collection is enabled by default when OpenTelemetry is enabled in ojp-server. You can control it with these configuration options:
 
 ```properties
-# Enable/disable metrics collection (default: enabled if OpenTelemetry available)
-xa.metrics.enabled=true
+# Enable/disable XA pool metrics collection (default: enabled when OpenTelemetry is enabled)
+ojp.xa.metrics.enabled=true
 
 # Set a custom pool name for metrics labeling (default: ojp-xa-pool)
-xa.poolName=my-app-xa-pool
+ojp.xa.poolName=my-app-xa-pool
+
+# For backward compatibility, old config keys are also supported:
+# xa.metrics.enabled=true
+# xa.poolName=my-app-xa-pool
 ```
 
 ### Java Configuration Example
@@ -52,17 +56,28 @@ config.put("xa.url", "jdbc:postgresql://localhost:5432/mydb");
 config.put("xa.username", "postgres");
 config.put("xa.password", "secret");
 config.put("xa.maxPoolSize", "20");
-config.put("xa.poolName", "orders-service-xa-pool");
-config.put("xa.metrics.enabled", "true");
+config.put("ojp.xa.poolName", "orders-service-xa-pool");
+config.put("ojp.xa.metrics.enabled", "true");
 
 XADataSource xaDS = provider.createXADataSource(config);
+```
+
+### JVM Arguments for ojp-server
+
+When running ojp-server, use these JVM arguments to enable metrics:
+
+```bash
+-Dojp.opentelemetry.enabled=true     # Enable OpenTelemetry (includes XA pool metrics)
+-Dojp.prometheus.port=9159           # Prometheus endpoint port
+-Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
+-Dojp.xa.metrics.enabled=true        # Explicitly enable XA pool metrics (optional, enabled by default)
 ```
 
 ## Integration with OpenTelemetry
 
 ### Automatic Integration
 
-Metrics are automatically collected when OpenTelemetry is available on the classpath and an OpenTelemetry instance is configured in the application. The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
+Metrics are automatically collected when OpenTelemetry is enabled in ojp-server (`ojp.opentelemetry.enabled=true`). The OpenTelemetry instance is registered globally and used by all XA pools. The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
 
 ### With Prometheus Exporter
 
