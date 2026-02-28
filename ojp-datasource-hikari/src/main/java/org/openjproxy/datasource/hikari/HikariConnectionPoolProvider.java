@@ -172,58 +172,97 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
         private final Meter meter;
         private final String poolName;
         private final Attributes attributes;
+        private volatile PoolStats poolStats;
 
         public HikariOpenTelemetryMetricsTrackerFactory(OpenTelemetry openTelemetry, String poolName) {
             this.meter = openTelemetry.getMeter("ojp.hikari.pool");
             this.poolName = poolName;
             this.attributes = Attributes.of(AttributeKey.stringKey("pool.name"), poolName);
             
-            // Register gauges for pool metrics
+            log.info("Registering OpenTelemetry gauges for HikariCP pool '{}'", poolName);
+            
+            // Register gauges for pool metrics - these read from poolStats
             meter.gaugeBuilder("ojp.hikari.pool.connections.active")
                     .setDescription("Active (in-use) connections")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
-                        // Will be updated by tracker
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getActiveConnections(), attributes);
+                        }
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.idle")
                     .setDescription("Idle connections in pool")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
-                        // Will be updated by tracker
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getIdleConnections(), attributes);
+                        }
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.total")
                     .setDescription("Total connections")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
-                        // Will be updated by tracker
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getTotalConnections(), attributes);
+                        }
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.pending")
                     .setDescription("Threads waiting for connection")
                     .setUnit("threads")
                     .buildWithCallback(measurement -> {
-                        // Will be updated by tracker
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getPendingThreads(), attributes);
+                        }
+                    });
+            
+            meter.gaugeBuilder("ojp.hikari.pool.connections.max")
+                    .setDescription("Maximum pool size")
+                    .setUnit("connections")
+                    .buildWithCallback(measurement -> {
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getMaxConnections(), attributes);
+                        }
+                    });
+            
+            meter.gaugeBuilder("ojp.hikari.pool.connections.min")
+                    .setDescription("Minimum idle connections")
+                    .setUnit("connections")
+                    .buildWithCallback(measurement -> {
+                        PoolStats stats = poolStats;
+                        if (stats != null) {
+                            measurement.record(stats.getMinConnections(), attributes);
+                        }
                     });
         }
 
         @Override
         public com.zaxxer.hikari.metrics.IMetricsTracker create(String poolName, PoolStats poolStats) {
+            // Store the PoolStats reference so gauges can read from it
+            this.poolStats = poolStats;
+            log.info("HikariCP pool '{}' metrics tracker created - metrics will be available", poolName);
+            
             return new com.zaxxer.hikari.metrics.IMetricsTracker() {
                 @Override
                 public void recordConnectionAcquiredNanos(long elapsedAcquiredNanos) {
-                    // Record connection acquisition time
+                    // Can add histogram/counter for acquisition time if needed
                 }
 
                 @Override
                 public void recordConnectionUsageMillis(long elapsedBorrowedMillis) {
-                    // Record connection usage time
+                    // Can add histogram/counter for usage time if needed
                 }
 
                 @Override
                 public void recordConnectionTimeout() {
-                    // Record timeout event
+                    // Can add counter for timeouts if needed
                 }
 
                 @Override
