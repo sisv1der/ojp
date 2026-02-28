@@ -109,9 +109,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     private static final String RESULT_SET_METADATA_ATTR_PREFIX = "rsMetadata|";
 
-    // Per-connection pool metrics map for HikariCP (non-XA) connections
-    private final Map<String, org.openjproxy.xa.pool.commons.metrics.PoolMetrics> connectionPoolMetricsMap = new ConcurrentHashMap<>();
-
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
@@ -142,8 +139,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 sessionManager,
                 circuitBreakerRegistry,
                 serverConfiguration,
-                sqlStatementMetrics,
-                connectionPoolMetricsMap);
+                sqlStatementMetrics);
     }
 
     /**
@@ -159,22 +155,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         }
         log.info("OpenTelemetry not available – SQL statement metrics disabled (no-op)");
         return org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics.INSTANCE;
-    }
-
-    /**
-     * Returns (and lazily creates) PoolMetrics for a HikariCP datasource identified
-     * by {@code connHash}. Uses OpenTelemetry when available; otherwise returns no-op.
-     */
-    private org.openjproxy.xa.pool.commons.metrics.PoolMetrics getOrCreateConnectionPoolMetrics(String connHash) {
-        return connectionPoolMetricsMap.computeIfAbsent(connHash, hash -> {
-            io.opentelemetry.api.OpenTelemetry openTelemetry =
-                    org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.getInstance();
-            if (openTelemetry != null) {
-                log.debug("Creating OpenTelemetry pool metrics for HikariCP connection hash: {}", hash);
-                return new org.openjproxy.xa.pool.commons.metrics.OpenTelemetryPoolMetrics(openTelemetry, hash);
-            }
-            return org.openjproxy.xa.pool.commons.metrics.NoOpPoolMetrics.INSTANCE;
-        });
     }
 
     /**
@@ -607,9 +587,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                     }
 
                     try {
-                        // Use enhanced connection acquisition with timeout protection and metrics
-                        conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash,
-                                getOrCreateConnectionPoolMetrics(connHash), connHash);
+                        // Use enhanced connection acquisition with timeout protection
+                        conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash);
                         log.debug("Successfully acquired connection from pool for hash: {}", connHash);
                     } catch (SQLException e) {
                         log.error("Failed to acquire connection from pool for hash: {}. Error: {}",

@@ -166,9 +166,8 @@ public class SessionConnectionHelper {
                     }
 
                     try {
-                        // Use enhanced connection acquisition with timeout protection and metrics
-                        conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash,
-                                context.getConnectionPoolMetrics(connHash), connHash);
+                        // Use enhanced connection acquisition with timeout protection
+                        conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash);
                         log.debug("Successfully acquired connection from pool for hash: {}", connHash);
                     } catch (SQLException e) {
                         log.error("Failed to acquire connection from pool for hash: {}. Error: {}",

@@ -7,6 +7,7 @@ import com.zaxxer.hikari.metrics.PoolStats;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import org.openjproxy.datasource.ConnectionPoolProvider;
 import org.openjproxy.datasource.PoolConfig;
@@ -173,13 +174,20 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
         private final String poolName;
         private final Attributes attributes;
         private volatile PoolStats poolStats;
+        private final DoubleHistogram acquisitionTimeHistogram;
 
         public HikariOpenTelemetryMetricsTrackerFactory(OpenTelemetry openTelemetry, String poolName) {
             this.meter = openTelemetry.getMeter("ojp.hikari.pool");
             this.poolName = poolName;
             this.attributes = Attributes.of(AttributeKey.stringKey("pool.name"), poolName);
-            
+
             log.info("Registering OpenTelemetry gauges for HikariCP pool '{}'", poolName);
+
+            // Histogram for connection acquisition time
+            this.acquisitionTimeHistogram = meter.histogramBuilder("ojp.hikari.pool.connections.acquisition.time")
+                    .setDescription("Time in milliseconds to acquire a connection from the HikariCP pool")
+                    .setUnit("ms")
+                    .build();
             
             // Register standardized pool metrics (aligned suffix naming with XA pools)
             meter.gaugeBuilder("ojp.hikari.pool.connections.active")
@@ -252,7 +260,7 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
             return new com.zaxxer.hikari.metrics.IMetricsTracker() {
                 @Override
                 public void recordConnectionAcquiredNanos(long elapsedAcquiredNanos) {
-                    // Can add histogram/counter for acquisition time if needed
+                    acquisitionTimeHistogram.record(elapsedAcquiredNanos / 1_000_000.0, attributes);
                 }
 
                 @Override
