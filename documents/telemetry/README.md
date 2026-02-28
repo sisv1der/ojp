@@ -47,7 +47,7 @@ The telemetry system can be configured through JVM system properties or environm
 
 | Property | Environment Variable | Default | Description |
 |----------|---------------------|---------|-------------|
-| `ojp.opentelemetry.enabled` | `OJP_OPENTELEMETRY_ENABLED` | `true` | Enable/disable OpenTelemetry metrics collection |
+| `ojp.telemetry.enabled` | `OJP_TELEMETRY_ENABLED` | `true` | Master switch: Enable/disable OpenTelemetry infrastructure (Prometheus server, MeterProvider, TracerProvider) |
 | `ojp.prometheus.port` | `OJP_PROMETHEUS_PORT` | `9159` | Port for Prometheus metrics HTTP server |
 | `ojp.prometheus.allowedIps` | `OJP_PROMETHEUS_ALLOWED_IPS` | `0.0.0.0/0` | Comma-separated list of allowed IP addresses/CIDR blocks for metrics endpoint |
 

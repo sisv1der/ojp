@@ -32,14 +32,14 @@ public class OjpServerTelemetry {
 	 * Creates GrpcTelemetry with default configuration.
 	 */
 	public GrpcTelemetry createGrpcTelemetry() {
-		return createGrpcTelemetry(DEFAULT_PROMETHEUS_PORT, List.of(IpWhitelistValidator.ALLOW_ALL_IPS));
+		return createGrpcTelemetry(DEFAULT_PROMETHEUS_PORT, List.of(IpWhitelistValidator.ALLOW_ALL_IPS), true, true);
 	}
 
 	/**
 	 * Creates GrpcTelemetry with specified Prometheus port.
 	 */
 	public GrpcTelemetry createGrpcTelemetry(int prometheusPort) {
-		return createGrpcTelemetry(prometheusPort, List.of(IpWhitelistValidator.ALLOW_ALL_IPS));
+		return createGrpcTelemetry(prometheusPort, List.of(IpWhitelistValidator.ALLOW_ALL_IPS), true, true);
 	}
 
 	/**
@@ -55,12 +55,20 @@ public class OjpServerTelemetry {
 
 	/**
 	 * Creates GrpcTelemetry with specified Prometheus port and IP whitelist.
+	 * 
+	 * @param prometheusPort Port to expose Prometheus metrics on
+	 * @param allowedIps IP whitelist for Prometheus endpoint
+	 * @param grpcMetricsEnabled Whether to enable gRPC metrics
+	 * @param poolMetricsEnabled Whether to enable pool metrics
 	 */
-	public GrpcTelemetry createGrpcTelemetry(int prometheusPort, List<String> allowedIps) {
+	public GrpcTelemetry createGrpcTelemetry(int prometheusPort, List<String> allowedIps, 
+			boolean grpcMetricsEnabled, boolean poolMetricsEnabled) {
 		allowedIps = validateAllowedIps(allowedIps);
 
 		logger.info("Initializing OpenTelemetry with Prometheus on port {} with IP whitelist: {}",
 					prometheusPort, allowedIps);
+		logger.info("gRPC metrics enabled: {}, Pool metrics enabled: {}", 
+					grpcMetricsEnabled, poolMetricsEnabled);
 
 		PrometheusHttpServer prometheusServer = PrometheusHttpServer.builder()
 				.setPort(prometheusPort)
@@ -73,7 +81,23 @@ public class OjpServerTelemetry {
 								.build())
 				.build();
 
-		return GrpcTelemetry.create(openTelemetry);
+		// Register OpenTelemetry instance for pool metrics if enabled
+		if (poolMetricsEnabled) {
+			org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.setInstance(openTelemetry);
+			logger.info("OpenTelemetry instance registered for pool metrics");
+		}
+
+		// Create GrpcTelemetry with or without metrics based on configuration
+		// Note: When gRPC metrics are disabled, we use noop() to prevent gRPC instrumentation
+		// from collecting and exporting metrics. The OpenTelemetry SDK is still initialized
+		// for pool metrics and tracing if enabled.
+		if (grpcMetricsEnabled) {
+			logger.info("gRPC metrics enabled, creating instrumented GrpcTelemetry");
+			return GrpcTelemetry.create(openTelemetry);
+		} else {
+			logger.info("gRPC metrics disabled, creating no-op GrpcTelemetry");
+			return GrpcTelemetry.create(OpenTelemetry.noop());
+		}
 	}
 
 	/**
@@ -86,15 +110,19 @@ public class OjpServerTelemetry {
 	 * @param tracingEndpoint Endpoint URL for the trace exporter
 	 * @param serviceName     Service name to attach to all spans
 	 * @param sampleRate      Fraction of requests to sample (0.0–1.0)
+	 * @param grpcMetricsEnabled Whether to enable gRPC metrics
+	 * @param poolMetricsEnabled Whether to enable pool metrics
 	 */
 	public GrpcTelemetry createGrpcTelemetry(int prometheusPort, List<String> allowedIps,
 			boolean tracingEnabled, String tracingExporter, String tracingEndpoint,
-			String serviceName, double sampleRate) {
+			String serviceName, double sampleRate, boolean grpcMetricsEnabled, boolean poolMetricsEnabled) {
 
 		allowedIps = validateAllowedIps(allowedIps);
 
 		logger.info("Initializing OpenTelemetry with Prometheus on port {} with IP whitelist: {}",
 				prometheusPort, allowedIps);
+		logger.info("gRPC metrics enabled: {}, Pool metrics enabled: {}", 
+				grpcMetricsEnabled, poolMetricsEnabled);
 
 		PrometheusHttpServer prometheusServer = PrometheusHttpServer.builder()
 				.setPort(prometheusPort)
@@ -113,7 +141,24 @@ public class OjpServerTelemetry {
 		}
 
 		OpenTelemetry openTelemetry = sdkBuilder.build();
-		return GrpcTelemetry.create(openTelemetry);
+		
+		// Register OpenTelemetry instance for pool metrics if enabled
+		if (poolMetricsEnabled) {
+			org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.setInstance(openTelemetry);
+			logger.info("OpenTelemetry instance registered for pool metrics");
+		}
+		
+		// Create GrpcTelemetry with or without metrics based on configuration
+		// Note: When gRPC metrics are disabled, we use noop() to prevent gRPC instrumentation
+		// from collecting and exporting metrics. The OpenTelemetry SDK is still initialized
+		// for pool metrics and tracing if enabled.
+		if (grpcMetricsEnabled) {
+			logger.info("gRPC metrics enabled, creating instrumented GrpcTelemetry");
+			return GrpcTelemetry.create(openTelemetry);
+		} else {
+			logger.info("gRPC metrics disabled, creating no-op GrpcTelemetry");
+			return GrpcTelemetry.create(OpenTelemetry.noop());
+		}
 	}
 
 	/**

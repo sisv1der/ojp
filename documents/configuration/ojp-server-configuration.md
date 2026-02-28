@@ -100,7 +100,7 @@ For detailed configuration examples for each database, see [SSL/TLS Certificate 
 
 | Property                      | Environment Variable          | Type    | Default | Description                                    | Since |
 |-------------------------------|-------------------------------|---------|---------|------------------------------------------------|-------|
-| `ojp.opentelemetry.enabled`   | `OJP_OPENTELEMETRY_ENABLED`   | boolean | true    | Enable/disable OpenTelemetry instrumentation  | 0.2.0-beta |
+| `ojp.telemetry.enabled`   | `OJP_TELEMETRY_ENABLED`   | boolean | true    | Master switch: Enable/disable OpenTelemetry infrastructure (Prometheus server, MeterProvider, TracerProvider)  | 0.2.0-beta |
 | `ojp.opentelemetry.endpoint`  | `OJP_OPENTELEMETRY_ENDPOINT`  | string  | ""      | OpenTelemetry exporter endpoint (empty = default) | 0.2.0-beta |
 
 ### Tracing Settings
@@ -286,7 +286,7 @@ Set configuration using JVM system properties when starting the server:
 ```bash
 java -Dojp.server.port=8080 \
      -Dojp.prometheus.port=9091 \
-     -Dojp.opentelemetry.enabled=false \
+     -Dojp.telemetry.enabled=false \
      -Dojp.server.threadPoolSize=100 \
      -Dojp.server.circuitBreakerTimeout=120000 \
      -Dojp.server.circuitBreakerThreshold=3 \

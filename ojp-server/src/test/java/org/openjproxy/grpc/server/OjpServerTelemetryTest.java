@@ -60,7 +60,8 @@ class OjpServerTelemetryTest {
 		GrpcTelemetry telemetry = instrument.createGrpcTelemetry(
 				9192,
 				List.of(IpWhitelistValidator.ALLOW_ALL_IPS),
-				false, "zipkin", "http://localhost:9411/api/v2/spans", "ojp-server", 1.0);
+				false, "zipkin", "http://localhost:9411/api/v2/spans", "ojp-server", 1.0,
+				true, true); // grpcMetricsEnabled, poolMetricsEnabled
 
 		assertNotNull(telemetry);
 		assertNotNull(telemetry.newServerInterceptor());

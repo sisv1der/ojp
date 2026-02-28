@@ -19,7 +19,7 @@ class ServerConfigurationTest {
         // Clear any system properties set during tests
         System.clearProperty("ojp.server.port");
         System.clearProperty("ojp.prometheus.port");
-        System.clearProperty("ojp.opentelemetry.enabled");
+        System.clearProperty("ojp.telemetry.enabled");
         System.clearProperty("ojp.opentelemetry.endpoint");
         System.clearProperty("ojp.server.threadPoolSize");
         System.clearProperty("ojp.server.maxRequestSize");
@@ -55,7 +55,7 @@ class ServerConfigurationTest {
         // Set JVM system properties
         System.setProperty("ojp.server.port", "8080");
         System.setProperty("ojp.prometheus.port", "9091");
-        System.setProperty("ojp.opentelemetry.enabled", "false");
+        System.setProperty("ojp.telemetry.enabled", "false");
         System.setProperty("ojp.opentelemetry.endpoint", "http://localhost:4317");
         System.setProperty("ojp.server.threadPoolSize", "100");
         System.setProperty("ojp.server.maxRequestSize", "8388608"); // 8MB
@@ -109,7 +109,7 @@ class ServerConfigurationTest {
 
     @Test
     void testBooleanValues() {
-        System.setProperty("ojp.opentelemetry.enabled", "true");
+        System.setProperty("ojp.telemetry.enabled", "true");
 
         ServerConfiguration config = new ServerConfiguration();
 
