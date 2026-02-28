@@ -409,7 +409,7 @@ Replace `<provider>` with your provider name (e.g., `xa`, `hikari`, `mypool`).
 
 **Optional Provider-Specific Metrics:**
 
-If your pool implementation provides additional insights (like Apache Commons Pool 2 does for XA pools), you can expose provider-specific metrics following the same pattern:
+If your pool implementation provides additional insights, you can expose provider-specific metrics following the same pattern:
 
 - `ojp.<provider>.pool.connections.created` - Total connections created
 - `ojp.<provider>.pool.connections.destroyed` - Total connections destroyed
@@ -418,7 +418,7 @@ If your pool implementation provides additional insights (like Apache Commons Po
 - `ojp.<provider>.pool.connections.acquisition.time` - Total acquisition time (counter)
 - `ojp.<provider>.pool.connections.acquisition.count` - Total acquisitions (counter)
 
-**Important:** All implementations must expose the 6 core gauges with consistent suffix naming (`.active`, `.idle`, `.total`, `.pending`, `.max`, `.min`). Additional metrics are optional and should reflect capabilities unique to your pool implementation.
+**Important:** All implementations should expose the 6 core gauges with consistent suffix naming (`.active`, `.idle`, `.total`, `.pending`, `.max`, `.min`). Additional metrics are optional and should reflect capabilities unique to your pool implementation.
 
 ### Configuration Integration
 
