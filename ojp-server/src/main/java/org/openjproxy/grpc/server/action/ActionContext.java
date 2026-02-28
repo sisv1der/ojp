@@ -8,11 +8,16 @@ import org.openjproxy.grpc.server.CircuitBreakerRegistry;
 import org.openjproxy.grpc.server.ServerConfiguration;
 import org.openjproxy.grpc.server.SlowQuerySegregationManager;
 import org.openjproxy.grpc.server.UnpooledConnectionDetails;
+import org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics;
+import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
 import org.openjproxy.xa.pool.XATransactionRegistry;
+import org.openjproxy.xa.pool.commons.metrics.NoOpPoolMetrics;
+import org.openjproxy.xa.pool.commons.metrics.PoolMetrics;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
 import javax.sql.DataSource;
 import javax.sql.XADataSource;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -117,6 +122,22 @@ public class ActionContext {
      * Immutable after construction.
      */
     private final ServerConfiguration serverConfiguration;
+
+    // ========== Telemetry ==========
+
+    /**
+     * SQL statement metrics for recording execution telemetry per statement hash.
+     * Emits execution time, total execution count, and slow execution count to OpenTelemetry.
+     */
+    private final SqlStatementMetrics sqlStatementMetrics;
+
+    /**
+     * Map of connection hash to PoolMetrics for HikariCP (non-XA) connections.
+     * Records queue depth and connection acquisition time per pool.
+     * Key: connection hash
+     * Value: pool metrics for that HikariCP datasource
+     */
+    private final Map<String, PoolMetrics> connectionPoolMetricsMap;
     
     // ========== Constructor ==========
     
@@ -133,6 +154,27 @@ public class ActionContext {
             SessionManager sessionManager,
             CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
+        this(datasourceMap, xaDataSourceMap, xaRegistries, unpooledConnectionDetailsMap, dbNameMap,
+             slowQuerySegregationManagers, xaPoolProvider, xaCoordinator, clusterHealthTracker,
+             sessionManager, circuitBreakerRegistry, serverConfiguration,
+             NoOpSqlStatementMetrics.INSTANCE, Collections.emptyMap());
+    }
+
+    public ActionContext(
+            Map<String, DataSource> datasourceMap,
+            Map<String, XADataSource> xaDataSourceMap,
+            Map<String, XATransactionRegistry> xaRegistries,
+            Map<String, UnpooledConnectionDetails> unpooledConnectionDetailsMap,
+            Map<String, DbName> dbNameMap,
+            Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers,
+            XAConnectionPoolProvider xaPoolProvider,
+            MultinodeXaCoordinator xaCoordinator,
+            ClusterHealthTracker clusterHealthTracker,
+            SessionManager sessionManager,
+            CircuitBreakerRegistry circuitBreakerRegistry,
+            ServerConfiguration serverConfiguration,
+            SqlStatementMetrics sqlStatementMetrics,
+            Map<String, PoolMetrics> connectionPoolMetricsMap) {
         
         this.datasourceMap = datasourceMap;
         this.xaDataSourceMap = xaDataSourceMap;
@@ -146,6 +188,8 @@ public class ActionContext {
         this.sessionManager = sessionManager;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.serverConfiguration = serverConfiguration;
+        this.sqlStatementMetrics = sqlStatementMetrics != null ? sqlStatementMetrics : NoOpSqlStatementMetrics.INSTANCE;
+        this.connectionPoolMetricsMap = connectionPoolMetricsMap != null ? connectionPoolMetricsMap : Collections.emptyMap();
     }
     
     // ========== Getters ==========
@@ -201,5 +245,20 @@ public class ActionContext {
     
     public ServerConfiguration getServerConfiguration() {
         return serverConfiguration;
+    }
+
+    /**
+     * Returns the SQL statement metrics for recording per-statement execution telemetry.
+     */
+    public SqlStatementMetrics getSqlStatementMetrics() {
+        return sqlStatementMetrics;
+    }
+
+    /**
+     * Returns the PoolMetrics for a given connection hash (HikariCP non-XA pools).
+     * Returns a no-op instance when no metrics are configured for the hash.
+     */
+    public PoolMetrics getConnectionPoolMetrics(String connectionHash) {
+        return connectionPoolMetricsMap.getOrDefault(connectionHash, NoOpPoolMetrics.INSTANCE);
     }
 }
