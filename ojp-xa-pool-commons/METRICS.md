@@ -2,43 +2,50 @@
 
 ## Overview
 
-OJP now exposes comprehensive connection pool metrics to OpenTelemetry for all supported pool implementations: XA pools (Commons Pool 2), HikariCP, and DBCP. These metrics provide deep visibility into pool health, performance, and resource utilization, similar to how HikariCP's native metrics work.
+OJP exposes comprehensive connection pool metrics to OpenTelemetry for all supported pool implementations: XA pools (Commons Pool 2), HikariCP, and DBCP. These metrics provide deep visibility into pool health, performance, and resource utilization. All pool types use consistent suffix naming for core metrics, with provider-specific prefixes (ojp.xa.pool, ojp.hikari.pool, ojp.dbcp.pool).
 
-## Metrics Exposed
+## Core Metrics (All Pool Types)
 
-### XA Pool Metrics (Commons Pool 2)
+All pool implementations expose the following core metrics with consistent suffix naming:
 
-All XA pool metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attribute for identification.
-
-#### Gauge Metrics (Current State)
+### XA Pool Metrics
 
 | Metric Name | Type | Unit | Description |
 |------------|------|------|-------------|
-| `ojp.xa.pool.connections.active` | Gauge | connections | Number of connections currently borrowed from the pool |
-| `ojp.xa.pool.connections.idle` | Gauge | connections | Number of idle connections available in the pool |
-| `ojp.xa.pool.connections.pending` | Gauge | threads | Number of threads waiting to borrow a connection |
-| `ojp.xa.pool.connections.max` | Gauge | connections | Maximum pool size (configurable) |
+| `ojp.xa.pool.connections.active` | Gauge | connections | Number of active (borrowed) connections |
+| `ojp.xa.pool.connections.idle` | Gauge | connections | Number of idle connections in the pool |
+| `ojp.xa.pool.connections.total` | Gauge | connections | Total connections (active + idle) |
+| `ojp.xa.pool.connections.pending` | Gauge | threads | Number of threads waiting for connections |
+| `ojp.xa.pool.connections.max` | Gauge | connections | Maximum pool size (configured) |
 | `ojp.xa.pool.connections.min` | Gauge | connections | Minimum idle connections maintained |
-| `ojp.xa.pool.connections.utilization` | Gauge | percent | Pool utilization percentage (0-100) calculated as `(active/max) * 100` |
-| `ojp.xa.pool.connections.created` | Gauge | connections | Total connections created since pool start |
-| `ojp.xa.pool.connections.destroyed` | Gauge | connections | Total connections destroyed since pool start |
 
 ### HikariCP Pool Metrics
 
-All HikariCP metrics are prefixed with `ojp.hikari.pool` and tagged with the `pool.name` attribute for identification.
-
-#### Gauge Metrics (Current State)
-
 | Metric Name | Type | Unit | Description |
 |------------|------|------|-------------|
-| `ojp.hikari.pool.connections.active` | Gauge | connections | Number of connections currently in use |
+| `ojp.hikari.pool.connections.active` | Gauge | connections | Number of active (borrowed) connections |
 | `ojp.hikari.pool.connections.idle` | Gauge | connections | Number of idle connections in the pool |
-| `ojp.hikari.pool.connections.total` | Gauge | connections | Total connections in the pool (active + idle) |
+| `ojp.hikari.pool.connections.total` | Gauge | connections | Total connections (active + idle) |
 | `ojp.hikari.pool.connections.pending` | Gauge | threads | Number of threads waiting for connections |
 | `ojp.hikari.pool.connections.max` | Gauge | connections | Maximum pool size (configured) |
 | `ojp.hikari.pool.connections.min` | Gauge | connections | Minimum idle connections maintained |
 
-### XA Pool Counter Metrics (Events)
+**Note:** Pool utilization percentage can be calculated as: `(active / max) * 100`
+
+All metrics are tagged with the `pool.name` attribute for identification in multi-pool environments.
+
+## XA-Specific Additional Metrics
+
+XA pools (using Apache Commons Pool 2) provide additional metrics for advanced monitoring:
+
+### Gauge Metrics (Lifetime Totals)
+
+| Metric Name | Type | Unit | Description |
+|------------|------|------|-------------|
+| `ojp.xa.pool.connections.created` | Gauge | connections | Total connections created since pool start |
+| `ojp.xa.pool.connections.destroyed` | Gauge | connections | Total connections destroyed since pool start |
+
+### Counter Metrics (Events)
 
 | Metric Name | Type | Unit | Description |
 |------------|------|------|-------------|
@@ -116,7 +123,7 @@ http://localhost:9159/metrics
 Example Prometheus metrics output:
 
 ```
-# XA Pool Metrics
+# XA Pool Core Metrics
 # HELP ojp_xa_pool_connections_active Number of active (borrowed) connections
 # TYPE ojp_xa_pool_connections_active gauge
 ojp_xa_pool_connections_active{pool_name="ojp-xa-pool"} 5.0
@@ -125,15 +132,19 @@ ojp_xa_pool_connections_active{pool_name="ojp-xa-pool"} 5.0
 # TYPE ojp_xa_pool_connections_idle gauge
 ojp_xa_pool_connections_idle{pool_name="ojp-xa-pool"} 15.0
 
-# HELP ojp_xa_pool_connections_utilization Pool utilization percentage (0-100)
-# TYPE ojp_xa_pool_connections_utilization gauge
-ojp_xa_pool_connections_utilization{pool_name="ojp-xa-pool"} 25.0
+# HELP ojp_xa_pool_connections_total Total connections (active + idle)
+# TYPE ojp_xa_pool_connections_total gauge
+ojp_xa_pool_connections_total{pool_name="ojp-xa-pool"} 20.0
 
-# HELP ojp_xa_pool_connections_exhausted_total Pool exhaustion events
-# TYPE ojp_xa_pool_connections_exhausted_total counter
-ojp_xa_pool_connections_exhausted_total{pool_name="ojp-xa-pool"} 0.0
+# HELP ojp_xa_pool_connections_pending Number of threads waiting for connections
+# TYPE ojp_xa_pool_connections_pending gauge
+ojp_xa_pool_connections_pending{pool_name="ojp-xa-pool"} 0.0
 
-# HikariCP Pool Metrics
+# HELP ojp_xa_pool_connections_max Maximum pool size
+# TYPE ojp_xa_pool_connections_max gauge
+ojp_xa_pool_connections_max{pool_name="ojp-xa-pool"} 20.0
+
+# HikariCP Pool Core Metrics
 # HELP ojp_hikari_pool_connections_active Number of active connections
 # TYPE ojp_hikari_pool_connections_active gauge
 ojp_hikari_pool_connections_active{pool_name="my-hikari-pool"} 8.0
@@ -146,36 +157,41 @@ ojp_hikari_pool_connections_idle{pool_name="my-hikari-pool"} 2.0
 # TYPE ojp_hikari_pool_connections_total gauge
 ojp_hikari_pool_connections_total{pool_name="my-hikari-pool"} 10.0
 
-# HELP ojp_hikari_pool_connections_pending Threads waiting for connections
-# TYPE ojp_hikari_pool_connections_pending gauge
-ojp_hikari_pool_connections_pending{pool_name="my-hikari-pool"} 0.0
+# XA-Specific Additional Metrics
+# HELP ojp_xa_pool_connections_created Total connections created since pool start
+# TYPE ojp_xa_pool_connections_created gauge
+ojp_xa_pool_connections_created{pool_name="ojp-xa-pool"} 45.0
+
+# HELP ojp_xa_pool_connections_exhausted_total Pool exhaustion events
+# TYPE ojp_xa_pool_connections_exhausted_total counter
+ojp_xa_pool_connections_exhausted_total{pool_name="ojp-xa-pool"} 0.0
 ```
 
 ## Monitoring Best Practices
 
 ### Key Metrics to Watch
 
-1. **Pool Utilization** (`ojp.xa.pool.connections.utilization`)
+1. **Pool Utilization** (calculate as `active / max * 100`)
    - Consistently high (>80%): Consider increasing pool size
    - Consistently low (<20%): Consider reducing pool size
 
-2. **Pending Threads** (`ojp.xa.pool.connections.pending`)
+2. **Pending Threads** (`ojp.xa.pool.connections.pending` or `ojp.hikari.pool.connections.pending`)
    - Any non-zero value indicates contention
    - Sustained high values: Increase pool size or optimize connection usage
 
-3. **Pool Exhaustion Events** (`ojp.xa.pool.connections.exhausted`)
+3. **Pool Exhaustion Events** (`ojp.xa.pool.connections.exhausted`) - XA pools only
    - Should be zero or very low
    - Frequent exhaustion: Increase pool size or reduce connection hold time
 
-4. **Connection Leaks** (`ojp.xa.pool.connections.leaks.detected`)
+4. **Connection Leaks** (`ojp.xa.pool.connections.leaks.detected`) - XA pools only
    - Should always be zero
    - Any leaks indicate application bugs (connections not being returned)
 
-5. **Validation Failures** (`ojp.xa.pool.connections.validation.failed`)
+5. **Validation Failures** (`ojp.xa.pool.connections.validation.failed`) - XA pools only
    - Occasional failures are normal (network issues, database restarts)
    - Frequent failures may indicate database health issues
 
-6. **Average Acquisition Time**
+6. **Average Acquisition Time** - XA pools only
    - Calculate as `acquisition.time / acquisition.count`
    - High values indicate pool contention or database latency
 
@@ -184,33 +200,39 @@ ojp_hikari_pool_connections_pending{pool_name="my-hikari-pool"} 0.0
 ```yaml
 # Example Prometheus alerting rules
 groups:
-  - name: ojp_xa_pool
+  - name: ojp_pool_alerts
     rules:
-      # Alert if pool utilization is consistently high
-      - alert: XAPoolHighUtilization
-        expr: ojp_xa_pool_connections_utilization > 85
+      # Alert if pool utilization is consistently high (works for all pool types)
+      - alert: PoolHighUtilization
+        expr: |
+          (ojp_xa_pool_connections_active / ojp_xa_pool_connections_max) * 100 > 85
+          or
+          (ojp_hikari_pool_connections_active / ojp_hikari_pool_connections_max) * 100 > 85
         for: 5m
         annotations:
-          summary: "XA pool {{ $labels.pool_name }} is running hot"
+          summary: "Pool {{ $labels.pool_name }} is running hot"
           description: "Pool utilization is {{ $value }}%"
 
-      # Alert if pool exhaustion is occurring
+      # Alert if pool exhaustion is occurring (XA pools)
       - alert: XAPoolExhausted
         expr: increase(ojp_xa_pool_connections_exhausted_total[5m]) > 0
         annotations:
           summary: "XA pool {{ $labels.pool_name }} is exhausting"
           description: "Pool has exhausted {{ $value }} times in 5 minutes"
 
-      # Alert on connection leaks
+      # Alert on connection leaks (XA pools)
       - alert: XAPoolConnectionLeak
         expr: increase(ojp_xa_pool_connections_leaks_detected_total[5m]) > 0
         annotations:
           summary: "Connection leak detected in {{ $labels.pool_name }}"
           description: "{{ $value }} leaks detected in 5 minutes"
 
-      # Alert if threads are waiting for connections
-      - alert: XAPoolContention
-        expr: ojp_xa_pool_connections_pending > 5
+      # Alert if threads are waiting for connections (works for all pool types)
+      - alert: PoolContention
+        expr: |
+          ojp_xa_pool_connections_pending > 5
+          or
+          ojp_hikari_pool_connections_pending > 5
         for: 2m
         annotations:
           summary: "High contention in {{ $labels.pool_name }}"
@@ -221,20 +243,20 @@ groups:
 
 Key panels to include:
 
-1. **Pool Overview**
-   - Active connections (time series)
-   - Idle connections (time series)
-   - Pool utilization percentage (gauge)
+1. **Pool Overview** (works for all pool types)
+   - Active connections (time series): `ojp_xa_pool_connections_active`, `ojp_hikari_pool_connections_active`
+   - Idle connections (time series): `ojp_xa_pool_connections_idle`, `ojp_hikari_pool_connections_idle`
+   - Pool utilization percentage (gauge): `(ojp_xa_pool_connections_active / ojp_xa_pool_connections_max) * 100`
 
-2. **Performance**
-   - Average connection acquisition time (graph)
-   - Connections created/destroyed rate (graph)
+2. **Performance** (XA pools only)
+   - Average connection acquisition time (graph): `rate(ojp_xa_pool_connections_acquisition_time[5m]) / rate(ojp_xa_pool_connections_acquisition_count[5m])`
+   - Connections created/destroyed rate (graph): `rate(ojp_xa_pool_connections_created[5m])`, `rate(ojp_xa_pool_connections_destroyed[5m])`
 
 3. **Health**
-   - Pending threads (stat)
-   - Pool exhaustion events (stat)
-   - Validation failures (stat)
-   - Connection leaks (stat - should always be 0)
+   - Pending threads (stat): `ojp_xa_pool_connections_pending`, `ojp_hikari_pool_connections_pending`
+   - Pool exhaustion events (stat, XA): `rate(ojp_xa_pool_connections_exhausted_total[5m])`
+   - Validation failures (stat, XA): `rate(ojp_xa_pool_connections_validation_failed_total[5m])`
+   - Connection leaks (stat, XA - should always be 0): `ojp_xa_pool_connections_leaks_detected_total`
 
 ## Architecture
 

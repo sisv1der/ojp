@@ -17,27 +17,31 @@ import java.util.concurrent.atomic.AtomicLong;
  * OpenTelemetry-based implementation of PoolMetrics.
  * <p>
  * This implementation exposes Apache Commons Pool 2 XA connection pool metrics
- * to OpenTelemetry, similar to how HikariCP exposes its metrics.
+ * to OpenTelemetry, following the same naming convention as HikariCP for consistency.
  * </p>
  * 
- * <h3>Exposed Metrics:</h3>
+ * <h3>Core Pool Metrics (aligned with HikariCP):</h3>
  * <ul>
  *   <li><b>ojp.xa.pool.connections.active</b> - Number of active (borrowed) connections</li>
  *   <li><b>ojp.xa.pool.connections.idle</b> - Number of idle connections in pool</li>
+ *   <li><b>ojp.xa.pool.connections.total</b> - Total connections (active + idle)</li>
  *   <li><b>ojp.xa.pool.connections.pending</b> - Number of threads waiting for connections</li>
  *   <li><b>ojp.xa.pool.connections.max</b> - Maximum pool size</li>
  *   <li><b>ojp.xa.pool.connections.min</b> - Minimum idle connections</li>
- *   <li><b>ojp.xa.pool.connections.utilization</b> - Pool utilization percentage (0-100)</li>
- *   <li><b>ojp.xa.pool.connections.created</b> - Total connections created (counter)</li>
- *   <li><b>ojp.xa.pool.connections.destroyed</b> - Total connections destroyed (counter)</li>
- *   <li><b>ojp.xa.pool.connections.borrowed</b> - Total borrow operations (counter)</li>
- *   <li><b>ojp.xa.pool.connections.returned</b> - Total return operations (counter)</li>
+ * </ul>
+ * 
+ * <h3>XA-Specific Additional Metrics (from Apache Commons Pool 2):</h3>
+ * <ul>
+ *   <li><b>ojp.xa.pool.connections.created</b> - Total connections created since pool start</li>
+ *   <li><b>ojp.xa.pool.connections.destroyed</b> - Total connections destroyed since pool start</li>
  *   <li><b>ojp.xa.pool.connections.exhausted</b> - Pool exhaustion events (counter)</li>
  *   <li><b>ojp.xa.pool.connections.validation.failed</b> - Validation failures (counter)</li>
  *   <li><b>ojp.xa.pool.connections.leaks.detected</b> - Leak detections (counter)</li>
  *   <li><b>ojp.xa.pool.connections.acquisition.time</b> - Connection acquisition time in ms (counter - sum)</li>
  *   <li><b>ojp.xa.pool.connections.acquisition.count</b> - Number of acquisitions tracked (counter)</li>
  * </ul>
+ * 
+ * <p><b>Note:</b> Pool utilization can be calculated as: <code>(active / max) * 100</code></p>
  * 
  * <p>All metrics are labeled with <code>pool.name</code> attribute for identification.</p>
  */
@@ -85,9 +89,9 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
         this.meter = openTelemetry.getMeter(METER_NAME);
         this.attributes = Attributes.of(POOL_NAME_KEY, poolName);
         
-        log.info("Initializing OpenTelemetry metrics for pool: {}", poolName);
+        log.info("Initializing OpenTelemetry metrics for XA pool: {}", poolName);
         
-        // Create observable gauges for pool state
+        // Create core pool metrics (aligned with HikariCP naming - same suffixes)
         meter.gaugeBuilder("ojp.xa.pool.connections.active")
                 .setDescription("Number of active (borrowed) connections")
                 .setUnit("connections")
@@ -99,6 +103,14 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                 .setUnit("connections")
                 .buildWithCallback(measurement -> 
                     measurement.record(currentIdle.get(), attributes));
+        
+        meter.gaugeBuilder("ojp.xa.pool.connections.total")
+                .setDescription("Total connections (active + idle)")
+                .setUnit("connections")
+                .buildWithCallback(measurement -> {
+                    int total = currentActive.get() + currentIdle.get();
+                    measurement.record(total, attributes);
+                });
         
         meter.gaugeBuilder("ojp.xa.pool.connections.pending")
                 .setDescription("Number of threads waiting for connections")
@@ -118,16 +130,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                 .buildWithCallback(measurement -> 
                     measurement.record(currentMinIdle.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.utilization")
-                .setDescription("Pool utilization percentage (0-100)")
-                .setUnit("percent")
-                .buildWithCallback(measurement -> {
-                    int max = currentMaxTotal.get();
-                    int active = currentActive.get();
-                    double utilization = max > 0 ? (active * 100.0 / max) : 0.0;
-                    measurement.record(Math.round(utilization), attributes);
-                });
-        
+        // XA-specific additional metrics from Apache Commons Pool 2
         meter.gaugeBuilder("ojp.xa.pool.connections.created")
                 .setDescription("Total connections created since pool start")
                 .setUnit("connections")

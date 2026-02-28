@@ -181,9 +181,9 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
             
             log.info("Registering OpenTelemetry gauges for HikariCP pool '{}'", poolName);
             
-            // Register gauges for pool metrics - these read from poolStats
+            // Register standardized pool metrics (aligned suffix naming with XA pools)
             meter.gaugeBuilder("ojp.hikari.pool.connections.active")
-                    .setDescription("Active (in-use) connections")
+                    .setDescription("Number of active (borrowed) connections")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
                         PoolStats stats = poolStats;
@@ -193,7 +193,7 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.idle")
-                    .setDescription("Idle connections in pool")
+                    .setDescription("Number of idle connections in pool")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
                         PoolStats stats = poolStats;
@@ -203,7 +203,7 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.total")
-                    .setDescription("Total connections")
+                    .setDescription("Total connections (active + idle)")
                     .setUnit("connections")
                     .buildWithCallback(measurement -> {
                         PoolStats stats = poolStats;
@@ -213,7 +213,7 @@ public class HikariConnectionPoolProvider implements ConnectionPoolProvider {
                     });
             
             meter.gaugeBuilder("ojp.hikari.pool.connections.pending")
-                    .setDescription("Threads waiting for connection")
+                    .setDescription("Number of threads waiting for connections")
                     .setUnit("threads")
                     .buildWithCallback(measurement -> {
                         PoolStats stats = poolStats;

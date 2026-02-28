@@ -393,25 +393,32 @@ public class MyConnectionPoolProvider implements ConnectionPoolProvider {
 
 ### Key Metrics to Expose
 
-Your implementation should expose these standard metrics for consistency with built-in providers:
+Your implementation should expose these **standardized core metrics** with consistent suffix naming:
 
-**Gauges (current state):**
-- `ojp.<pool-type>.pool.connections.active` - Active/borrowed connections
-- `ojp.<pool-type>.pool.connections.idle` - Idle connections in pool
-- `ojp.<pool-type>.pool.connections.pending` - Threads waiting for connections
-- `ojp.<pool-type>.pool.connections.max` - Maximum pool size
-- `ojp.<pool-type>.pool.connections.min` - Minimum pool size (if applicable)
-- `ojp.<pool-type>.pool.connections.utilization` - Pool utilization percentage
+**Core Gauges (required for all pool types):**
+- `ojp.<provider>.pool.connections.active` - Active/borrowed connections
+- `ojp.<provider>.pool.connections.idle` - Idle connections in pool
+- `ojp.<provider>.pool.connections.total` - Total connections (active + idle)
+- `ojp.<provider>.pool.connections.pending` - Threads waiting for connections
+- `ojp.<provider>.pool.connections.max` - Maximum pool size
+- `ojp.<provider>.pool.connections.min` - Minimum idle connections
 
-**Counters (cumulative events):**
-- `ojp.<pool-type>.pool.connections.created` - Total connections created
-- `ojp.<pool-type>.pool.connections.destroyed` - Total connections destroyed
-- `ojp.<pool-type>.pool.connections.exhausted` - Pool exhaustion events
-- `ojp.<pool-type>.pool.connections.validation.failed` - Failed validations
-- `ojp.<pool-type>.pool.connections.acquisition.time` - Total acquisition time
-- `ojp.<pool-type>.pool.connections.acquisition.count` - Total acquisitions
+Replace `<provider>` with your provider name (e.g., `xa`, `hikari`, `mypool`).
 
-Replace `<pool-type>` with your provider name (e.g., `mypool` for metrics like `ojp.mypool.pool.connections.active`).
+**Pool utilization** can be calculated as: `(active / max) * 100`
+
+**Optional Provider-Specific Metrics:**
+
+If your pool implementation provides additional insights (like Apache Commons Pool 2 does for XA pools), you can expose provider-specific metrics following the same pattern:
+
+- `ojp.<provider>.pool.connections.created` - Total connections created
+- `ojp.<provider>.pool.connections.destroyed` - Total connections destroyed
+- `ojp.<provider>.pool.connections.exhausted` - Pool exhaustion events (counter)
+- `ojp.<provider>.pool.connections.validation.failed` - Failed validations (counter)
+- `ojp.<provider>.pool.connections.acquisition.time` - Total acquisition time (counter)
+- `ojp.<provider>.pool.connections.acquisition.count` - Total acquisitions (counter)
+
+**Important:** All implementations must expose the 6 core gauges with consistent suffix naming (`.active`, `.idle`, `.total`, `.pending`, `.max`, `.min`). Additional metrics are optional and should reflect capabilities unique to your pool implementation.
 
 ### Configuration Integration
 
@@ -440,9 +447,15 @@ For complete integration with OJP's telemetry system:
 
 1. **Obtain OpenTelemetry Instance**: Use `OpenTelemetryHolder.getInstance()` to get the globally registered OpenTelemetry instance
 2. **Respect Configuration**: Check `ojp.telemetry.enabled` and `ojp.telemetry.pool.metrics.enabled` before initializing metrics
-3. **Use Consistent Naming**: Follow the `ojp.<type>.pool.connections.*` naming convention
+3. **Use Consistent Naming**: Follow the `ojp.<provider>.pool.connections.*` pattern with standardized suffixes (`.active`, `.idle`, `.total`, `.pending`, `.max`, `.min`)
 4. **Add Pool Name Attribute**: Tag all metrics with `pool.name` attribute for multi-pool identification
-5. **Update Documentation**: Document your metrics in your provider's README
+5. **Provider-Specific Metrics**: Use the same pattern for additional metrics unique to your implementation
+6. **Update Documentation**: Document your metrics in your provider's README
+
+**Examples:**
+- XA pools: `ojp.xa.pool.connections.active`, `ojp.xa.pool.connections.idle`, etc.
+- HikariCP: `ojp.hikari.pool.connections.active`, `ojp.hikari.pool.connections.idle`, etc.
+- Custom provider "mypool": `ojp.mypool.pool.connections.active`, `ojp.mypool.pool.connections.idle`, etc.
 
 See the [Commons Pool 2 XA metrics implementation](../../../ojp-xa-pool-commons/src/main/java/org/openjproxy/xa/pool/commons/metrics/) and [HikariCP metrics integration](../../../ojp-datasource-hikari/src/main/java/org/openjproxy/datasource/hikari/) for reference implementations.
 
