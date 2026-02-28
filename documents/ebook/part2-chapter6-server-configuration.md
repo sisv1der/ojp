@@ -180,7 +180,7 @@ graph LR
 
 Modern observability goes beyond logs. OJP integrates with OpenTelemetry to provide metrics through Prometheus. The server automatically instruments gRPC operations, providing insights into request processing and server performance.
 
-**Note**: Currently, OJP exports metrics via Prometheus but does not export distributed traces. The OpenTelemetry integration focuses on providing operational metrics such as request rates, error rates, and latency through the Prometheus endpoint.
+**Note**: OJP exports metrics via Prometheus and also supports distributed tracing via OpenTelemetry. Metrics are enabled by default; distributed tracing must be explicitly enabled via configuration (see Chapter 13 for full tracing configuration details). The OpenTelemetry integration provides operational metrics such as request rates, error rates, and latency through the Prometheus endpoint, as well as distributed traces to Zipkin or OTLP-compatible backends such as Jaeger and Grafana Tempo.
 
 OpenTelemetry support is enabled by default, making the Prometheus metrics endpoint available at the configured port (default 9159). The server automatically instruments all gRPC operations, creating metrics for connection acquisition, query execution, and server resource usage.
 
