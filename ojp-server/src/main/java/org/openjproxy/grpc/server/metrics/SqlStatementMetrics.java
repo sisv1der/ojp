@@ -12,11 +12,11 @@ public interface SqlStatementMetrics {
     /**
      * Records the execution time of a SQL statement.
      *
-     * @param sqlHash      the hash of the SQL statement (from {@link org.openjproxy.grpc.server.SqlStatementXXHash})
+     * @param sql             the actual SQL statement text
      * @param executionTimeMs the execution time in milliseconds
-     * @param isSlow       whether this execution is classified as slow
+     * @param isSlow          whether this execution is classified as slow
      */
-    void recordSqlExecution(String sqlHash, long executionTimeMs, boolean isSlow);
+    void recordSqlExecution(String sql, long executionTimeMs, boolean isSlow);
 
     /**
      * Closes the metrics collector and releases any resources.

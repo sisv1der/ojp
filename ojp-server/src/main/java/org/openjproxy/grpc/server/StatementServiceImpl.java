@@ -776,8 +776,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             // Get the appropriate slow query segregation manager for this datasource
             SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
 
-            // Execute with slow query segregation
-            manager.executeWithSegregation(stmtHash, () -> {
+            // Execute with slow query segregation, passing actual SQL for metric labelling
+            manager.executeWithSegregation(stmtHash, request.getSql(), () -> {
                 executionLogic.execute();
                 return null;
             });

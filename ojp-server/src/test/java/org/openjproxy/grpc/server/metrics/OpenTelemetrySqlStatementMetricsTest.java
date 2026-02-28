@@ -95,24 +95,24 @@ class OpenTelemetrySqlStatementMetricsTest {
     }
 
     @Test
-    void shouldIgnoreNullOrEmptySqlHash() {
+    void shouldIgnoreNullOrEmptySql() {
         // Should not throw
         assertDoesNotThrow(() -> metrics.recordSqlExecution(null, 10L, false));
         assertDoesNotThrow(() -> metrics.recordSqlExecution("", 10L, false));
     }
 
     @Test
-    void shouldTagMetricWithSqlHash() {
-        String hash = "deadbeef";
-        metrics.recordSqlExecution(hash, 15L, false);
+    void shouldTagMetricWithSqlStatement() {
+        String sql = "SELECT 1 FROM dual";
+        metrics.recordSqlExecution(sql, 15L, false);
 
         Collection<MetricData> collected = metricReader.collectAllMetrics();
-        boolean hashAttributeFound = collected.stream()
+        boolean statementAttributeFound = collected.stream()
                 .filter(m -> m.getName().equals("ojp.sql.execution.time"))
                 .flatMap(m -> m.getHistogramData().getPoints().stream())
-                .anyMatch(p -> hash.equals(p.getAttributes().get(OpenTelemetrySqlStatementMetrics.SQL_HASH_KEY)));
+                .anyMatch(p -> sql.equals(p.getAttributes().get(OpenTelemetrySqlStatementMetrics.SQL_STATEMENT_KEY)));
 
-        assertTrue(hashAttributeFound, "Expected sql.hash attribute on execution time histogram");
+        assertTrue(statementAttributeFound, "Expected sql.statement attribute on execution time histogram");
     }
 
     @Test

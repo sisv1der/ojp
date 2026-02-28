@@ -13,7 +13,7 @@ public class NoOpSqlStatementMetrics implements SqlStatementMetrics {
     }
 
     @Override
-    public void recordSqlExecution(String sqlHash, long executionTimeMs, boolean isSlow) {
+    public void recordSqlExecution(String sql, long executionTimeMs, boolean isSlow) {
         // No-op
     }
 

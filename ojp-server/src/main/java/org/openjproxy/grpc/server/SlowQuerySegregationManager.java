@@ -91,17 +91,20 @@ public class SlowQuerySegregationManager {
     /**
      * Executes an operation with slow query segregation.
      * This method handles slot acquisition, performance monitoring, and slot release.
-     * 
+     * The {@code operationHash} is used for performance monitoring (slot classification);
+     * the actual SQL text is passed separately for metric labelling.
+     *
      * @param operationHash The hash of the SQL operation
-     * @param operation The operation to execute
-     * @param <T> The return type of the operation
+     * @param sql           The actual SQL statement text (used as metric label)
+     * @param operation     The operation to execute
+     * @param <T>           The return type of the operation
      * @return The result of the operation
      * @throws Exception if the operation fails or slot acquisition times out
      */
-    public <T> T executeWithSegregation(String operationHash, SegregatedOperation<T> operation) throws Exception {
+    public <T> T executeWithSegregation(String operationHash, String sql, SegregatedOperation<T> operation) throws Exception {
         if (!enabled) {
             // If segregation is disabled, just execute and monitor performance
-            return executeAndMonitor(operationHash, operation);
+            return executeAndMonitor(operationHash, sql, operation);
         }
         
         // Determine if this is a slow or fast operation
@@ -109,7 +112,6 @@ public class SlowQuerySegregationManager {
         
         // Acquire appropriate slot
         boolean slotAcquired = false;
-        long startTime = System.currentTimeMillis();
         
         try {
             if (isSlowOperation) {
@@ -127,7 +129,7 @@ public class SlowQuerySegregationManager {
             }
             
             // Execute the operation and monitor its performance
-            return executeAndMonitor(operationHash, operation);
+            return executeAndMonitor(operationHash, sql, operation);
             
         } finally {
             // Always release the slot
@@ -142,11 +144,25 @@ public class SlowQuerySegregationManager {
             }
         }
     }
+
+    /**
+     * Executes an operation with slow query segregation.
+     * This method handles slot acquisition, performance monitoring, and slot release.
+     *
+     * @param operationHash The hash of the SQL operation
+     * @param operation The operation to execute
+     * @param <T> The return type of the operation
+     * @return The result of the operation
+     * @throws Exception if the operation fails or slot acquisition times out
+     */
+    public <T> T executeWithSegregation(String operationHash, SegregatedOperation<T> operation) throws Exception {
+        return executeWithSegregation(operationHash, operationHash, operation);
+    }
     
     /**
      * Executes an operation and monitors its performance without slot management.
      */
-    private <T> T executeAndMonitor(String operationHash, SegregatedOperation<T> operation) throws Exception {
+    private <T> T executeAndMonitor(String operationHash, String sql, SegregatedOperation<T> operation) throws Exception {
         long startTime = System.currentTimeMillis();
         
         try {
@@ -155,7 +171,7 @@ public class SlowQuerySegregationManager {
             // Record successful execution time
             long executionTime = System.currentTimeMillis() - startTime;
             performanceMonitor.recordExecutionTime(operationHash, executionTime);
-            sqlStatementMetrics.recordSqlExecution(operationHash, executionTime,
+            sqlStatementMetrics.recordSqlExecution(sql, executionTime,
                     performanceMonitor.isSlowOperation(operationHash));
             
             return result;
@@ -163,7 +179,7 @@ public class SlowQuerySegregationManager {
             // Still record execution time even for failed operations for monitoring purposes
             long executionTime = System.currentTimeMillis() - startTime;
             performanceMonitor.recordExecutionTime(operationHash, executionTime);
-            sqlStatementMetrics.recordSqlExecution(operationHash, executionTime,
+            sqlStatementMetrics.recordSqlExecution(sql, executionTime,
                     performanceMonitor.isSlowOperation(operationHash));
             throw e;
         }
