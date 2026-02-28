@@ -73,7 +73,7 @@ However, production environments often require more specific configuration. You 
 
 The configuration hierarchy works simply: JVM properties take precedence over environment variables, which take precedence over defaults. This means you can set defaults with environment variables in your deployment manifests while still allowing ops teams to override specific values at runtime using JVM properties when needed.
 
-**[AI Image Prompt: Create an infographic showing OJP's metrics configuration hierarchy. Display three levels as a pyramid or stacked layers: bottom layer labeled "Defaults" (9159 port, enabled telemetry, open access), middle layer labeled "Environment Variables" (OJP_PROMETHEUS_PORT, OJP_OPENTELEMETRY_ENABLED, OJP_PROMETHEUS_ALLOWED_IPS), and top layer labeled "JVM Properties" (ojp.prometheus.port, ojp.opentelemetry.enabled, ojp.prometheus.allowedIps). Use arrows showing override direction from bottom to top. Include example values for each configuration method. Style: Educational infographic, modern colors, clear typography.]**
+**[AI Image Prompt: Create an infographic showing OJP's metrics configuration hierarchy. Display three levels as a pyramid or stacked layers: bottom layer labeled "Defaults" (9159 port, enabled telemetry, open access), middle layer labeled "Environment Variables" (OJP_PROMETHEUS_PORT, OJP_TELEMETRY_ENABLED, OJP_PROMETHEUS_ALLOWED_IPS), and top layer labeled "JVM Properties" (ojp.prometheus.port, ojp.telemetry.enabled, ojp.prometheus.allowedIps). Use arrows showing override direction from bottom to top. Include example values for each configuration method. Style: Educational infographic, modern colors, clear typography.]**
 
 ### Configuration Examples
 
@@ -81,7 +81,7 @@ Here's how you configure OJP's telemetry using JVM properties. This approach wor
 
 ```bash
 java -jar ojp-server.jar \
-  -Dojp.opentelemetry.enabled=true \
+  -Dojp.telemetry.enabled=true \
   -Dojp.prometheus.port=9159 \
   -Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
 ```
@@ -91,7 +91,7 @@ The `allowedIps` property deserves special attention. It accepts a comma-separat
 For containerized deployments, environment variables provide a cleaner configuration approach. Most container orchestrators like Kubernetes or Docker Compose make it easy to inject environment variables into containers:
 
 ```bash
-export OJP_OPENTELEMETRY_ENABLED=true
+export OJP_TELEMETRY_ENABLED=true
 export OJP_PROMETHEUS_PORT=9159
 export OJP_PROMETHEUS_ALLOWED_IPS=127.0.0.1,10.0.0.0/8
 java -jar ojp-server.jar

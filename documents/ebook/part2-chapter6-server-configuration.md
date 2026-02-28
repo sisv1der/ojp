@@ -189,11 +189,11 @@ OpenTelemetry support is enabled by default, making the Prometheus metrics endpo
 The default configuration provides metrics through the Prometheus HTTP endpoint. You can enable or disable OpenTelemetry as needed:
 
 ```bash
-# Enable OpenTelemetry (default)
--Dojp.opentelemetry.enabled=true
+# Enable OpenTelemetry infrastructure (default)
+-Dojp.telemetry.enabled=true
 
 # Disable telemetry for performance-critical scenarios
--Dojp.opentelemetry.enabled=false
+-Dojp.telemetry.enabled=false
 ```
 
 The metrics available through Prometheus include standard gRPC instrumentation metrics such as request counts, request durations, and error rates. These metrics integrate well with Prometheus-based monitoring stacks and can be visualized in Grafana or other observability platforms.

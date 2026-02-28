@@ -68,7 +68,7 @@ XADataSource xaDS = provider.createXADataSource(config);
 When running ojp-server, use these JVM arguments to enable metrics:
 
 ```bash
--Dojp.opentelemetry.enabled=true                # Enable OpenTelemetry
+-Dojp.telemetry.enabled=true                    # Enable OpenTelemetry infrastructure
 -Dojp.prometheus.port=9159                      # Prometheus endpoint port
 -Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
 -Dojp.telemetry.pool.metrics.enabled=true      # Enable pool metrics (XA, HikariCP, DBCP)
@@ -79,7 +79,19 @@ When running ojp-server, use these JVM arguments to enable metrics:
 
 ### Automatic Integration
 
-Metrics are automatically collected when OpenTelemetry is enabled in ojp-server (`ojp.opentelemetry.enabled=true`) and pool metrics are enabled (`ojp.telemetry.pool.metrics.enabled=true`, which is the default). The OpenTelemetry instance is registered globally and used by all pools (XA, HikariCP, DBCP). The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
+Metrics are automatically collected when OpenTelemetry is enabled in ojp-server (`ojp.telemetry.enabled=true`) and pool metrics are enabled (`ojp.telemetry.pool.metrics.enabled=true`, which is the default). The OpenTelemetry instance is registered globally and used by all pools (XA, HikariCP, DBCP). The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
+
+### Configuration Hierarchy
+
+The telemetry system uses a three-tier configuration approach:
+
+1. **Master Switch** (`ojp.telemetry.enabled`): Controls whether to initialize the OpenTelemetry SDK and Prometheus server. When false, the system uses no-op telemetry with zero overhead, and no telemetry infrastructure is started (no Prometheus port opened, no exporters initialized).
+
+2. **gRPC Metrics** (`ojp.telemetry.grpc.metrics.enabled`): Controls collection of gRPC server metrics. Only takes effect when the master switch is enabled. Default: true.
+
+3. **Pool Metrics** (`ojp.telemetry.pool.metrics.enabled`): Controls collection of connection pool metrics (XA, HikariCP, DBCP). Only takes effect when the master switch is enabled. Default: true.
+
+This design provides clear separation of concerns: the master switch manages infrastructure setup and resource allocation, while the granular flags control which specific metrics are collected within an already-initialized OpenTelemetry system.
 
 ### With Prometheus Exporter
 

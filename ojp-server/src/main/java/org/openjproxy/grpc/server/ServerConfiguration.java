@@ -18,7 +18,7 @@ public class ServerConfiguration {
     // Configuration keys
     private static final String SERVER_PORT_KEY = "ojp.server.port";
     private static final String PROMETHEUS_PORT_KEY = "ojp.prometheus.port";
-    private static final String OPENTELEMETRY_ENABLED_KEY = "ojp.opentelemetry.enabled";
+    private static final String OPENTELEMETRY_ENABLED_KEY = "ojp.telemetry.enabled";
     private static final String OPENTELEMETRY_ENDPOINT_KEY = "ojp.opentelemetry.endpoint";
     private static final String THREAD_POOL_SIZE_KEY = "ojp.server.threadPoolSize";
     private static final String MAX_REQUEST_SIZE_KEY = "ojp.server.maxRequestSize";
