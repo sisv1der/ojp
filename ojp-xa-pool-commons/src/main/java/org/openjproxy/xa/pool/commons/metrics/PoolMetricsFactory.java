@@ -44,12 +44,22 @@ public class PoolMetricsFactory {
         }
         
         // Check if metrics are explicitly disabled (check all keys for backward compatibility)
+        // First check config map, then system properties
         String metricsEnabled = config.get(METRICS_ENABLED_KEY);
+        if (metricsEnabled == null) {
+            metricsEnabled = System.getProperty(METRICS_ENABLED_KEY);
+        }
         if (metricsEnabled == null) {
             metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_1);
         }
         if (metricsEnabled == null) {
+            metricsEnabled = System.getProperty(METRICS_ENABLED_KEY_LEGACY_1);
+        }
+        if (metricsEnabled == null) {
             metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_2);
+        }
+        if (metricsEnabled == null) {
+            metricsEnabled = System.getProperty(METRICS_ENABLED_KEY_LEGACY_2);
         }
         if (metricsEnabled != null && "false".equalsIgnoreCase(metricsEnabled.trim())) {
             log.info("XA pool metrics explicitly disabled via configuration");
@@ -65,9 +75,19 @@ public class PoolMetricsFactory {
         if (openTelemetry != null) {
             try {
                 // Support both old and new config keys for pool name
+                // Check config map first, then system properties
                 String poolName = config.get(POOL_NAME_KEY);
                 if (poolName == null) {
-                    poolName = config.getOrDefault(POOL_NAME_KEY_OLD, DEFAULT_POOL_NAME);
+                    poolName = System.getProperty(POOL_NAME_KEY);
+                }
+                if (poolName == null) {
+                    poolName = config.get(POOL_NAME_KEY_OLD);
+                }
+                if (poolName == null) {
+                    poolName = System.getProperty(POOL_NAME_KEY_OLD);
+                }
+                if (poolName == null) {
+                    poolName = DEFAULT_POOL_NAME;
                 }
                 log.info("Creating OpenTelemetry metrics for XA pool: {}", poolName);
                 return new OpenTelemetryPoolMetrics(openTelemetry, poolName);
