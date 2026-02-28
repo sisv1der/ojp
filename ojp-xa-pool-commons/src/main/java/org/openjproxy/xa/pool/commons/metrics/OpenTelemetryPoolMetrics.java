@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <ul>
  *   <li><b>ojp.xa.pool.connections.active</b> - Number of active (borrowed) connections</li>
  *   <li><b>ojp.xa.pool.connections.idle</b> - Number of idle connections in pool</li>
- *   <li><b>ojp.xa.pool.connections.total</b> - Total connections (active + idle)</li>
+ *   <li><b>ojp.xa.pool.connections.size</b> - Total connections (active + idle)</li>
  *   <li><b>ojp.xa.pool.connections.pending</b> - Number of threads waiting for connections</li>
  *   <li><b>ojp.xa.pool.connections.max</b> - Maximum pool size</li>
  *   <li><b>ojp.xa.pool.connections.min</b> - Minimum idle connections</li>
@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 
  * <h3>XA-Specific Additional Metrics (from Apache Commons Pool 2):</h3>
  * <ul>
- *   <li><b>ojp.xa.pool.connections.created</b> - Total connections created since pool start</li>
+ *   <li><b>ojp.xa.pool.connections.opened</b> - Total connections created since pool start</li>
  *   <li><b>ojp.xa.pool.connections.destroyed</b> - Total connections destroyed since pool start</li>
  *   <li><b>ojp.xa.pool.connections.exhausted</b> - Pool exhaustion events (counter)</li>
  *   <li><b>ojp.xa.pool.connections.validation.failed</b> - Validation failures (counter)</li>
@@ -117,7 +117,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                 .buildWithCallback(measurement -> 
                     measurement.record(currentIdle.get(), attributes));
         
-        this.gaugeTotal = meter.gaugeBuilder("ojp.xa.pool.connections.total")
+        this.gaugeTotal = meter.gaugeBuilder("ojp.xa.pool.connections.size")
                 .setDescription("Total connections (active + idle)")
                 .setUnit("connections")
                 .ofLongs()
@@ -150,7 +150,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                     measurement.record(currentMinIdle.get(), attributes));
         
         // XA-specific additional metrics from Apache Commons Pool 2
-        this.gaugeCreated = meter.gaugeBuilder("ojp.xa.pool.connections.created")
+        this.gaugeCreated = meter.gaugeBuilder("ojp.xa.pool.connections.opened")
                 .setDescription("Total connections created since pool start")
                 .setUnit("connections")
                 .ofLongs()
