@@ -11,7 +11,7 @@ import java.util.Map;
  * <p>
  * This factory determines which metrics implementation to use based on:
  * <ul>
- *   <li>Configuration settings (ojp.xa.metrics.enabled)</li>
+ *   <li>Configuration settings (ojp.telemetry.pool.metrics.enabled)</li>
  *   <li>Availability of OpenTelemetry on the classpath</li>
  *   <li>Provided OpenTelemetry instance</li>
  * </ul>
@@ -20,9 +20,12 @@ import java.util.Map;
 public class PoolMetricsFactory {
     private static final Logger log = LoggerFactory.getLogger(PoolMetricsFactory.class);
     
-    // Support both old and new config key formats for backward compatibility
-    private static final String METRICS_ENABLED_KEY = "ojp.xa.metrics.enabled";
-    private static final String METRICS_ENABLED_KEY_OLD = "xa.metrics.enabled";
+    // Primary config key
+    private static final String METRICS_ENABLED_KEY = "ojp.telemetry.pool.metrics.enabled";
+    // Legacy keys for backward compatibility
+    private static final String METRICS_ENABLED_KEY_LEGACY_1 = "ojp.xa.metrics.enabled";
+    private static final String METRICS_ENABLED_KEY_LEGACY_2 = "xa.metrics.enabled";
+    
     private static final String POOL_NAME_KEY = "ojp.xa.poolName";
     private static final String POOL_NAME_KEY_OLD = "xa.poolName";
     private static final String DEFAULT_POOL_NAME = "ojp-xa-pool";
@@ -40,10 +43,13 @@ public class PoolMetricsFactory {
             return NoOpPoolMetrics.INSTANCE;
         }
         
-        // Check if metrics are explicitly disabled (support both old and new keys)
+        // Check if metrics are explicitly disabled (check all keys for backward compatibility)
         String metricsEnabled = config.get(METRICS_ENABLED_KEY);
         if (metricsEnabled == null) {
-            metricsEnabled = config.get(METRICS_ENABLED_KEY_OLD);
+            metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_1);
+        }
+        if (metricsEnabled == null) {
+            metricsEnabled = config.get(METRICS_ENABLED_KEY_LEGACY_2);
         }
         if (metricsEnabled != null && "false".equalsIgnoreCase(metricsEnabled.trim())) {
             log.info("XA pool metrics explicitly disabled via configuration");

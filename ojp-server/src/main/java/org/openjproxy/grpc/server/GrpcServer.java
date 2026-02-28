@@ -57,7 +57,9 @@ public class GrpcServer {
                 config.getTracingExporter(),
                 config.getTracingEndpoint(),
                 config.getTracingServiceName(),
-                config.getTracingSampleRate()
+                config.getTracingSampleRate(),
+                config.isTelemetryGrpcMetricsEnabled(),
+                config.isTelemetryPoolMetricsEnabled()
             );
 
             OjpHealthManager.setServiceStatus(OjpHealthManager.Services.OPENTELEMETRY_SERVICE,

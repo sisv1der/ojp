@@ -64,6 +64,10 @@ public class ServerConfiguration {
     private static final String TRACING_SERVICE_NAME_KEY = "ojp.tracing.serviceName";
     private static final String TRACING_SAMPLE_RATE_KEY = "ojp.tracing.sampleRate";
 
+    // Telemetry metrics configuration keys
+    private static final String TELEMETRY_GRPC_METRICS_ENABLED_KEY = "ojp.telemetry.grpc.metrics.enabled";
+    private static final String TELEMETRY_POOL_METRICS_ENABLED_KEY = "ojp.telemetry.pool.metrics.enabled";
+
     // TLS configuration keys
     private static final String TLS_ENABLED_KEY = "ojp.server.tls.enabled";
     private static final String TLS_KEYSTORE_PATH_KEY = "ojp.server.tls.keystore.path";
@@ -127,6 +131,10 @@ public class ServerConfiguration {
     public static final String DEFAULT_TRACING_SERVICE_NAME = "ojp-server";
     public static final double DEFAULT_TRACING_SAMPLE_RATE = 1.0; // 100% sampling when enabled
 
+    // Telemetry metrics default values
+    public static final boolean DEFAULT_TELEMETRY_GRPC_METRICS_ENABLED = true; // Enabled by default when OpenTelemetry is enabled
+    public static final boolean DEFAULT_TELEMETRY_POOL_METRICS_ENABLED = true; // Enabled by default when OpenTelemetry is enabled
+
     // TLS default values
     public static final boolean DEFAULT_TLS_ENABLED = false; // Disabled by default for backwards compatibility
     public static final boolean DEFAULT_TLS_CLIENT_AUTH_REQUIRED = false; // mTLS disabled by default
@@ -187,6 +195,10 @@ public class ServerConfiguration {
     private final String tracingExporter;
     private final String tracingServiceName;
     private final double tracingSampleRate;
+
+    // Telemetry metrics configuration
+    private final boolean telemetryGrpcMetricsEnabled;
+    private final boolean telemetryPoolMetricsEnabled;
 
     // TLS configuration
     private final boolean tlsEnabled;
@@ -257,6 +269,10 @@ public class ServerConfiguration {
         this.tracingExporter = getStringProperty(TRACING_EXPORTER_KEY, DEFAULT_TRACING_EXPORTER);
         this.tracingServiceName = getStringProperty(TRACING_SERVICE_NAME_KEY, DEFAULT_TRACING_SERVICE_NAME);
         this.tracingSampleRate = getDoubleProperty(TRACING_SAMPLE_RATE_KEY, DEFAULT_TRACING_SAMPLE_RATE);
+
+        // Telemetry metrics configuration
+        this.telemetryGrpcMetricsEnabled = getBooleanProperty(TELEMETRY_GRPC_METRICS_ENABLED_KEY, DEFAULT_TELEMETRY_GRPC_METRICS_ENABLED);
+        this.telemetryPoolMetricsEnabled = getBooleanProperty(TELEMETRY_POOL_METRICS_ENABLED_KEY, DEFAULT_TELEMETRY_POOL_METRICS_ENABLED);
 
         logConfigurationSummary();
     }
@@ -616,6 +632,14 @@ public class ServerConfiguration {
 
     public double getTracingSampleRate() {
         return tracingSampleRate;
+    }
+
+    public boolean isTelemetryGrpcMetricsEnabled() {
+        return telemetryGrpcMetricsEnabled;
+    }
+
+    public boolean isTelemetryPoolMetricsEnabled() {
+        return telemetryPoolMetricsEnabled;
     }
     
 }

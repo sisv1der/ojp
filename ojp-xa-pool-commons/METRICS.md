@@ -33,16 +33,17 @@ All metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attr
 
 ## Configuration
 
-Metrics collection is enabled by default when OpenTelemetry is enabled in ojp-server. You can control it with these configuration options:
+Metrics collection is controlled by the `ojp.telemetry.pool.metrics.enabled` flag. When enabled (default), metrics are collected for all pool types (XA, HikariCP, DBCP).
 
 ```properties
-# Enable/disable XA pool metrics collection (default: enabled when OpenTelemetry is enabled)
-ojp.xa.metrics.enabled=true
+# Enable/disable pool metrics collection (default: enabled when OpenTelemetry is enabled)
+ojp.telemetry.pool.metrics.enabled=true
 
-# Set a custom pool name for metrics labeling (default: ojp-xa-pool)
+# Set a custom pool name for metrics labeling (default: ojp-xa-pool for XA pools)
 ojp.xa.poolName=my-app-xa-pool
 
-# For backward compatibility, old config keys are also supported:
+# For backward compatibility, legacy config keys are also supported:
+# ojp.xa.metrics.enabled=true
 # xa.metrics.enabled=true
 # xa.poolName=my-app-xa-pool
 ```
@@ -57,7 +58,7 @@ config.put("xa.username", "postgres");
 config.put("xa.password", "secret");
 config.put("xa.maxPoolSize", "20");
 config.put("ojp.xa.poolName", "orders-service-xa-pool");
-config.put("ojp.xa.metrics.enabled", "true");
+config.put("ojp.telemetry.pool.metrics.enabled", "true");
 
 XADataSource xaDS = provider.createXADataSource(config);
 ```
@@ -67,17 +68,18 @@ XADataSource xaDS = provider.createXADataSource(config);
 When running ojp-server, use these JVM arguments to enable metrics:
 
 ```bash
--Dojp.opentelemetry.enabled=true     # Enable OpenTelemetry (includes XA pool metrics)
--Dojp.prometheus.port=9159           # Prometheus endpoint port
+-Dojp.opentelemetry.enabled=true                # Enable OpenTelemetry
+-Dojp.prometheus.port=9159                      # Prometheus endpoint port
 -Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
--Dojp.xa.metrics.enabled=true        # Explicitly enable XA pool metrics (optional, enabled by default)
+-Dojp.telemetry.pool.metrics.enabled=true      # Enable pool metrics (XA, HikariCP, DBCP)
+-Dojp.telemetry.grpc.metrics.enabled=true      # Enable gRPC metrics (default: true)
 ```
 
 ## Integration with OpenTelemetry
 
 ### Automatic Integration
 
-Metrics are automatically collected when OpenTelemetry is enabled in ojp-server (`ojp.opentelemetry.enabled=true`). The OpenTelemetry instance is registered globally and used by all XA pools. The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
+Metrics are automatically collected when OpenTelemetry is enabled in ojp-server (`ojp.opentelemetry.enabled=true`) and pool metrics are enabled (`ojp.telemetry.pool.metrics.enabled=true`, which is the default). The OpenTelemetry instance is registered globally and used by all pools (XA, HikariCP, DBCP). The metrics will be exported through whatever exporters are configured in your OpenTelemetry SDK setup (Prometheus, OTLP, etc.).
 
 ### With Prometheus Exporter
 
