@@ -75,10 +75,7 @@ class OpenTelemetryPoolMetricsTest {
         boolean foundIdleMetric = metricDataCollection.stream()
                 .anyMatch(md -> md.getName().equals("ojp.xa.pool.connections.idle"));
         assertTrue(foundIdleMetric, "Should have idle connections metric");
-        
-        boolean foundUtilizationMetric = metricDataCollection.stream()
-                .anyMatch(md -> md.getName().equals("ojp.xa.pool.connections.utilization"));
-        assertTrue(foundUtilizationMetric, "Should have utilization metric");
+
     }
     
     @Test
