@@ -1,14 +1,16 @@
-# OpenTelemetry Metrics for Commons Pool 2 XA Connection Pool
+# OpenTelemetry Metrics for Connection Pools
 
 ## Overview
 
-The OJP XA Pool Commons module now exposes comprehensive connection pool metrics to OpenTelemetry, similar to how HikariCP exposes its metrics. These metrics provide deep visibility into pool health, performance, and resource utilization.
+OJP now exposes comprehensive connection pool metrics to OpenTelemetry for all supported pool implementations: XA pools (Commons Pool 2), HikariCP, and DBCP. These metrics provide deep visibility into pool health, performance, and resource utilization, similar to how HikariCP's native metrics work.
 
 ## Metrics Exposed
 
-All metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attribute for identification.
+### XA Pool Metrics (Commons Pool 2)
 
-### Gauge Metrics (Current State)
+All XA pool metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attribute for identification.
+
+#### Gauge Metrics (Current State)
 
 | Metric Name | Type | Unit | Description |
 |------------|------|------|-------------|
@@ -21,7 +23,22 @@ All metrics are prefixed with `ojp.xa.pool` and tagged with the `pool.name` attr
 | `ojp.xa.pool.connections.created` | Gauge | connections | Total connections created since pool start |
 | `ojp.xa.pool.connections.destroyed` | Gauge | connections | Total connections destroyed since pool start |
 
-### Counter Metrics (Events)
+### HikariCP Pool Metrics
+
+All HikariCP metrics are prefixed with `ojp.hikari.pool` and tagged with the `pool.name` attribute for identification.
+
+#### Gauge Metrics (Current State)
+
+| Metric Name | Type | Unit | Description |
+|------------|------|------|-------------|
+| `ojp.hikari.pool.connections.active` | Gauge | connections | Number of connections currently in use |
+| `ojp.hikari.pool.connections.idle` | Gauge | connections | Number of idle connections in the pool |
+| `ojp.hikari.pool.connections.total` | Gauge | connections | Total connections in the pool (active + idle) |
+| `ojp.hikari.pool.connections.pending` | Gauge | threads | Number of threads waiting for connections |
+| `ojp.hikari.pool.connections.max` | Gauge | connections | Maximum pool size (configured) |
+| `ojp.hikari.pool.connections.min` | Gauge | connections | Minimum idle connections maintained |
+
+### XA Pool Counter Metrics (Events)
 
 | Metric Name | Type | Unit | Description |
 |------------|------|------|-------------|
@@ -104,6 +121,7 @@ http://localhost:9159/metrics
 Example Prometheus metrics output:
 
 ```
+# XA Pool Metrics
 # HELP ojp_xa_pool_connections_active Number of active (borrowed) connections
 # TYPE ojp_xa_pool_connections_active gauge
 ojp_xa_pool_connections_active{pool_name="ojp-xa-pool"} 5.0
@@ -119,6 +137,23 @@ ojp_xa_pool_connections_utilization{pool_name="ojp-xa-pool"} 25.0
 # HELP ojp_xa_pool_connections_exhausted_total Pool exhaustion events
 # TYPE ojp_xa_pool_connections_exhausted_total counter
 ojp_xa_pool_connections_exhausted_total{pool_name="ojp-xa-pool"} 0.0
+
+# HikariCP Pool Metrics
+# HELP ojp_hikari_pool_connections_active Number of active connections
+# TYPE ojp_hikari_pool_connections_active gauge
+ojp_hikari_pool_connections_active{pool_name="my-hikari-pool"} 8.0
+
+# HELP ojp_hikari_pool_connections_idle Number of idle connections
+# TYPE ojp_hikari_pool_connections_idle gauge
+ojp_hikari_pool_connections_idle{pool_name="my-hikari-pool"} 2.0
+
+# HELP ojp_hikari_pool_connections_total Total connections in pool
+# TYPE ojp_hikari_pool_connections_total gauge
+ojp_hikari_pool_connections_total{pool_name="my-hikari-pool"} 10.0
+
+# HELP ojp_hikari_pool_connections_pending Threads waiting for connections
+# TYPE ojp_hikari_pool_connections_pending gauge
+ojp_hikari_pool_connections_pending{pool_name="my-hikari-pool"} 0.0
 ```
 
 ## Monitoring Best Practices
@@ -224,7 +259,7 @@ This design ensures:
 
 ## Comparison with HikariCP
 
-Similar to HikariCP's metrics, this implementation provides:
+Similar to HikariCP's native metrics implementation, OJP's pool metrics provide:
 
 ✅ Pool state metrics (active, idle, pending, utilization)  
 ✅ Connection lifecycle metrics (created, destroyed)  
@@ -234,7 +269,19 @@ Similar to HikariCP's metrics, this implementation provides:
 ✅ Prometheus export support  
 ✅ Configurable pool naming for multi-pool scenarios  
 
-Additional features specific to XA pools:
+### HikariCP Integration
+
+For HikariCP pools, OJP leverages HikariCP's built-in `MetricsTrackerFactory` interface to collect metrics. When pool metrics are enabled (`ojp.telemetry.pool.metrics.enabled=true`), an OpenTelemetry-based MetricsTracker is automatically registered with each HikariCP instance. This provides native HikariCP metrics through the same OpenTelemetry infrastructure as XA pools.
+
+The metrics exposed for HikariCP include:
+- Active, idle, and total connection counts
+- Threads waiting for connections (pending)
+- Maximum and minimum pool sizes
+- All metrics tagged with the configured pool name
+
+### Additional features specific to XA pools:
+
 ✅ Leak detection metrics  
 ✅ Integration with existing housekeeping system  
 ✅ Transaction isolation tracking  
+✅ More granular lifecycle events (created, destroyed, validation failures)

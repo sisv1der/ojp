@@ -18,7 +18,9 @@ OJP's telemetry system captures several categories of operational data. At the g
 
 The server operational metrics provide insights into OJP's internal health. You can track thread pool utilization, memory usage, and garbage collection behavior. Understanding these metrics helps you right-size your OJP Server deployment and identify resource constraints before they cause problems.
 
-Connection and session information forms another critical category of telemetry data. OJP tracks how many connections are active, how long sessions persist, and how effectively the connection pool serves requests. These metrics directly impact your database's performance, as connection management efficiency determines how well your applications can scale.
+Connection pool metrics form a critical category of telemetry data. OJP exposes comprehensive metrics for all pool types—XA pools (Commons Pool 2), HikariCP, and DBCP. You can monitor active and idle connections, pool utilization percentages, threads waiting for connections, connection lifecycle events (created, destroyed), and health indicators like exhaustion events, validation failures, and leak detection. These metrics directly impact your database's performance, as connection management efficiency determines how well your applications can scale.
+
+The pool metrics follow the same patterns as HikariCP's native metrics implementation, providing familiar observability for teams already monitoring HikariCP pools. Each metric is tagged with the pool name, allowing you to monitor multiple pools independently in multi-database environments.
 
 ### Current Capabilities and Future Direction
 
@@ -296,6 +298,141 @@ graph LR
     style O fill:#ffe1e1,stroke:#333
     style D fill:#e1ffe1,stroke:#333
 ```
+
+## 13.5 Connection Pool Metrics
+
+Understanding how your connection pools behave is crucial for maintaining optimal database performance. OJP exposes comprehensive metrics for all supported pool types—XA pools (Commons Pool 2), HikariCP, and DBCP—providing visibility into pool health, utilization, and performance.
+
+### Enabling Pool Metrics
+
+Pool metrics collection is controlled independently from gRPC metrics through the `ojp.telemetry.pool.metrics.enabled` configuration flag. This separation allows you to enable pool monitoring without collecting gRPC telemetry, or vice versa:
+
+```bash
+# Enable telemetry infrastructure
+-Dojp.telemetry.enabled=true
+
+# Control specific metric categories
+-Dojp.telemetry.grpc.metrics.enabled=true     # gRPC server metrics (default: true)
+-Dojp.telemetry.pool.metrics.enabled=true     # Pool metrics (default: true)
+
+# Prometheus configuration
+-Dojp.prometheus.port=9159
+-Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
+```
+
+When pool metrics are enabled, OJP automatically registers metrics collectors for all connection pools created by the server. Each pool's metrics are tagged with its configured pool name, allowing you to monitor multiple pools independently.
+
+### XA Pool Metrics (Commons Pool 2)
+
+XA pools expose 13 metrics covering pool state, performance, and health:
+
+**Gauge Metrics** (current state):
+- `ojp.xa.pool.connections.active` - Currently borrowed connections
+- `ojp.xa.pool.connections.idle` - Available idle connections  
+- `ojp.xa.pool.connections.pending` - Threads waiting for connections
+- `ojp.xa.pool.connections.max` - Maximum pool size
+- `ojp.xa.pool.connections.min` - Minimum idle connections
+- `ojp.xa.pool.connections.utilization` - Pool utilization percentage (0-100)
+- `ojp.xa.pool.connections.created` - Total connections created
+- `ojp.xa.pool.connections.destroyed` - Total connections destroyed
+
+**Counter Metrics** (cumulative events):
+- `ojp.xa.pool.connections.exhausted` - Pool exhaustion events
+- `ojp.xa.pool.connections.validation.failed` - Connection validation failures
+- `ojp.xa.pool.connections.leaks.detected` - Connection leaks detected
+- `ojp.xa.pool.connections.acquisition.time` - Total acquisition time (milliseconds)
+- `ojp.xa.pool.connections.acquisition.count` - Number of acquisitions
+
+### HikariCP Pool Metrics
+
+HikariCP pools expose 6 core metrics using HikariCP's native MetricsTrackerFactory integration:
+
+**Gauge Metrics**:
+- `ojp.hikari.pool.connections.active` - Connections currently in use
+- `ojp.hikari.pool.connections.idle` - Idle connections in pool
+- `ojp.hikari.pool.connections.total` - Total connections (active + idle)
+- `ojp.hikari.pool.connections.pending` - Threads waiting for connections
+- `ojp.hikari.pool.connections.max` - Maximum pool size
+- `ojp.hikari.pool.connections.min` - Minimum idle connections
+
+The HikariCP implementation leverages HikariCP's built-in PoolStats callback mechanism, ensuring metrics accurately reflect the pool's internal state.
+
+### Monitoring Pool Health
+
+Several key patterns indicate pool health issues:
+
+**High Utilization** - When `utilization` consistently exceeds 80-90%, the pool is nearing capacity. Consider increasing the maximum pool size or optimizing connection usage patterns in your application code.
+
+**Pending Threads** - Any non-zero value in the `pending` metric indicates contention. Threads are waiting for connections, suggesting the pool can't keep up with demand. Sustained high values warrant immediate investigation.
+
+**Pool Exhaustion** - The `exhausted` counter incrementing means applications are timing out waiting for connections. This is a critical condition requiring immediate action—either increase the pool size, reduce connection hold time, or add more database capacity.
+
+**Connection Leaks** - The `leaks.detected` counter should always be zero. Any detected leaks indicate application bugs where connections aren't being properly closed. Use the housekeeping logs to identify which application connections are leaking.
+
+**Validation Failures** - Occasional validation failures are normal (network blips, database restarts). Frequent failures suggest connectivity problems or database health issues that need investigation.
+
+### Grafana Dashboard Example
+
+Create focused dashboards for pool monitoring with these key panels:
+
+**Pool Overview Panel** - Time series showing active and idle connections over time. This gives you a quick visual of pool behavior and identifies unusual patterns.
+
+**Utilization Gauge** - Display current pool utilization percentage with color thresholds: green (0-70%), yellow (70-85%), red (>85%). This provides at-a-glance health status.
+
+**Performance Metrics** - Graph average connection acquisition time calculated as `acquisition.time / acquisition.count`. Increasing acquisition time indicates pool contention or database latency.
+
+**Health Indicators** - Stats showing pending threads, exhaustion events, and leak detections. These should typically be zero or very low.
+
+Example PromQL queries for your dashboards:
+
+```promql
+# Pool utilization percentage
+ojp_xa_pool_connections_utilization{pool_name="my-pool"}
+
+# Average acquisition time in milliseconds  
+rate(ojp_xa_pool_connections_acquisition_time_total[5m])
+/
+rate(ojp_xa_pool_connections_acquisition_count_total[5m])
+
+# Connection exhaustion rate (events per second)
+rate(ojp_xa_pool_connections_exhausted_total[5m])
+
+# Active connections across all HikariCP pools
+sum by (pool_name) (ojp_hikari_pool_connections_active)
+```
+
+### Alerting on Pool Issues
+
+Configure alerts for critical pool conditions:
+
+```yaml
+groups:
+  - name: ojp_pool_alerts
+    rules:
+      - alert: PoolHighUtilization
+        expr: ojp_xa_pool_connections_utilization > 85
+        for: 5m
+        annotations:
+          summary: "Pool {{ $labels.pool_name }} utilization is {{ $value }}%"
+      
+      - alert: PoolExhaustion
+        expr: increase(ojp_xa_pool_connections_exhausted_total[5m]) > 0
+        annotations:
+          summary: "Pool {{ $labels.pool_name }} exhausted {{ $value }} times"
+      
+      - alert: ConnectionLeak
+        expr: increase(ojp_xa_pool_connections_leaks_detected_total[5m]) > 0
+        annotations:
+          summary: "Connection leak detected in {{ $labels.pool_name }}"
+      
+      - alert: PoolContention
+        expr: ojp_xa_pool_connections_pending > 5
+        for: 2m
+        annotations:
+          summary: "{{ $value }} threads waiting in {{ $labels.pool_name }}"
+```
+
+For detailed information about all available pool metrics, configuration options, and monitoring best practices, see the `METRICS.md` documentation in the `ojp-xa-pool-commons` module.
 
 ### Security and Access Control
 
