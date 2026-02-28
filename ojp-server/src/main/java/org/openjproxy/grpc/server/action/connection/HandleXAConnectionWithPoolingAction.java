@@ -245,6 +245,9 @@ public class HandleXAConnectionWithPoolingAction {
                 xaPoolConfig.put("xa.timeBetweenEvictionRunsMs", String.valueOf(xaConfig.getTimeBetweenEvictionRuns()));
                 xaPoolConfig.put("xa.numTestsPerEvictionRun", String.valueOf(xaConfig.getNumTestsPerEvictionRun()));
                 xaPoolConfig.put("xa.softMinEvictableIdleTimeMs", String.valueOf(xaConfig.getSoftMinEvictableIdleTime()));
+                // Use connHash as unique pool name to avoid DuplicateLabelsException when
+                // multiple XA pools with the same default name exist in the same JVM
+                xaPoolConfig.put("ojp.xa.poolName", connHash);
                 
                 // Create pooled XA DataSource via provider
                 log.info("[XA-POOL-CREATE] Creating XA pool for connHash={}, serverEndpointsHash={}, config=(max={}, min={})",
