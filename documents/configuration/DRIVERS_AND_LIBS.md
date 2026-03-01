@@ -145,10 +145,12 @@ java -Dojp.libs.path=/path/to/ojp-libs -jar ojp-server-0.3.2-snapshot-shaded.jar
 # Create external libraries directory on host
 mkdir -p ./ojp-libs
 
-# (Optional) Download open source drivers if you want specific versions
-# The container already includes H2, PostgreSQL, MySQL, MariaDB
+# Download open source drivers (required)
+cd ojp-server
+bash download-drivers.sh ../ojp-libs
+cd ..
 
-# Add proprietary drivers and libraries
+# Add proprietary drivers and libraries (if needed)
 cp ~/Downloads/ojdbc11.jar ./ojp-libs/
 # Optional: Add Oracle UCP for advanced connection pooling
 cp ~/Downloads/ucp.jar ./ojp-libs/
@@ -163,36 +165,9 @@ docker run -d \
   rrobetti/ojp:0.3.2-snapshot
 ```
 
-The container is pre-configured to look for libraries in `/opt/ojp/ojp-libs`. Your volume-mounted drivers will be loaded alongside the pre-installed open source drivers.
+The container is pre-configured to look for libraries in `/opt/ojp/ojp-libs`. All drivers placed in the mounted directory will be loaded automatically at startup.
 
-### Option 4: Docker - Custom Image Build
-
-This option creates a single container image with additional proprietary drivers embedded.
-
-#### Step 1: Download Additional Libraries
-
-```bash
-mkdir -p ./ojp-libs
-# Add proprietary drivers (open source drivers already included in base image)
-cp ~/Downloads/ojdbc11.jar ./ojp-libs/
-# Optional: Add additional libraries like Oracle UCP
-cp ~/Downloads/ucp.jar ./ojp-libs/
-```
-
-#### Step 2: Build Custom Image
-
-```bash
-# Using the provided Dockerfile.proprietary
-docker build -f Dockerfile.proprietary -t my-company/ojp:1.0.0 .
-```
-
-#### Step 3: Run Custom Image
-
-```bash
-docker run -d -p 1059:1059 my-company/ojp:1.0.0
-```
-
-### Option 5: Docker Compose
+### Option 4: Docker Compose
 
 ```yaml
 version: '3.8'
@@ -207,7 +182,7 @@ services:
       - OJP_LIBS_PATH=/opt/ojp/ojp-libs
 ```
 
-**Note**: The Docker image already includes open-source drivers. The volume mount is only needed if you want to add proprietary drivers or use specific driver versions.
+**Note**: All drivers must be downloaded and placed in the mounted `ojp-libs` directory. Open-source drivers can be downloaded using the `download-drivers.sh` script.
 
 ## Configuration
 
@@ -387,31 +362,37 @@ chown -R 1000:1000 ./ojp-libs/
 ### GitLab CI Example
 
 ```yaml
-build-ojp-with-drivers:
-  stage: build
+deploy-ojp-with-drivers:
+  stage: deploy
   script:
-    - mkdir drivers
+    - mkdir -p ojp-libs
     - curl -o ojp-libs/ojdbc11.jar $ORACLE_DRIVER_URL
-    - docker build -f Dockerfile.proprietary -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker run -d
+        -p 1059:1059
+        -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs
+        rrobetti/ojp:latest
 ```
 
 ### GitHub Actions Example
 
 ```yaml
-name: Build OJP with Drivers
+name: Deploy OJP with Drivers
 on: [push]
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Download drivers
         run: |
-          mkdir drivers
+          mkdir -p ojp-libs
           curl -o ojp-libs/ojdbc11.jar ${{ secrets.ORACLE_DRIVER_URL }}
-      - name: Build Docker image
-        run: docker build -f Dockerfile.proprietary -t ojp:latest .
+      - name: Run OJP with drivers
+        run: |
+          docker run -d \
+            -p 1059:1059 \
+            -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+            rrobetti/ojp:latest
 ```
 
 ## Security Considerations
@@ -428,10 +409,10 @@ jobs:
 A: Yes, place all required JAR files in the external libraries directory.
 
 **Q: What if I don't need proprietary drivers?**  
-A: Docker images include open-source drivers by default. For runnable JAR deployments, use the `download-drivers.sh` script to get the open source drivers.
+A: Use the `download-drivers.sh` script to get the open-source drivers (H2, PostgreSQL, MySQL, MariaDB) for both Docker and runnable JAR deployments.
 
 **Q: Can I use specific versions of open source drivers?**  
-A: Yes, simply download your preferred version and place it in the ojp-libs directory. It will override the default drivers in Docker images.
+A: Yes, simply download your preferred version and place it in the ojp-libs directory.
 
 **Q: Can I hot-reload drivers?**  
 A: No, OJP loads drivers and libraries at startup. Restart the server to load new JARs.

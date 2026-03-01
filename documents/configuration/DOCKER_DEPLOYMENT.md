@@ -310,34 +310,26 @@ docker run -d \
 
 ### Example 5: Adding Proprietary Drivers
 
-To add proprietary JDBC drivers (Oracle, SQL Server, DB2):
-
-1. Create a `Dockerfile.proprietary`:
-
-```dockerfile
-FROM rrobetti/ojp:0.3.2-snapshot
-
-# Copy proprietary driver JARs
-COPY ojp-libs/*.jar /opt/ojp/ojp-libs/
-```
-
-2. Build your custom image:
+To add proprietary JDBC drivers (Oracle, SQL Server, DB2), use a volume mount:
 
 ```bash
-# Place driver JARs in ojp-libs/
-mkdir ojp-libs
+# Create libs directory and download open source drivers
+mkdir -p ojp-libs
+cd ojp-server
+bash download-drivers.sh ../ojp-libs
+cd ..
+
+# Add proprietary drivers
 cp ~/Downloads/ojdbc11.jar ojp-libs/
 cp ~/Downloads/mssql-jdbc-12.jar ojp-libs/
 
-# Build custom image
-docker build -f Dockerfile.proprietary -t my-company/ojp:1.0.0 .
-
-# Run with JVM parameters
+# Run with volume mount
 docker run -d \
   --name ojp-custom \
   -p 1059:1059 \
+  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
   -e JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g -Dfile.encoding=UTF-8 -Duser.timezone=UTC" \
-  my-company/ojp:1.0.0
+  rrobetti/ojp:0.3.2-snapshot
 ```
 
 ---
