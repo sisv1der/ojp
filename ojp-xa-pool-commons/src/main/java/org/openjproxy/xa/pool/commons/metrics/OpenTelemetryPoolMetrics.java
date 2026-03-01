@@ -3,6 +3,7 @@ package org.openjproxy.xa.pool.commons.metrics;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongGauge;
@@ -36,8 +37,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li><b>ojp.xa.pool.connections.exhausted</b> - Pool exhaustion events (counter)</li>
  *   <li><b>ojp.xa.pool.connections.validation.failed</b> - Validation failures (counter)</li>
  *   <li><b>ojp.xa.pool.connections.leaks.detected</b> - Leak detections (counter)</li>
- *   <li><b>ojp.xa.pool.connections.acquisition.time</b> - Connection acquisition time in ms (counter - sum)</li>
- *   <li><b>ojp.xa.pool.connections.acquisition.count</b> - Number of acquisitions tracked (counter)</li>
+ *   <li><b>ojp.xa.pool.connections.acquisition.time</b> - Connection acquisition time histogram in ms</li>
  * </ul>
  * 
  * <p><b>Note:</b> Pool utilization can be calculated as: <code>(active / max) * 100</code></p>
@@ -67,8 +67,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
     private final LongCounter exhaustedCounter;
     private final LongCounter validationFailureCounter;
     private final LongCounter leakDetectionCounter;
-    private final LongCounter acquisitionTimeCounter;
-    private final LongCounter acquisitionCountCounter;
+    private final DoubleHistogram acquisitionTimeHistogram;
 
     // Observable gauge handles — must be closed to deregister callbacks
     private final ObservableLongGauge gaugeActive;
@@ -180,14 +179,9 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                 .setUnit("leaks")
                 .build();
         
-        this.acquisitionTimeCounter = meter.counterBuilder("ojp.xa.pool.connections.acquisition.time")
-                .setDescription("Total connection acquisition time in milliseconds")
+        this.acquisitionTimeHistogram = meter.histogramBuilder("ojp.xa.pool.connections.acquisition.time")
+                .setDescription("Time in milliseconds to acquire a connection from the XA pool")
                 .setUnit("ms")
-                .build();
-        
-        this.acquisitionCountCounter = meter.counterBuilder("ojp.xa.pool.connections.acquisition.count")
-                .setDescription("Number of connection acquisitions tracked")
-                .setUnit("acquisitions")
                 .build();
         
         log.debug("OpenTelemetry metrics initialized successfully for pool: {}", poolName);
@@ -221,8 +215,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
     
     @Override
     public void recordConnectionAcquisitionTime(String poolName, long durationMillis) {
-        acquisitionTimeCounter.add(durationMillis, attributes);
-        acquisitionCountCounter.add(1, attributes);
+        acquisitionTimeHistogram.record(durationMillis, attributes);
         log.trace("Recorded connection acquisition time for {}: {}ms", poolName, durationMillis);
     }
     

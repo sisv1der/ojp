@@ -227,8 +227,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         if (manager == null) {
             log.warn("No SlowQuerySegregationManager found for connection hash {}, creating disabled fallback",
                     connHash);
-            // Create a disabled manager as fallback
-            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false);
+            // Create a disabled manager as fallback - use real sqlStatementMetrics so SQL execution
+            // time is still recorded even if the manager was not pre-created for this connection.
+            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false, actionContext.getSqlStatementMetrics());
             slowQuerySegregationManagers.put(connHash, manager);
         }
         return manager;

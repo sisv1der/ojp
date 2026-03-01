@@ -86,14 +86,10 @@ class OpenTelemetryPoolMetricsTest {
         // Collect metrics
         Collection<MetricData> metricDataCollection = metricReader.collectAllMetrics();
         
-        // Verify acquisition metrics are recorded
+        // Verify acquisition time histogram is recorded (replaces the former counters)
         boolean foundAcquisitionTime = metricDataCollection.stream()
                 .anyMatch(md -> md.getName().equals("ojp.xa.pool.connections.acquisition.time"));
-        assertTrue(foundAcquisitionTime, "Should have acquisition time metric");
-        
-        boolean foundAcquisitionCount = metricDataCollection.stream()
-                .anyMatch(md -> md.getName().equals("ojp.xa.pool.connections.acquisition.count"));
-        assertTrue(foundAcquisitionCount, "Should have acquisition count metric");
+        assertTrue(foundAcquisitionTime, "Should have acquisition time histogram metric");
     }
     
     @Test
