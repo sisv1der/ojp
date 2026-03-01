@@ -162,7 +162,7 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-prometheus</artifactId>
-            <version>1.52.0-alpha</version>
+            <version>1.59.0-alpha</version>
         </dependency>
 
         <!-- Zipkin trace exporter -->
