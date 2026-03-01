@@ -8,8 +8,6 @@ import org.openjproxy.grpc.server.CircuitBreakerRegistry;
 import org.openjproxy.grpc.server.ServerConfiguration;
 import org.openjproxy.grpc.server.SlowQuerySegregationManager;
 import org.openjproxy.grpc.server.UnpooledConnectionDetails;
-import org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics;
-import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
@@ -120,14 +118,6 @@ public class ActionContext {
      */
     private final ServerConfiguration serverConfiguration;
 
-    // ========== Telemetry ==========
-
-    /**
-     * SQL statement metrics for recording execution telemetry per statement hash.
-     * Emits execution time, total execution count, and slow execution count to OpenTelemetry.
-     */
-    private final SqlStatementMetrics sqlStatementMetrics;
-
     // ========== Constructors ==========
     
     public ActionContext(
@@ -143,26 +133,6 @@ public class ActionContext {
             SessionManager sessionManager,
             CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
-        this(datasourceMap, xaDataSourceMap, xaRegistries, unpooledConnectionDetailsMap, dbNameMap,
-             slowQuerySegregationManagers, xaPoolProvider, xaCoordinator, clusterHealthTracker,
-             sessionManager, circuitBreakerRegistry, serverConfiguration,
-             NoOpSqlStatementMetrics.INSTANCE);
-    }
-
-    public ActionContext(
-            Map<String, DataSource> datasourceMap,
-            Map<String, XADataSource> xaDataSourceMap,
-            Map<String, XATransactionRegistry> xaRegistries,
-            Map<String, UnpooledConnectionDetails> unpooledConnectionDetailsMap,
-            Map<String, DbName> dbNameMap,
-            Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers,
-            XAConnectionPoolProvider xaPoolProvider,
-            MultinodeXaCoordinator xaCoordinator,
-            ClusterHealthTracker clusterHealthTracker,
-            SessionManager sessionManager,
-            CircuitBreakerRegistry circuitBreakerRegistry,
-            ServerConfiguration serverConfiguration,
-            SqlStatementMetrics sqlStatementMetrics) {
         
         this.datasourceMap = datasourceMap;
         this.xaDataSourceMap = xaDataSourceMap;
@@ -176,7 +146,6 @@ public class ActionContext {
         this.sessionManager = sessionManager;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.serverConfiguration = serverConfiguration;
-        this.sqlStatementMetrics = sqlStatementMetrics != null ? sqlStatementMetrics : NoOpSqlStatementMetrics.INSTANCE;
     }
     
     // ========== Getters ==========
@@ -232,12 +201,5 @@ public class ActionContext {
     
     public ServerConfiguration getServerConfiguration() {
         return serverConfiguration;
-    }
-
-    /**
-     * Returns the SQL statement metrics for recording per-statement execution telemetry.
-     */
-    public SqlStatementMetrics getSqlStatementMetrics() {
-        return sqlStatementMetrics;
     }
 }

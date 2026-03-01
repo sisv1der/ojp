@@ -112,6 +112,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
+    // SQL statement metrics (only used by executeQuery/executeUpdate)
+    private final org.openjproxy.grpc.server.metrics.SqlStatementMetrics sqlStatementMetrics;
+
     public StatementServiceImpl(SessionManager sessionManager, CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
         this.sessionManager = sessionManager;
@@ -122,8 +125,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         initializeXAPoolProvider();
 
         // Create SQL statement metrics from the registered OpenTelemetry instance (if available)
-        org.openjproxy.grpc.server.metrics.SqlStatementMetrics sqlStatementMetrics =
-                createSqlStatementMetrics();
+        this.sqlStatementMetrics = createSqlStatementMetrics();
 
         // Initialize ActionContext with all shared state
         this.actionContext = new org.openjproxy.grpc.server.action.ActionContext(
@@ -138,8 +140,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 clusterHealthTracker,
                 sessionManager,
                 circuitBreakerRegistry,
-                serverConfiguration,
-                sqlStatementMetrics);
+                serverConfiguration);
     }
 
     /**
@@ -815,7 +816,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             String sql = request.getSql();
             if (sql != null && !sql.isEmpty()) {
                 long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
-                actionContext.getSqlStatementMetrics().recordSqlExecution(
+                sqlStatementMetrics.recordSqlExecution(
                         sql, executionTimeMs, manager.isSlowOperation(stmtHash));
             }
         }
