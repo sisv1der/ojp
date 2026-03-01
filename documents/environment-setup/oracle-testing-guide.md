@@ -83,4 +83,4 @@ Also can explicitly disable oracle tests as in:
 mvn test -DenableOracleTests=false
 ```
 
-To build a Docker image of ojp-server follow the above steps and then follow the [Build ojp-server docker image](/ojp-server/README.md) - OpenTelemetry integration and monitoring setup.
+To use Oracle with Docker deployment, see the [Docker Deployment Guide](../configuration/DOCKER_DEPLOYMENT.md) for volume mount instructions.
