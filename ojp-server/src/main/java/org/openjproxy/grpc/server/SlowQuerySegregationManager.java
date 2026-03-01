@@ -9,9 +9,8 @@ import org.slf4j.LoggerFactory;
  * This class coordinates between the QueryPerformanceMonitor (which tracks execution times)
  * and the SlotManager (which enforces execution limits) to implement the slow query segregation feature.
  *
- * <p>SQL execution time metrics are recorded by the caller ({@code StatementServiceImpl.executeWithResilience})
- * using the {@code SqlStatementMetrics} field held directly on {@code StatementServiceImpl}. This class handles
- * only performance classification and concurrency slot management.</p>
+ * <p>SQL execution time metrics are recorded by the caller ({@code StatementServiceImpl.executeWithResilience}).
+ * This class handles only performance classification and concurrency slot management.</p>
  */
 public class SlowQuerySegregationManager {
     
