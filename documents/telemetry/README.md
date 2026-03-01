@@ -8,6 +8,8 @@ OJP (Open J Proxy) provides observability features to monitor database operation
 OJP exposes operational metrics through a Prometheus-compatible endpoint, providing insights into:
 - gRPC communication metrics (request counts, latency, errors)
 - Server operational metrics
+- Connection pool metrics (XA pools and HikariCP) including connection acquisition time histograms
+- SQL execution time histograms per statement (for both XA and non-XA connections)
 - Connection and session information
 
 ### Distributed Tracing via OpenTelemetry
@@ -90,7 +92,77 @@ export OJP_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
 java -jar ojp-server.jar
 ```
 
-## Integration Examples
+## SQL Execution Metrics
+
+OJP records per-statement SQL execution metrics for every query flowing through the proxy, for both standard and XA connections. Metrics are emitted under the `ojp.sql` OpenTelemetry meter scope.
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ojp.sql.execution.time` | Histogram | Execution time in ms per SQL statement. Exposes `_bucket`, `_count`, `_sum` in Prometheus. |
+| `ojp.sql.executions` | Counter | Total number of executions per SQL statement. |
+| `ojp.sql.slow.executions` | Counter | Executions classified as "slow" (≥2× overall average) per SQL statement. |
+
+All three metrics carry an `sql.statement` label containing the actual SQL text (with parameters as `?` placeholders).
+
+### Example Prometheus Output
+
+```
+ojp_sql_execution_time_milliseconds_bucket{otel_scope_name="ojp.sql",sql_statement="SELECT id FROM users WHERE email = ?",le="10.0"} 47
+ojp_sql_execution_time_milliseconds_bucket{otel_scope_name="ojp.sql",sql_statement="SELECT id FROM users WHERE email = ?",le="+Inf"} 50
+ojp_sql_execution_time_milliseconds_count{otel_scope_name="ojp.sql",sql_statement="SELECT id FROM users WHERE email = ?"} 50
+ojp_sql_execution_time_milliseconds_sum{otel_scope_name="ojp.sql",sql_statement="SELECT id FROM users WHERE email = ?"} 312.5
+```
+
+### Example PromQL Queries
+
+```promql
+# p95 SQL execution time per statement
+histogram_quantile(0.95,
+  sum(rate(ojp_sql_execution_time_milliseconds_bucket[5m]))
+  by (le, sql_statement)
+)
+
+# Slow execution ratio
+rate(ojp_sql_slow_executions_total[5m])
+/
+rate(ojp_sql_executions_total[5m])
+```
+
+## Connection Pool Metrics
+
+### XA Pool Metrics (`ojp.xa.pool` scope)
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ojp.xa.pool.connections.active` | Gauge | Currently borrowed connections |
+| `ojp.xa.pool.connections.idle` | Gauge | Available idle connections |
+| `ojp.xa.pool.connections.pending` | Gauge | Threads waiting for connections |
+| `ojp.xa.pool.connections.max` | Gauge | Maximum pool size |
+| `ojp.xa.pool.connections.min` | Gauge | Minimum idle connections |
+| `ojp.xa.pool.connections.utilization` | Gauge | Pool utilization percentage (0–100) |
+| `ojp.xa.pool.connections.size` | Gauge | Total connections (active + idle) |
+| `ojp.xa.pool.connections.opened` | Gauge | Total connections created since pool start |
+| `ojp.xa.pool.connections.destroyed` | Gauge | Total connections destroyed since pool start |
+| `ojp.xa.pool.connections.exhausted` | Counter | Pool exhaustion events |
+| `ojp.xa.pool.connections.validation.failed` | Counter | Connection validation failures |
+| `ojp.xa.pool.connections.leaks.detected` | Counter | Connection leaks detected |
+| `ojp.xa.pool.connections.acquisition.time` | Histogram | Connection acquisition latency (ms), enabling p50/p95/p99 analysis |
+
+> **Note:** `.size` and `.opened` are used instead of `.total` and `.created` because Prometheus reserves those suffixes for counters.
+
+### HikariCP Pool Metrics (`ojp.hikari.pool` scope)
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ojp.hikari.pool.connections.active` | Gauge | Connections currently in use |
+| `ojp.hikari.pool.connections.idle` | Gauge | Idle connections in pool |
+| `ojp.hikari.pool.connections.total` | Gauge | Total connections (active + idle) |
+| `ojp.hikari.pool.connections.pending` | Gauge | Threads waiting for connections |
+| `ojp.hikari.pool.connections.max` | Gauge | Maximum pool size |
+| `ojp.hikari.pool.connections.min` | Gauge | Minimum idle connections |
+| `ojp.hikari.pool.connections.acquisition.time` | Histogram | Connection acquisition latency (ms), enabling p50/p95/p99 analysis |
+
+
 
 ### With Prometheus and Grafana
 1. Configure Prometheus to scrape OJP metrics:

@@ -112,6 +112,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
+    // SQL statement metrics (only used by executeQuery/executeUpdate)
+    private final org.openjproxy.grpc.server.metrics.SqlStatementMetrics sqlStatementMetrics;
+
     public StatementServiceImpl(SessionManager sessionManager, CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration) {
         this.sessionManager = sessionManager;
@@ -120,6 +123,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
                 serverConfiguration.isSqlEnhancerEnabled());
         initializeXAPoolProvider();
+
+        // Create SQL statement metrics from the registered OpenTelemetry instance (if available)
+        this.sqlStatementMetrics = createSqlStatementMetrics();
 
         // Initialize ActionContext with all shared state
         this.actionContext = new org.openjproxy.grpc.server.action.ActionContext(
@@ -135,6 +141,21 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 sessionManager,
                 circuitBreakerRegistry,
                 serverConfiguration);
+    }
+
+    /**
+     * Creates SQL statement metrics using the registered OpenTelemetry instance.
+     * Falls back to no-op metrics when OpenTelemetry is unavailable.
+     */
+    private org.openjproxy.grpc.server.metrics.SqlStatementMetrics createSqlStatementMetrics() {
+        io.opentelemetry.api.OpenTelemetry openTelemetry =
+                org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder.getInstance();
+        if (openTelemetry != null) {
+            log.info("OpenTelemetry instance available – enabling SQL statement metrics");
+            return new org.openjproxy.grpc.server.metrics.OpenTelemetrySqlStatementMetrics(openTelemetry);
+        }
+        log.info("OpenTelemetry not available – SQL statement metrics disabled (no-op)");
+        return org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics.INSTANCE;
     }
 
     /**
@@ -207,7 +228,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         if (manager == null) {
             log.warn("No SlowQuerySegregationManager found for connection hash {}, creating disabled fallback",
                     connHash);
-            // Create a disabled manager as fallback
             manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false);
             slowQuerySegregationManagers.put(connHash, manager);
         }
@@ -750,14 +770,14 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         String connHash = request.getSession().getConnHash();
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.get(connHash);
 
+        // Get the appropriate slow query segregation manager for this datasource
+        SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
+        long sqlStartMs = System.currentTimeMillis();
         try {
             circuitBreaker.preCheck(stmtHash);
 
-            // Get the appropriate slow query segregation manager for this datasource
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
-
-            // Execute with slow query segregation
-            manager.executeWithSegregation(stmtHash, () -> {
+            // Execute with slow query segregation, passing actual SQL for metric labelling
+            manager.executeWithSegregation(stmtHash, request.getSql(), () -> {
                 executionLogic.execute();
                 return null;
             });
@@ -789,6 +809,15 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
                 circuitBreaker.onFailure(stmtHash, sqlException);
                 sendSQLExceptionMetadata(sqlException, responseObserver);
+            }
+        } finally {
+            // Record SQL execution time for all connections (XA and non-XA) regardless of
+            // manager state. This is the single authoritative place for SQL metrics.
+            String sql = request.getSql();
+            if (sql != null && !sql.isEmpty()) {
+                long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
+                sqlStatementMetrics.recordSqlExecution(
+                        sql, executionTimeMs, manager.isSlowOperation(stmtHash));
             }
         }
     }

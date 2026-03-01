@@ -3,13 +3,13 @@ package org.openjproxy.xa.pool.commons.metrics;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongGauge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <ul>
  *   <li><b>ojp.xa.pool.connections.active</b> - Number of active (borrowed) connections</li>
  *   <li><b>ojp.xa.pool.connections.idle</b> - Number of idle connections in pool</li>
- *   <li><b>ojp.xa.pool.connections.total</b> - Total connections (active + idle)</li>
+ *   <li><b>ojp.xa.pool.connections.size</b> - Total connections (active + idle)</li>
  *   <li><b>ojp.xa.pool.connections.pending</b> - Number of threads waiting for connections</li>
  *   <li><b>ojp.xa.pool.connections.max</b> - Maximum pool size</li>
  *   <li><b>ojp.xa.pool.connections.min</b> - Minimum idle connections</li>
@@ -32,13 +32,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * 
  * <h3>XA-Specific Additional Metrics (from Apache Commons Pool 2):</h3>
  * <ul>
- *   <li><b>ojp.xa.pool.connections.created</b> - Total connections created since pool start</li>
+ *   <li><b>ojp.xa.pool.connections.opened</b> - Total connections created since pool start</li>
  *   <li><b>ojp.xa.pool.connections.destroyed</b> - Total connections destroyed since pool start</li>
  *   <li><b>ojp.xa.pool.connections.exhausted</b> - Pool exhaustion events (counter)</li>
  *   <li><b>ojp.xa.pool.connections.validation.failed</b> - Validation failures (counter)</li>
  *   <li><b>ojp.xa.pool.connections.leaks.detected</b> - Leak detections (counter)</li>
- *   <li><b>ojp.xa.pool.connections.acquisition.time</b> - Connection acquisition time in ms (counter - sum)</li>
- *   <li><b>ojp.xa.pool.connections.acquisition.count</b> - Number of acquisitions tracked (counter)</li>
+ *   <li><b>ojp.xa.pool.connections.acquisition.time</b> - Connection acquisition time histogram in ms</li>
  * </ul>
  * 
  * <p><b>Note:</b> Pool utilization can be calculated as: <code>(active / max) * 100</code></p>
@@ -68,8 +67,17 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
     private final LongCounter exhaustedCounter;
     private final LongCounter validationFailureCounter;
     private final LongCounter leakDetectionCounter;
-    private final LongCounter acquisitionTimeCounter;
-    private final LongCounter acquisitionCountCounter;
+    private final DoubleHistogram acquisitionTimeHistogram;
+
+    // Observable gauge handles — must be closed to deregister callbacks
+    private final ObservableLongGauge gaugeActive;
+    private final ObservableLongGauge gaugeIdle;
+    private final ObservableLongGauge gaugeTotal;
+    private final ObservableLongGauge gaugePending;
+    private final ObservableLongGauge gaugeMax;
+    private final ObservableLongGauge gaugeMin;
+    private final ObservableLongGauge gaugeCreated;
+    private final ObservableLongGauge gaugeDestroyed;
     
     /**
      * Creates OpenTelemetry metrics for the specified pool.
@@ -92,54 +100,66 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
         log.info("Initializing OpenTelemetry metrics for XA pool: {}", poolName);
         
         // Create core pool metrics (aligned with HikariCP naming - same suffixes)
-        meter.gaugeBuilder("ojp.xa.pool.connections.active")
+        // Store handles so close() can deregister callbacks and prevent DuplicateLabelsException
+        // when a pool with the same name is later recreated.
+        this.gaugeActive = meter.gaugeBuilder("ojp.xa.pool.connections.active")
                 .setDescription("Number of active (borrowed) connections")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentActive.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.idle")
+        this.gaugeIdle = meter.gaugeBuilder("ojp.xa.pool.connections.idle")
                 .setDescription("Number of idle connections in pool")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentIdle.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.total")
+        this.gaugeTotal = meter.gaugeBuilder("ojp.xa.pool.connections.size")
                 .setDescription("Total connections (active + idle)")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> {
-                    int total = currentActive.get() + currentIdle.get();
+                    // Read both atomics once to minimise the race window; a small momentary
+                    // inconsistency is acceptable for a monitoring gauge.
+                    long total = (long) currentActive.get() + currentIdle.get();
                     measurement.record(total, attributes);
                 });
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.pending")
+        this.gaugePending = meter.gaugeBuilder("ojp.xa.pool.connections.pending")
                 .setDescription("Number of threads waiting for connections")
                 .setUnit("threads")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentWaiters.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.max")
+        this.gaugeMax = meter.gaugeBuilder("ojp.xa.pool.connections.max")
                 .setDescription("Maximum pool size")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentMaxTotal.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.min")
+        this.gaugeMin = meter.gaugeBuilder("ojp.xa.pool.connections.min")
                 .setDescription("Minimum idle connections")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentMinIdle.get(), attributes));
         
         // XA-specific additional metrics from Apache Commons Pool 2
-        meter.gaugeBuilder("ojp.xa.pool.connections.created")
+        this.gaugeCreated = meter.gaugeBuilder("ojp.xa.pool.connections.opened")
                 .setDescription("Total connections created since pool start")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentCreated.get(), attributes));
         
-        meter.gaugeBuilder("ojp.xa.pool.connections.destroyed")
+        this.gaugeDestroyed = meter.gaugeBuilder("ojp.xa.pool.connections.destroyed")
                 .setDescription("Total connections destroyed since pool start")
                 .setUnit("connections")
+                .ofLongs()
                 .buildWithCallback(measurement -> 
                     measurement.record(currentDestroyed.get(), attributes));
         
@@ -159,14 +179,9 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
                 .setUnit("leaks")
                 .build();
         
-        this.acquisitionTimeCounter = meter.counterBuilder("ojp.xa.pool.connections.acquisition.time")
-                .setDescription("Total connection acquisition time in milliseconds")
+        this.acquisitionTimeHistogram = meter.histogramBuilder("ojp.xa.pool.connections.acquisition.time")
+                .setDescription("Time in milliseconds to acquire a connection from the XA pool")
                 .setUnit("ms")
-                .build();
-        
-        this.acquisitionCountCounter = meter.counterBuilder("ojp.xa.pool.connections.acquisition.count")
-                .setDescription("Number of connection acquisitions tracked")
-                .setUnit("acquisitions")
                 .build();
         
         log.debug("OpenTelemetry metrics initialized successfully for pool: {}", poolName);
@@ -200,8 +215,7 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
     
     @Override
     public void recordConnectionAcquisitionTime(String poolName, long durationMillis) {
-        acquisitionTimeCounter.add(durationMillis, attributes);
-        acquisitionCountCounter.add(1, attributes);
+        acquisitionTimeHistogram.record(durationMillis, attributes);
         log.trace("Recorded connection acquisition time for {}: {}ms", poolName, durationMillis);
     }
     
@@ -226,6 +240,17 @@ public class OpenTelemetryPoolMetrics implements PoolMetrics {
     @Override
     public void close() {
         log.info("Closing OpenTelemetry metrics for pool: {}", poolName);
-        // OpenTelemetry meters are managed by the SDK, no explicit cleanup needed
+        // Close observable gauge handles to deregister their callbacks from the OTel SDK.
+        // Without this, recreating a pool with the same name would register a second set of
+        // callbacks for identical metric+label combinations, causing DuplicateLabelsException
+        // on the next Prometheus scrape.
+        gaugeActive.close();
+        gaugeIdle.close();
+        gaugeTotal.close();
+        gaugePending.close();
+        gaugeMax.close();
+        gaugeMin.close();
+        gaugeCreated.close();
+        gaugeDestroyed.close();
     }
 }

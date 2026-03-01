@@ -237,6 +237,15 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- OpenTelemetry SDK testing utilities (InMemoryMetricReader etc.) -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-sdk-testing -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>1.58.0</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>

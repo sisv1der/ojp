@@ -18,7 +18,9 @@ OJP's telemetry system captures several categories of operational data. At the g
 
 The server operational metrics provide insights into OJP's internal health. You can track thread pool utilization, memory usage, and garbage collection behavior. Understanding these metrics helps you right-size your OJP Server deployment and identify resource constraints before they cause problems.
 
-Connection pool metrics form a critical category of telemetry data. OJP exposes comprehensive metrics for all pool types—XA pools (Commons Pool 2), HikariCP, and DBCP. You can monitor active and idle connections, pool utilization percentages, threads waiting for connections, connection lifecycle events (created, destroyed), and health indicators like exhaustion events, validation failures, and leak detection. These metrics directly impact your database's performance, as connection management efficiency determines how well your applications can scale.
+Connection pool metrics form a critical category of telemetry data. OJP exposes comprehensive metrics for all pool types—XA pools (Commons Pool 2), HikariCP, and DBCP. You can monitor active and idle connections, pool utilization percentages, threads waiting for connections, connection lifecycle events (opened, destroyed), and health indicators like exhaustion events, validation failures, and leak detection. These metrics directly impact your database's performance, as connection management efficiency determines how well your applications can scale.
+
+SQL execution metrics provide per-statement visibility into every query that flows through the proxy. For each unique SQL statement, OJP records an execution time histogram enabling p50/p95/p99 latency analysis, a total execution count, and a slow-execution count. Crucially, these metrics are emitted identically for both standard and XA connections, giving you a unified view of database performance regardless of transaction model.
 
 The pool metrics follow the same patterns as HikariCP's native metrics implementation, providing familiar observability for teams already monitoring HikariCP pools. Each metric is tagged with the pool name, allowing you to monitor multiple pools independently in multi-database environments.
 
@@ -429,7 +431,7 @@ When pool metrics are enabled, OJP automatically registers metrics collectors fo
 
 ### XA Pool Metrics (Commons Pool 2)
 
-XA pools expose 13 metrics covering pool state, performance, and health:
+XA pools expose 12 metrics covering pool state, performance, and health:
 
 **Gauge Metrics** (current state):
 - `ojp.xa.pool.connections.active` - Currently borrowed connections
@@ -438,19 +440,23 @@ XA pools expose 13 metrics covering pool state, performance, and health:
 - `ojp.xa.pool.connections.max` - Maximum pool size
 - `ojp.xa.pool.connections.min` - Minimum idle connections
 - `ojp.xa.pool.connections.utilization` - Pool utilization percentage (0-100)
-- `ojp.xa.pool.connections.created` - Total connections created
-- `ojp.xa.pool.connections.destroyed` - Total connections destroyed
+- `ojp.xa.pool.connections.size` - Total connections (active + idle)
+- `ojp.xa.pool.connections.opened` - Total connections created since pool start
+- `ojp.xa.pool.connections.destroyed` - Total connections destroyed since pool start
 
 **Counter Metrics** (cumulative events):
 - `ojp.xa.pool.connections.exhausted` - Pool exhaustion events
 - `ojp.xa.pool.connections.validation.failed` - Connection validation failures
 - `ojp.xa.pool.connections.leaks.detected` - Connection leaks detected
-- `ojp.xa.pool.connections.acquisition.time` - Total acquisition time (milliseconds)
-- `ojp.xa.pool.connections.acquisition.count` - Number of acquisitions
+
+**Histogram Metrics** (distribution):
+- `ojp.xa.pool.connections.acquisition.time` - Connection acquisition time distribution (milliseconds). Exposes `_bucket`, `_count`, and `_sum` in Prometheus, enabling p50/p95/p99 percentile analysis.
+
+> **Note on metric naming:** Prometheus reserves the suffixes `.total` and `.created` for counters. To avoid name collisions in the Prometheus exposition format, these gauges use the suffixes `.size` and `.opened` respectively.
 
 ### HikariCP Pool Metrics
 
-HikariCP pools expose 6 core metrics using HikariCP's native MetricsTrackerFactory integration:
+HikariCP pools expose 7 core metrics using HikariCP's native MetricsTrackerFactory integration:
 
 **Gauge Metrics**:
 - `ojp.hikari.pool.connections.active` - Connections currently in use
@@ -460,7 +466,10 @@ HikariCP pools expose 6 core metrics using HikariCP's native MetricsTrackerFacto
 - `ojp.hikari.pool.connections.max` - Maximum pool size
 - `ojp.hikari.pool.connections.min` - Minimum idle connections
 
-The HikariCP implementation leverages HikariCP's built-in PoolStats callback mechanism, ensuring metrics accurately reflect the pool's internal state.
+**Histogram Metrics** (distribution):
+- `ojp.hikari.pool.connections.acquisition.time` - Connection acquisition time distribution (milliseconds). Exposes `_bucket`, `_count`, and `_sum` in Prometheus, enabling p50/p95/p99 percentile analysis of how long applications wait to obtain a pooled connection.
+
+The HikariCP implementation leverages HikariCP's built-in PoolStats callback mechanism and MetricsTrackerFactory integration, ensuring metrics accurately reflect the pool's internal state.
 
 ### Monitoring Pool Health
 
@@ -484,7 +493,7 @@ Create focused dashboards for pool monitoring with these key panels:
 
 **Utilization Gauge** - Display current pool utilization percentage with color thresholds: green (0-70%), yellow (70-85%), red (>85%). This provides at-a-glance health status.
 
-**Performance Metrics** - Graph average connection acquisition time calculated as `acquisition.time / acquisition.count`. Increasing acquisition time indicates pool contention or database latency.
+**Performance Metrics** - Graph p95 connection acquisition time using the histogram. Increasing acquisition latency indicates pool contention or database latency.
 
 **Health Indicators** - Stats showing pending threads, exhaustion events, and leak detections. These should typically be zero or very low.
 
@@ -494,16 +503,29 @@ Example PromQL queries for your dashboards:
 # Pool utilization percentage
 ojp_xa_pool_connections_utilization{pool_name="my-pool"}
 
-# Average acquisition time in milliseconds  
-rate(ojp_xa_pool_connections_acquisition_time_total[5m])
-/
-rate(ojp_xa_pool_connections_acquisition_count_total[5m])
+# p95 XA connection acquisition time (milliseconds)
+histogram_quantile(0.95,
+  sum(rate(ojp_xa_pool_connections_acquisition_time_milliseconds_bucket[5m]))
+  by (le, pool_name)
+)
+
+# p95 HikariCP connection acquisition time (milliseconds)
+histogram_quantile(0.95,
+  sum(rate(ojp_hikari_pool_connections_acquisition_time_milliseconds_bucket[5m]))
+  by (le, pool_name)
+)
 
 # Connection exhaustion rate (events per second)
 rate(ojp_xa_pool_connections_exhausted_total[5m])
 
 # Active connections across all HikariCP pools
 sum by (pool_name) (ojp_hikari_pool_connections_active)
+
+# p95 SQL execution time per statement (milliseconds) – works for both XA and non-XA
+histogram_quantile(0.95,
+  sum(rate(ojp_sql_execution_time_milliseconds_bucket[5m]))
+  by (le, sql_statement)
+)
 ```
 
 ### Alerting on Pool Issues
@@ -535,6 +557,16 @@ groups:
         for: 2m
         annotations:
           summary: "{{ $value }} threads waiting in {{ $labels.pool_name }}"
+      
+      - alert: SlowSqlDetected
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(ojp_sql_execution_time_milliseconds_bucket[5m]))
+            by (le, sql_statement)
+          ) > 1000
+        for: 5m
+        annotations:
+          summary: "p95 SQL execution time for '{{ $labels.sql_statement }}' is {{ $value }}ms"
 ```
 
 For detailed information about all available pool metrics, configuration options, and monitoring best practices, see the `METRICS.md` documentation in the `ojp-xa-pool-commons` module.
@@ -613,6 +645,58 @@ Connection pool behavior directly impacts how well OJP performs. These metrics h
 
 `hikaricp_connections_usage_seconds` provides latency histograms for connection acquisition. This tells you how long applications wait to get a database connection from OJP's pool.
 
+### SQL Execution Metrics
+
+OJP records per-statement SQL execution metrics for every query that flows through the proxy—for both standard (non-XA) and XA connections. These metrics are emitted under the `ojp.sql` scope and are labeled with the actual SQL statement text.
+
+`ojp.sql.execution.time` is a histogram recording execution time in milliseconds for each SQL statement. In Prometheus, this becomes:
+- `ojp_sql_execution_time_milliseconds_bucket{sql_statement="...", le="..."}` — histogram bucket counts, enabling p50/p95/p99 analysis
+- `ojp_sql_execution_time_milliseconds_count{sql_statement="..."}` — total number of executions
+- `ojp_sql_execution_time_milliseconds_sum{sql_statement="..."}` — cumulative execution time
+
+`ojp.sql.executions` counts every SQL execution, labeled by statement text. Use this to understand which statements are most frequently executed.
+
+`ojp.sql.slow.executions` counts executions classified as "slow"—those whose average execution time is 2× or more than the overall average. Combined with `ojp.sql.executions`, this gives you a slow-execution ratio per statement.
+
+Example output from the Prometheus endpoint:
+
+```
+# HELP ojp_sql_execution_time_milliseconds SQL execution time histogram
+# TYPE ojp_sql_execution_time_milliseconds histogram
+ojp_sql_execution_time_milliseconds_bucket{otel_scope_name="ojp.sql",sql_statement="SELECT * FROM orders WHERE id = ?",le="5.0"} 0
+ojp_sql_execution_time_milliseconds_bucket{otel_scope_name="ojp.sql",sql_statement="SELECT * FROM orders WHERE id = ?",le="10.0"} 12
+ojp_sql_execution_time_milliseconds_bucket{otel_scope_name="ojp.sql",sql_statement="SELECT * FROM orders WHERE id = ?",le="+Inf"} 15
+ojp_sql_execution_time_milliseconds_count{otel_scope_name="ojp.sql",sql_statement="SELECT * FROM orders WHERE id = ?"} 15
+ojp_sql_execution_time_milliseconds_sum{otel_scope_name="ojp.sql",sql_statement="SELECT * FROM orders WHERE id = ?"} 127.4
+```
+
+> **XA and non-XA parity:** SQL execution metrics are emitted identically for both XA and non-XA connections. You can use the same PromQL queries regardless of the transaction model your application uses.
+
+Example PromQL queries for SQL execution dashboards:
+
+```promql
+# p95 execution time per SQL statement
+histogram_quantile(0.95,
+  sum(rate(ojp_sql_execution_time_milliseconds_bucket[5m]))
+  by (le, sql_statement)
+)
+
+# Average execution time per SQL statement (ms)
+rate(ojp_sql_execution_time_milliseconds_sum[5m])
+/
+rate(ojp_sql_execution_time_milliseconds_count[5m])
+
+# Top 10 most-executed statements
+topk(10,
+  sum(rate(ojp_sql_executions_total[5m])) by (sql_statement)
+)
+
+# Slow execution ratio per statement
+rate(ojp_sql_slow_executions_total[5m])
+/
+rate(ojp_sql_executions_total[5m])
+```
+
 ### Server Health Metrics
 
 These metrics indicate OJP's overall operational health.
@@ -623,7 +707,7 @@ Thread pool metrics reveal how effectively OJP processes concurrent requests. If
 
 Process metrics like CPU usage and file descriptor counts help you understand resource consumption at the OS level. Running out of file descriptors is a common issue in high-connection environments.
 
-**[AI Image Prompt: Create an infographic categorizing OJP's Prometheus metrics into 3 categories: 1) gRPC Server Metrics (request counts, latency, errors), 2) Connection Pool Metrics (active, idle, pending connections), and 3) Server Health Metrics (JVM memory, threads, CPU, file descriptors). For each category, show 2-3 key metric names with example values and simple sparkline graphs. Use icons to represent each category (API for gRPC, pool for connections, heartbeat for health). Style: Educational infographic, clean layout, modern flat design, professional colors.]**
+**[AI Image Prompt: Create an infographic categorizing OJP's Prometheus metrics into 4 categories: 1) gRPC Server Metrics (request counts, latency, errors), 2) Connection Pool Metrics (active, idle, pending connections, acquisition time histograms), 3) SQL Execution Metrics (per-statement execution time histograms, slow-query counts), and 4) Server Health Metrics (JVM memory, threads, CPU, file descriptors). For each category, show 2-3 key metric names with example values and simple sparkline graphs. Use icons to represent each category (API for gRPC, pool for connections, database/clock for SQL, heartbeat for health). Style: Educational infographic, clean layout, modern flat design, professional colors.]**
 
 ## 13.7 Troubleshooting Telemetry Issues
 
@@ -673,20 +757,18 @@ This increases log verbosity and shows exactly what OpenTelemetry is doing—ini
 
 Understanding OJP's telemetry roadmap helps you plan your monitoring strategy for the future.
 
-### SQL-Level Instrumentation
+### SQL-Level Instrumentation (Available Now)
 
-Currently, OJP's metrics operate at the gRPC call level. You see that `ExecuteQuery` was called, but you don't see which SQL statements executed or how they performed.
-
-Future versions might include SQL-level metrics—tracking query patterns, execution times per statement type, and identifying expensive queries automatically. This would make OJP an even more powerful observability tool, giving you database-level insights without instrumenting every application.
+OJP provides full SQL-level metrics today. Every query flowing through the proxy—for both standard and XA connections—is instrumented with per-statement execution time histograms, execution counts, and slow-query classification. See section 13.6 "SQL Execution Metrics" for the complete reference and example PromQL queries.
 
 ### Custom Metrics
 
 Application-specific metrics could flow through OJP's telemetry system in future releases. Imagine adding business-level metrics (like "orders processed" or "user registrations") that get exported alongside OJP's operational metrics. This would provide a unified view of both technical and business KPIs.
 
-**[AI Image Prompt: Create a roadmap timeline visualization showing OJP's telemetry evolution. Display current state (Prometheus metrics + Distributed Tracing via Zipkin/OTLP) and two future phases: 1) SQL-Level Instrumentation (query pattern tracking, execution time breakdowns), and 2) Advanced Features (custom metrics, enhanced multinode observability). For each phase, show a representative icon and key capabilities. Use a horizontal timeline with milestone markers. Style: Roadmap infographic, modern design, professional color scheme with gradient elements, clear information hierarchy.]**
+**[AI Image Prompt: Create a roadmap timeline visualization showing OJP's telemetry evolution. Display current state (Prometheus metrics + Distributed Tracing via Zipkin/OTLP + SQL Execution Histograms) and future phases: 1) Advanced Features (custom metrics, enhanced multinode observability). For each phase, show a representative icon and key capabilities. Use a horizontal timeline with milestone markers. Style: Roadmap infographic, modern design, professional color scheme with gradient elements, clear information hierarchy.]**
 
 ---
 
-This chapter covered OJP's observability capabilities comprehensively. You learned how OpenTelemetry integration provides metrics through Prometheus and distributed traces through Zipkin and OTLP backends, how to set up monitoring infrastructure with Grafana, and how to interpret the metrics OJP exposes. Both metrics and distributed tracing are available today, giving you comprehensive operational visibility into your proxy.
+This chapter covered OJP's observability capabilities comprehensively. You learned how OpenTelemetry integration provides metrics through Prometheus and distributed traces through Zipkin and OTLP backends, how to set up monitoring infrastructure with Grafana, and how to interpret the metrics OJP exposes. Both metrics and distributed tracing are available today, giving you comprehensive operational visibility into your proxy. SQL execution time histograms give you per-statement p50/p95/p99 latency data for all connections—XA and non-XA alike—without any application-side instrumentation.
 
 In the next chapter, we'll dive into OJP's protocol and wire format details—understanding how data flows between applications, OJP, and databases at the binary level. This knowledge proves valuable when debugging issues or implementing non-Java clients.

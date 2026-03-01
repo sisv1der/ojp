@@ -21,12 +21,14 @@ import java.io.PrintWriter;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * XADataSource wrapper that pools {@link XABackendSession} instances using Apache Commons Pool 2.
@@ -62,8 +64,12 @@ import java.util.concurrent.TimeUnit;
  * should NOT be used directly for getting XAConnections. Use the provider's
  * {@code borrowSession()} method instead.</p>
  */
-public class CommonsPool2XADataSource implements XADataSource {
+public class CommonsPool2XADataSource implements XADataSource, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(CommonsPool2XADataSource.class);
+
+    // Counter used to assign a unique, non-sensitive ordinal to each pool instance,
+    // so OTel metric labels remain distinct without exposing connection hashes.
+    private static final AtomicInteger POOL_COUNTER = new AtomicInteger(0);
     
     private final XADataSource vendorXADataSource;
     private final GenericObjectPool<XABackendSession> pool;
@@ -95,8 +101,15 @@ public class CommonsPool2XADataSource implements XADataSource {
         this.config = config;
         this.poolName = config.getOrDefault("xa.poolName", "ojp-xa-pool");
         
+        // Assign a unique, non-sensitive name for OTel metrics so that multiple simultaneous
+        // pools never share the same label and cause DuplicateLabelsException on scrape.
+        // The ordinal is used only for metric labelling; it does not expose connection details.
+        Map<String, String> metricsConfig = new HashMap<>(config);
+        metricsConfig.putIfAbsent("ojp.xa.poolName",
+                "ojp-xa-pool-" + POOL_COUNTER.incrementAndGet());
+
         // Initialize metrics (will be no-op if OpenTelemetry not available)
-        this.poolMetrics = PoolMetricsFactory.create(config, null);
+        this.poolMetrics = PoolMetricsFactory.create(metricsConfig, null);
         
         // Parse housekeeping configuration
         this.housekeepingConfig = HousekeepingConfig.parseFromProperties(config);

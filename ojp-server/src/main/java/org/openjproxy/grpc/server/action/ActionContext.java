@@ -117,8 +117,8 @@ public class ActionContext {
      * Immutable after construction.
      */
     private final ServerConfiguration serverConfiguration;
-    
-    // ========== Constructor ==========
+
+    // ========== Constructors ==========
     
     public ActionContext(
             Map<String, DataSource> datasourceMap,
