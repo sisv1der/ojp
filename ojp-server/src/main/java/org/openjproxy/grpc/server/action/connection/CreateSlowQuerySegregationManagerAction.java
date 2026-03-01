@@ -53,8 +53,7 @@ public class CreateSlowQuerySegregationManagerAction {
                     context.getServerConfiguration().getSlowQuerySlowSlotTimeout(),
                     context.getServerConfiguration().getSlowQueryFastSlotTimeout(),
                     context.getServerConfiguration().getSlowQueryUpdateGlobalAvgInterval(),
-                    true,
-                    context.getSqlStatementMetrics()
+                    true
                 );
                 context.getSlowQuerySegregationManagers().put(connHash, manager);
                 log.info("Created SlowQuerySegregationManager for XA datasource {} with pool size {} (slow query segregation enabled)", 
@@ -70,8 +69,7 @@ public class CreateSlowQuerySegregationManagerAction {
                     0, // slowSlotTimeout not relevant
                     xaStartTimeoutMillis, // Use XA start timeout for fast slot timeout
                     0, // updateGlobalAvgInterval = 0 means no performance monitoring
-                    true, // enabled = true to use SlotManager
-                    context.getSqlStatementMetrics()
+                    true // enabled = true to use SlotManager
                 );
                 context.getSlowQuerySegregationManagers().put(connHash, manager);
                 log.info("Created SlowQuerySegregationManager for XA datasource {} with {} slots (all fast, timeout={}ms, no performance monitoring)", 
@@ -87,8 +85,7 @@ public class CreateSlowQuerySegregationManagerAction {
                     context.getServerConfiguration().getSlowQuerySlowSlotTimeout(),
                     context.getServerConfiguration().getSlowQueryFastSlotTimeout(),
                     context.getServerConfiguration().getSlowQueryUpdateGlobalAvgInterval(),
-                    true,
-                    context.getSqlStatementMetrics()
+                    true
                 );
                 context.getSlowQuerySegregationManagers().put(connHash, manager);
                 log.info("Created SlowQuerySegregationManager for datasource {} with pool size {}", 
@@ -96,8 +93,7 @@ public class CreateSlowQuerySegregationManagerAction {
             } else {
                 // Create disabled manager for consistency
                 SlowQuerySegregationManager manager = new SlowQuerySegregationManager(
-                    1, 0, 0, 0, 0, 0, false,
-                    context.getSqlStatementMetrics()
+                    1, 0, 0, 0, 0, 0, false
                 );
                 context.getSlowQuerySegregationManagers().put(connHash, manager);
                 log.info("Created disabled SlowQuerySegregationManager for datasource {}", connHash);

@@ -227,9 +227,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         if (manager == null) {
             log.warn("No SlowQuerySegregationManager found for connection hash {}, creating disabled fallback",
                     connHash);
-            // Create a disabled manager as fallback - use real sqlStatementMetrics so SQL execution
-            // time is still recorded even if the manager was not pre-created for this connection.
-            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false, actionContext.getSqlStatementMetrics());
+            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false);
             slowQuerySegregationManagers.put(connHash, manager);
         }
         return manager;
@@ -771,11 +769,11 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         String connHash = request.getSession().getConnHash();
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.get(connHash);
 
+        // Get the appropriate slow query segregation manager for this datasource
+        SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
+        long sqlStartMs = System.currentTimeMillis();
         try {
             circuitBreaker.preCheck(stmtHash);
-
-            // Get the appropriate slow query segregation manager for this datasource
-            SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(connHash);
 
             // Execute with slow query segregation, passing actual SQL for metric labelling
             manager.executeWithSegregation(stmtHash, request.getSql(), () -> {
@@ -810,6 +808,15 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
                 circuitBreaker.onFailure(stmtHash, sqlException);
                 sendSQLExceptionMetadata(sqlException, responseObserver);
+            }
+        } finally {
+            // Record SQL execution time for all connections (XA and non-XA) regardless of
+            // manager state. This is the single authoritative place for SQL metrics.
+            String sql = request.getSql();
+            if (sql != null && !sql.isEmpty()) {
+                long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
+                actionContext.getSqlStatementMetrics().recordSqlExecution(
+                        sql, executionTimeMs, manager.isSlowOperation(stmtHash));
             }
         }
     }

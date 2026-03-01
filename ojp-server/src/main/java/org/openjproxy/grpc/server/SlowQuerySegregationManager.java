@@ -1,7 +1,5 @@
 package org.openjproxy.grpc.server;
 
-import org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics;
-import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +8,10 @@ import org.slf4j.LoggerFactory;
  * 
  * This class coordinates between the QueryPerformanceMonitor (which tracks execution times)
  * and the SlotManager (which enforces execution limits) to implement the slow query segregation feature.
+ *
+ * <p>SQL execution time metrics are recorded by the caller ({@code StatementServiceImpl.executeWithResilience})
+ * using the shared {@code SqlStatementMetrics} instance from {@code ActionContext}. This class handles
+ * only performance classification and concurrency slot management.</p>
  */
 public class SlowQuerySegregationManager {
     
@@ -21,38 +23,6 @@ public class SlowQuerySegregationManager {
     private final boolean enabled;
     private final long slowSlotTimeoutMs;
     private final long fastSlotTimeoutMs;
-    private final SqlStatementMetrics sqlStatementMetrics;
-
-    /**
-     * Creates a new SlowQuerySegregationManager.
-     * 
-     * @param totalSlots The maximum total number of concurrent operations (from HikariCP max pool size)
-     * @param slowSlotPercentage The percentage of slots allocated to slow operations (0-100)
-     * @param idleTimeoutMs The time in milliseconds before a slot is considered idle and eligible for borrowing
-     * @param slowSlotTimeoutMs The timeout in milliseconds for acquiring slow operation slots
-     * @param fastSlotTimeoutMs The timeout in milliseconds for acquiring fast operation slots
-     * @param updateGlobalAvgIntervalSeconds The interval in seconds for updating global average (0 = update every query)
-     * @param enabled Whether the slow query segregation feature is enabled
-     * @param sqlStatementMetrics The metrics collector for SQL statement execution telemetry
-     */
-    public SlowQuerySegregationManager(int totalSlots, int slowSlotPercentage, long idleTimeoutMs,
-                                     long slowSlotTimeoutMs, long fastSlotTimeoutMs, long updateGlobalAvgIntervalSeconds, boolean enabled,
-                                     SqlStatementMetrics sqlStatementMetrics) {
-        this.enabled = enabled;
-        this.slowSlotTimeoutMs = slowSlotTimeoutMs;
-        this.fastSlotTimeoutMs = fastSlotTimeoutMs;
-        this.performanceMonitor = new QueryPerformanceMonitor(updateGlobalAvgIntervalSeconds);
-        this.sqlStatementMetrics = sqlStatementMetrics != null ? sqlStatementMetrics : NoOpSqlStatementMetrics.INSTANCE;
-        
-        if (enabled) {
-            this.slotManager = new SlotManager(totalSlots, slowSlotPercentage, idleTimeoutMs);
-            logger.info("SlowQuerySegregationManager initialized: enabled={}, totalSlots={}, slowSlotPercentage={}%, idleTimeout={}ms, slowSlotTimeout={}ms, fastSlotTimeout={}ms, updateGlobalAvgInterval={}s",
-                    enabled, totalSlots, slowSlotPercentage, idleTimeoutMs, slowSlotTimeoutMs, fastSlotTimeoutMs, updateGlobalAvgIntervalSeconds);
-        } else {
-            this.slotManager = null;
-            logger.info("SlowQuerySegregationManager initialized: enabled={}, updateGlobalAvgInterval={}s", enabled, updateGlobalAvgIntervalSeconds);
-        }
-    }
 
     /**
      * Creates a new SlowQuerySegregationManager.
@@ -67,8 +37,19 @@ public class SlowQuerySegregationManager {
      */
     public SlowQuerySegregationManager(int totalSlots, int slowSlotPercentage, long idleTimeoutMs,
                                      long slowSlotTimeoutMs, long fastSlotTimeoutMs, long updateGlobalAvgIntervalSeconds, boolean enabled) {
-        this(totalSlots, slowSlotPercentage, idleTimeoutMs, slowSlotTimeoutMs, fastSlotTimeoutMs, updateGlobalAvgIntervalSeconds, enabled,
-             NoOpSqlStatementMetrics.INSTANCE);
+        this.enabled = enabled;
+        this.slowSlotTimeoutMs = slowSlotTimeoutMs;
+        this.fastSlotTimeoutMs = fastSlotTimeoutMs;
+        this.performanceMonitor = new QueryPerformanceMonitor(updateGlobalAvgIntervalSeconds);
+        
+        if (enabled) {
+            this.slotManager = new SlotManager(totalSlots, slowSlotPercentage, idleTimeoutMs);
+            logger.info("SlowQuerySegregationManager initialized: enabled={}, totalSlots={}, slowSlotPercentage={}%, idleTimeout={}ms, slowSlotTimeout={}ms, fastSlotTimeout={}ms, updateGlobalAvgInterval={}s",
+                    enabled, totalSlots, slowSlotPercentage, idleTimeoutMs, slowSlotTimeoutMs, fastSlotTimeoutMs, updateGlobalAvgIntervalSeconds);
+        } else {
+            this.slotManager = null;
+            logger.info("SlowQuerySegregationManager initialized: enabled={}, updateGlobalAvgInterval={}s", enabled, updateGlobalAvgIntervalSeconds);
+        }
     }
     
     /**
@@ -84,8 +65,7 @@ public class SlowQuerySegregationManager {
      */
     public SlowQuerySegregationManager(int totalSlots, int slowSlotPercentage, long idleTimeoutMs,
                                      long slowSlotTimeoutMs, long fastSlotTimeoutMs, boolean enabled) {
-        this(totalSlots, slowSlotPercentage, idleTimeoutMs, slowSlotTimeoutMs, fastSlotTimeoutMs, 0L, enabled,
-             NoOpSqlStatementMetrics.INSTANCE);
+        this(totalSlots, slowSlotPercentage, idleTimeoutMs, slowSlotTimeoutMs, fastSlotTimeoutMs, 0L, enabled);
     }
     
     /**
@@ -161,6 +141,7 @@ public class SlowQuerySegregationManager {
     
     /**
      * Executes an operation and monitors its performance without slot management.
+     * Returns the execution time in milliseconds so the caller can record metrics.
      */
     private <T> T executeAndMonitor(String operationHash, String sql, SegregatedOperation<T> operation) throws Exception {
         long startTime = System.currentTimeMillis();
@@ -168,19 +149,15 @@ public class SlowQuerySegregationManager {
         try {
             T result = operation.execute();
             
-            // Record successful execution time
+            // Record execution time for performance classification only
             long executionTime = System.currentTimeMillis() - startTime;
             performanceMonitor.recordExecutionTime(operationHash, executionTime);
-            sqlStatementMetrics.recordSqlExecution(sql, executionTime,
-                    performanceMonitor.isSlowOperation(operationHash));
             
             return result;
         } catch (Exception e) {
             // Still record execution time even for failed operations for monitoring purposes
             long executionTime = System.currentTimeMillis() - startTime;
             performanceMonitor.recordExecutionTime(operationHash, executionTime);
-            sqlStatementMetrics.recordSqlExecution(sql, executionTime,
-                    performanceMonitor.isSlowOperation(operationHash));
             throw e;
         }
     }
