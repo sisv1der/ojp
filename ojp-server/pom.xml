@@ -15,7 +15,7 @@
     </parent>
 
     <properties>
-        <grpc.version>1.78.0</grpc.version>
+        <grpc.version>1.79.0</grpc.version>
         <netty.version>4.1.130.Final</netty.version>
         <slf4j.version>2.0.17</slf4j.version>
         <jib.plugin.version>3.4.5</jib.plugin.version>
@@ -130,7 +130,7 @@
         <dependency>
             <groupId>at.yawk.lz4</groupId>
             <artifactId>lz4-java</artifactId>
-            <version>1.10.2</version>
+            <version>1.10.3</version>
         </dependency>
 
         <!-- OpenTelemetry API -->
@@ -138,7 +138,7 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-api</artifactId>
-            <version>1.58.0</version>
+            <version>1.59.0</version>
         </dependency>
 
         <!-- OpenTelemetry SDK -->
@@ -146,7 +146,7 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-sdk</artifactId>
-            <version>1.58.0</version>
+            <version>1.59.0</version>
         </dependency>
 
         <!-- OpenTelemetry gRPC instrumentation -->
@@ -162,7 +162,23 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-prometheus</artifactId>
-            <version>1.52.0-alpha</version>
+            <version>1.59.0-alpha</version>
+        </dependency>
+
+        <!-- Zipkin trace exporter -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-zipkin -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-zipkin</artifactId>
+            <version>1.59.0</version>
+        </dependency>
+
+        <!-- OTLP trace exporter (alternative to Zipkin, e.g. for Jaeger/Tempo) -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-otlp -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <version>1.59.0</version>
         </dependency>
 
         <!-- HTTP server for metrics endpoint -->
@@ -193,7 +209,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.14.2</version>
+            <version>5.14.3</version>
             <scope>test</scope>
         </dependency>
 
@@ -201,7 +217,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>5.21.0</version>
+            <version>5.22.0</version>
             <scope>test</scope>
         </dependency>
 
@@ -209,7 +225,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
-            <version>5.14.2</version>
+            <version>5.14.3</version>
             <scope>test</scope>
         </dependency>
 
@@ -218,6 +234,15 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>2.4.240</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- OpenTelemetry SDK testing utilities (InMemoryMetricReader etc.) -->
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-sdk-testing -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>1.58.0</version>
             <scope>test</scope>
         </dependency>
 

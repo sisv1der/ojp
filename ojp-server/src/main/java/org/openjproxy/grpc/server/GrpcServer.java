@@ -26,7 +26,8 @@ public class GrpcServer {
 
         // Load configuration
         ServerConfiguration config = new ServerConfiguration();
-        
+
+        CircuitBreakerRegistry circuitBreakerRegistry = new CircuitBreakerRegistry(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold());
         // Load external JDBC drivers from configured directory
         logger.info("Loading external JDBC drivers...");
         boolean driversLoaded = DriverLoader.loadDriversFromPath(config.getDriversPath());
@@ -50,8 +51,15 @@ public class GrpcServer {
         
         if (config.isOpenTelemetryEnabled()) {
             grpcTelemetry = ojpServerTelemetry.createGrpcTelemetry(
-                config.getPrometheusPort(), 
-                config.getPrometheusAllowedIps()
+                config.getPrometheusPort(),
+                config.getPrometheusAllowedIps(),
+                config.isTracingEnabled(),
+                config.getTracingExporter(),
+                config.getTracingEndpoint(),
+                config.getTracingServiceName(),
+                config.getTracingSampleRate(),
+                config.isTelemetryGrpcMetricsEnabled(),
+                config.isTelemetryPoolMetricsEnabled()
             );
 
             OjpHealthManager.setServiceStatus(OjpHealthManager.Services.OPENTELEMETRY_SERVICE,
@@ -64,10 +72,10 @@ public class GrpcServer {
         SessionManagerImpl sessionManager = new SessionManagerImpl();
         final StatementServiceImpl statementService = new StatementServiceImpl(
                 sessionManager,
-                new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold()),
+                circuitBreakerRegistry,
                 config
         );
-        
+
         NettyServerBuilder serverBuilder = NettyServerBuilder
                 .forPort(config.getServerPort())
                 .executor(Executors.newFixedThreadPool(config.getThreadPoolSize()))
@@ -137,7 +145,7 @@ public class GrpcServer {
             // Shutdown SQL enhancer engine first
             logger.info("Shutting down SQL enhancer engine...");
             statementService.shutdown();
-            
+
             // Shutdown session cleanup task
             if (finalSessionCleanupExecutor != null) {
                 logger.info("Shutting down session cleanup executor...");

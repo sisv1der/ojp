@@ -66,8 +66,13 @@ public class ProcessClusterHealthAction {
         log.info("[XA-REBALANCE] Cluster health changed for {}, healthy servers: {}, triggering pool rebalancing, isXA={}",
                 connHash, healthyServerCount, sessionInfo.getIsXA());
 
-        // Update the pool coordinator with new healthy server count
-        ConnectionPoolConfigurer.getPoolCoordinator().updateHealthyServers(connHash, healthyServerCount);
+        // Update the pool coordinator with new healthy server count.
+        // IMPORTANT: Use the returned allocation reference directly (not a second getPoolAllocation() call)
+        // to prevent a race condition where a concurrent calculatePoolSizes() call can overwrite
+        // the map entry between updateHealthyServers() and getPoolAllocation(), causing the wrong
+        // (freshly-reset, un-updated) pool sizes to be applied during resize.
+        MultinodePoolCoordinator.PoolAllocation allocation =
+                ConnectionPoolConfigurer.getPoolCoordinator().updateHealthyServers(connHash, healthyServerCount);
 
         // Apply pool size changes to non-XA HikariDataSource if present
         DataSource ds = context.getDatasourceMap().get(connHash);
@@ -82,8 +87,6 @@ public class ProcessClusterHealthAction {
         XATransactionRegistry xaRegistry = context.getXaRegistries().get(connHash);
         if (xaRegistry != null) {
             log.info("[XA-REBALANCE-DEBUG] Found XA registry for {}, resizing", connHash);
-            MultinodePoolCoordinator.PoolAllocation allocation =
-                    ConnectionPoolConfigurer.getPoolCoordinator().getPoolAllocation(connHash);
 
             if (allocation == null) {
                 log.warn("[XA-REBALANCE-DEBUG] No pool allocation found for {}", connHash);
