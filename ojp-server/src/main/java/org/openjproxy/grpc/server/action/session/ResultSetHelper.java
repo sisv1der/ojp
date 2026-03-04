@@ -21,17 +21,55 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Utility class for processing JDBC {@link ResultSet}s and streaming query
+ * results to gRPC clients.
+ * <p>
+ * Handles conversion of JDBC result set rows into the format expected by the
+ * OpenJProxy gRPC API,
+ * including special handling for LOBs (BLOBs, CLOBs), binary data, date/time
+ * types, and database-specific
+ * behaviors (e.g., row-by-row mode for SQL Server and DB2 when LOBs are
+ * present).
+ * </p>
+ */
 @Slf4j
 public class ResultSetHelper {
 
     private static final String RESULT_SET_METADATA_ATTR_PREFIX = "rsMetadata|";
     private static final List<String> INPUT_STREAM_TYPES = Arrays.asList("RAW", "BINARY VARYING", "BYTEA");
 
+    /**
+     * Private constructor to prevent instantiation.
+     * This class provides only static utility methods.
+     */
     private ResultSetHelper() {
         // Empty constructor
     }
 
-    public static void handleResultSet(ActionContext context, SessionInfo session, String resultSetUUID, StreamObserver<OpResult> responseObserver)
+    /**
+     * Processes a JDBC result set and streams its rows to the gRPC response
+     * observer.
+     * <p>
+     * Iterates over all rows in the result set, converting column values according
+     * to their SQL types.
+     * Results are sent in blocks of
+     * {@link org.openjproxy.constants.CommonConstants#ROWS_PER_RESULT_SET_DATA_BLOCK}
+     * rows. For SQL Server and DB2, when LOB columns are present, only one row is
+     * sent per call to support
+     * row-by-row fetching.
+     * </p>
+     *
+     * @param context          the action context providing session and database
+     *                         access
+     * @param session          the session information for the current client
+     * @param resultSetUUID    the unique identifier of the result set to process
+     * @param responseObserver the gRPC stream observer to send results to
+     * @throws SQLException if a database access error occurs while reading the
+     *                      result set
+     */
+    public static void handleResultSet(ActionContext context, SessionInfo session, String resultSetUUID,
+            StreamObserver<OpResult> responseObserver)
             throws SQLException {
         var sessionManager = context.getSessionManager();
 
@@ -75,7 +113,8 @@ public class ResultSetHelper {
                             resultSetMode = CommonConstants.RESULT_SET_ROW_BY_ROW_MODE;
                         }
                         if ("BLOB".equalsIgnoreCase(colTypeName)) {
-                            currentValue = LobProcessor.treatAsBlob(sessionManager, session, rs, i, context.getDbNameMap());
+                            currentValue = LobProcessor.treatAsBlob(sessionManager, session, rs, i,
+                                    context.getDbNameMap());
                         } else {
                             currentValue = LobProcessor.treatAsBinary(sessionManager, session, dbName, rs, i,
                                     INPUT_STREAM_TYPES);
@@ -166,9 +205,15 @@ public class ResultSetHelper {
 
     /**
      * Updates the last activity time for the session to prevent premature cleanup.
-     * This should be called at the beginning of any method that operates on a session.
+     * <p>
+     * This should be called at the beginning of any method that operates on a
+     * session
+     * to ensure the session is not evicted by idle timeout while processing.
+     * </p>
      *
-     * @param sessionInfo the session information
+     * @param context     the action context providing session manager access
+     * @param sessionInfo the session information; no-op if null or has empty
+     *                    session UUID
      */
     public static void updateSessionActivity(ActionContext context, SessionInfo sessionInfo) {
         if (sessionInfo != null && !sessionInfo.getSessionUUID().isEmpty()) {
@@ -176,8 +221,24 @@ public class ResultSetHelper {
         }
     }
 
+    /**
+     * Collects and registers result set metadata in the session for DB2 databases.
+     * <p>
+     * DB2 requires metadata to be collected before row iteration when LOBs may be
+     * present,
+     * since the cursor is not read in advance. The metadata is stored under a
+     * session attribute
+     * keyed by {@link #RESULT_SET_METADATA_ATTR_PREFIX} plus the result set UUID.
+     * </p>
+     *
+     * @param context       the action context providing session manager access
+     * @param session       the session to register the metadata in
+     * @param resultSetUUID the unique identifier of the result set
+     * @param rs            the JDBC result set whose metadata to collect
+     */
     @SneakyThrows
-    private static void collectResultSetMetadata(ActionContext context, SessionInfo session, String resultSetUUID, ResultSet rs) {
+    private static void collectResultSetMetadata(ActionContext context, SessionInfo session, String resultSetUUID,
+            ResultSet rs) {
         context.getSessionManager().registerAttr(session, RESULT_SET_METADATA_ATTR_PREFIX +
                 resultSetUUID, new HydratedResultSetMetadata(rs.getMetaData()));
     }

@@ -16,19 +16,53 @@ import static org.openjproxy.grpc.server.action.session.ResultSetHelper.handleRe
 import static org.openjproxy.grpc.server.action.session.ResultSetHelper.updateSessionActivity;
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
 
+/**
+ * Action to fetch the next batch of rows from a server-side result set.
+ * <p>
+ * This action resolves the session connection, updates session activity, processes cluster health
+ * from the request, and streams the next rows from the result set identified by
+ * {@link ResultSetFetchRequest#getResultSetUUID()} to the client. Any {@link java.sql.SQLException}
+ * encountered during the operation is sent to the client via the response observer.
+ * <p>
+ * This action is implemented as a singleton for thread-safety and memory efficiency.
+ *
+ * @see Action
+ * @see ResultSetFetchRequest
+ * @see OpResult
+ */
 @Slf4j
+@SuppressWarnings("java:S6548")
 public class FetchNextRowsAction implements Action<ResultSetFetchRequest, OpResult> {
 
     private static final FetchNextRowsAction INSTANCE = new FetchNextRowsAction();
 
+    /**
+     * Private constructor prevents external instantiation.
+     */
     private FetchNextRowsAction() {
-        // Private constructor prevents external instantiation
+        // Private constructor for singleton pattern
     }
 
+    /**
+     * Returns the singleton instance of FetchNextRowsAction.
+     *
+     * @return the singleton instance
+     */
     public static FetchNextRowsAction getInstance() {
         return INSTANCE;
     }
 
+    /**
+     * Executes the fetch next rows operation for the specified result set.
+     * <p>
+     * Updates session activity, processes cluster health, resolves the session connection,
+     * and streams the next rows to the client. SQL exceptions are sent as metadata
+     * via the response observer.
+     *
+     * @param context          the action context containing shared state and services
+     * @param request          the result set fetch request containing session and result set UUID
+     * @param responseObserver the response observer for streaming the result
+     */
     @Override
     public void execute(ActionContext context, ResultSetFetchRequest request, StreamObserver<OpResult> responseObserver) {
         log.debug("Executing fetch next rows for result set  {}", request.getResultSetUUID());

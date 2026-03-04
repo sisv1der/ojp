@@ -37,10 +37,39 @@ import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMe
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
 
 /**
- * Action to call a resource operation.
- * Extracts the logic from StatementServiceImpl.callResource().
+ * Action that invokes methods on JDBC resources (ResultSet, LOB, Statement, Connection, etc.)
+ * via reflection.
+ *
+ * <p>This action handles the {@code callResource} gRPC operation, allowing clients to call
+ * arbitrary methods on server-side JDBC resources. It resolves the resource by type and UUID
+ * from the session, invokes the target method with the provided parameters, and returns the
+ * result converted to protobuf format.
+ *
+ * <p>Supported resource types include:
+ * <ul>
+ *   <li>{@link ResourceType#RES_RESULT_SET} - ResultSet instances</li>
+ *   <li>{@link ResourceType#RES_LOB} - LOB (Large Object) instances</li>
+ *   <li>{@link ResourceType#RES_STATEMENT} - Statement instances (creates new if UUID is blank)</li>
+ *   <li>{@link ResourceType#RES_PREPARED_STATEMENT} - PreparedStatement instances</li>
+ *   <li>{@link ResourceType#RES_CALLABLE_STATEMENT} - CallableStatement instances</li>
+ *   <li>{@link ResourceType#RES_CONNECTION} - Connection instances</li>
+ *   <li>{@link ResourceType#RES_SAVEPOINT} - Savepoint instances</li>
+ * </ul>
+ *
+ * <p>Chained calls are supported (e.g., {@code getMetadata().isAutoIncrement(int column)}).
+ * Returned ResultSet, Array, CallableStatement, and Savepoint instances are automatically
+ * registered with the session manager and replaced by UUIDs in the response.
+ *
+ * <p>DB2 has special handling for ResultSet metadata retrieval, which is delegated to
+ * {@link #db2SpecialResultSetMetadata}.
+ *
+ * <p>This class is a thread-safe singleton. Use {@link #getInstance()} to obtain the instance.
+ *
+ * @see Action
+ * @see ActionContext
  */
 @Slf4j
+@SuppressWarnings("java:S6548")
 public class CallResourceAction implements Action<CallResourceRequest, CallResourceResponse> {
 
     private static final CallResourceAction INSTANCE = new CallResourceAction();
@@ -50,10 +79,27 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
         // Private constructor prevents external instantiation
     }
 
+    /**
+     * Returns the singleton instance of this action.
+     *
+     * @return the sole instance of {@code CallResourceAction}
+     */
     public static CallResourceAction getInstance() {
         return INSTANCE;
     }
 
+    /**
+     * Executes the call resource operation: resolves the target resource, invokes the
+     * requested method via reflection, and sends the result (or error) to the response observer.
+     *
+     * <p>Processes cluster health from the request, validates the session, resolves the resource
+     * by type and UUID, handles special cases (e.g., DB2 metadata, Savepoint resolution), and
+     * supports chained calls for nested method invocations.
+     *
+     * @param context         the action context containing session manager and database metadata
+     * @param request         the call resource request with session, resource type, UUID, and target method
+     * @param responseObserver the gRPC observer to receive the response or error metadata
+     */
     @Override
     public void execute(ActionContext context, CallResourceRequest request, StreamObserver<CallResourceResponse> responseObserver) {
         // Process cluster health from the request
@@ -207,6 +253,21 @@ public class CallResourceAction implements Action<CallResourceRequest, CallResou
         }
     }
 
+    /**
+     * Handles DB2-specific ResultSet metadata retrieval.
+     *
+     * <p>DB2 stores ResultSet metadata separately from the ResultSet. When the request targets
+     * {@code getMetadata()} on a ResultSet for a DB2 connection, this method retrieves the
+     * cached metadata from the session and invokes the requested metadata method (e.g.,
+     * {@code isAutoIncrement(int column)}) directly.
+     *
+     * @param context         the action context
+     * @param request         the call resource request
+     * @param responseObserver the gRPC observer to receive the response
+     * @return {@code true} if the DB2 special case was handled and the response was sent;
+     *         {@code false} if the request does not match this case and normal processing should continue
+     * @throws SQLException if invoking the metadata method fails
+     */
     private boolean db2SpecialResultSetMetadata(ActionContext context, CallResourceRequest request, StreamObserver<CallResourceResponse> responseObserver) throws SQLException {
         if (DbName.DB2.equals(context.getDbNameMap().get(request.getSession().getConnHash())) &&
                 ResourceType.RES_RESULT_SET.equals(request.getResourceType()) &&
