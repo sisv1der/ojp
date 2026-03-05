@@ -1,18 +1,109 @@
-# Spring boot
+# Spring Boot
 
-To integrate OJP into your Spring Boot project follow the steps:
+OJP provides a Spring Boot Starter (`ojp-spring-boot-starter`) that auto-configures the OJP JDBC driver
+in Spring Boot 3.x projects, making integration as simple as adding a dependency and setting a single
+connection URL property.
 
-## 1 Add the maven dependency to your project.
+> **Requirements:** Spring Boot 3.x (Java 17+). If you are using Spring Boot 2.7.x or Java 11,
+> follow the [manual configuration](#manual-configuration-spring-boot-27x--java-11) guide below.
+
+---
+
+## Quickstart with the Spring Boot Starter (Recommended)
+
+### 1. Replace the default `spring-boot-starter-jdbc` with the OJP starter
+
+```xml
+<!-- Remove the default starter that bundles HikariCP -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-jdbc</artifactId>
+    <exclusions>
+        <exclusion>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+
+<!-- Add the OJP Spring Boot Starter -->
+<dependency>
+    <groupId>org.openjproxy</groupId>
+    <artifactId>ojp-spring-boot-starter</artifactId>
+    <version>0.3.2-snapshot</version>
+</dependency>
+```
+
+> **Why exclude HikariCP?** OJP manages connection pooling centrally on the proxy server. A local
+> HikariCP pool inside the application would add unnecessary overhead. The OJP Spring Boot Starter
+> automatically configures `SimpleDriverDataSource` instead.
+
+### 2. Set your connection URL in `application.properties`
+
+```properties
+# OJP connection URL: jdbc:ojp[<ojp-host>:<ojp-port>]_<actual-driver-url>
+spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb
+spring.datasource.username=user
+spring.datasource.password=secret
+```
+
+That is all! The starter automatically sets:
+- `spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver`
+- `spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource`
+
+### 3. Optional: Fine-tune the OJP server-side connection pool
+
+OJP's connection pool lives on the proxy server. You can tune it directly from `application.properties`:
+
+```properties
+# Server-side HikariCP pool settings (forwarded to the OJP server via gRPC)
+ojp.connection.pool.maximum-pool-size=20
+ojp.connection.pool.minimum-idle=5
+ojp.connection.pool.connection-timeout=30000
+ojp.connection.pool.idle-timeout=600000
+ojp.connection.pool.max-lifetime=1800000
+
+# gRPC transport settings (increase for large LOB data)
+ojp.grpc.max-inbound-message-size=16777216
+
+# Named datasource (matches the (dataSourceName) segment in the JDBC URL)
+ojp.datasource.name=myApp
+
+# Environment profile: loads ojp-{environment}.properties first when set
+ojp.environment=prod
+```
+
+### 4. Start the OJP Server
+
+The OJP proxy server must be running and reachable at the host/port in the JDBC URL.
+
+```bash
+# Docker (recommended)
+docker run -d --network host \
+  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  rrobetti/ojp:latest
+```
+
+For full server setup options see the [Server Configuration Guide](../../configuration/ojp-server-configuration.md).
+
+---
+
+## Manual Configuration (Spring Boot 2.7.x / Java 11)
+
+If you cannot use the starter (e.g., Spring Boot 2.7.x or Java 11 projects), follow these steps:
+
+### 1. Add the JDBC driver dependency
+
 ```xml
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.3.2-snapshot</version>
 </dependency>
 ```
 
-## 2 Remove the local connection pool
-Spring boot by default comes with HikariCP connection pool, as OJP replaces completely the connection pool, remove it in the pom.xml as follows.
+### 2. Remove the local connection pool
+
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -26,20 +117,63 @@ Spring boot by default comes with HikariCP connection pool, as OJP replaces comp
     </exclusions>
 </dependency>
 ```
-## 3 Change your connection URL
-In your application.properties(or yaml) file, update your database connection URL, and add the OJP jdbc driver class as in the following example:
+
+### 3. Configure `application.properties`
 
 ```properties
 spring.datasource.url=jdbc:ojp[localhost:1059]_h2:~/test
 spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver
-## Sets the datasource to not use hikari CP connection pool and open single connections instead
+# Sets the datasource to not use HikariCP and open single connections instead
 spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource
-``` 
+```
 
-The example above is for `h2` but it is similar to any other database, you just need to add the `ojp[host:port]_` pattern immediately after `jdbc:`. `[host:port]` indicates the host and port you have your OJP proxy server running.
+The OJP URL pattern is `jdbc:ojp[host:port]_<actualDriver>://...`. You just need to prepend
+`ojp[host:port]_` immediately after `jdbc:` in your existing URL.
 
-## Troubleshooting 
+---
+
+## Troubleshooting
+
 ### Logging Configuration
+
+As of OJP version 0.3.2, the logging implementation has been updated to be compatible with Spring Boot's default logging framework, Logback.
+
+**What Changed:**
+- **OJP JDBC Driver**: No longer bundles any SLF4J implementation. It only uses the SLF4J API with `provided` scope, allowing the consuming application to choose the logging implementation.
+- **OJP Server**: Uses Logback as the logging implementation with configurable options.
+
+**Benefits:**
+- ✅ No more logging conflicts when using OJP JDBC driver with Spring Boot
+- ✅ Seamless integration with Spring Boot's existing logging configuration
+- ✅ The consuming application (like your Spring Boot app) provides the logging implementation
+- ✅ Consistent logging across your entire application
+
+**OJP Server Logging Configuration:**
+
+For detailed information about configuring OJP Server logging (log levels, file locations, rotation policies), see the [OJP Server Configuration Guide](../../configuration/ojp-server-configuration.md#logging-settings).
+
+**For older versions (0.3.2-beta and earlier):**
+
+If you're using an older version of OJP, you may encounter a conflict because the OJP JDBC driver bundled SLF4J Simple, which conflicts with Spring Boot's default Logback implementation.
+
+The error typically looks like this:
+
+```shell
+SLF4J(W): Class path contains multiple SLF4J providers.
+SLF4J(W): Found provider [org.slf4j.simple.SimpleServiceProvider@75412c2f]
+SLF4J(W): Found provider [ch.qos.logback.classic.spi.LogbackServiceProvider@282ba1e]
+Exception in thread "main" java.lang.IllegalStateException: LoggerFactory is not a Logback LoggerContext...
+```
+
+**Solution for older versions:**
+
+Option 1 (Recommended): Upgrade to OJP 0.3.2 or later, which has this issue resolved.
+
+Option 2: If you must use an older version, you can work around the issue by adding a JVM argument:
+```shell
+JAVA_OPTS="-Dslf4j.provider=ch.qos.logback.classic.spi.LogbackServiceProvider"
+```
+
 
 As of OJP version 0.3.2, the logging implementation has been updated to be compatible with Spring Boot's default logging framework, Logback.
 
