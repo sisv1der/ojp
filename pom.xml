@@ -21,7 +21,7 @@
         <module>ojp-datasource-dbcp</module>
         <module>ojp-xa-pool-commons</module>
         <module>ojp-testcontainers</module>
-        <module>ojp-spring-boot-starter</module>
+        <module>spring-boot-starter-ojp</module>
     </modules>
 
     <properties>

@@ -1,0 +1,7 @@
+# Spring Boot 3.x EnvironmentPostProcessor registration key
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  org.openjproxy.autoconfigure.OjpEnvironmentPostProcessor
+
+# Spring Boot 4.x EnvironmentPostProcessor registration key
+org.springframework.boot.EnvironmentPostProcessor=\
+  org.openjproxy.autoconfigure.OjpEnvironmentPostProcessor

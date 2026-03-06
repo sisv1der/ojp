@@ -1,11 +1,11 @@
 # Spring Boot
 
-OJP provides a Spring Boot Starter (`ojp-spring-boot-starter`) that auto-configures the OJP JDBC driver
-in Spring Boot 3.x projects, making integration as simple as adding a dependency and setting a single
+OJP provides a Spring Boot Starter (`spring-boot-starter-ojp`) that auto-configures the OJP JDBC driver
+in Spring Boot 4.x projects, making integration as simple as adding a dependency and setting a single
 connection URL property.
 
-> **Requirements:** Spring Boot 3.x (Java 17+). If you are using Spring Boot 2.7.x or Java 11,
-> follow the [manual configuration](#manual-configuration-spring-boot-27x--java-11) guide below.
+> **Requirements:** Spring Boot 4.x (Java 17+). The starter also works with Spring Boot 3.x.
+> For Java 11 projects, follow the [manual configuration](#manual-configuration-spring-boot-3x--java-11) guide below.
 
 ---
 
@@ -29,7 +29,7 @@ connection URL property.
 <!-- Add the OJP Spring Boot Starter -->
 <dependency>
     <groupId>org.openjproxy</groupId>
-    <artifactId>ojp-spring-boot-starter</artifactId>
+    <artifactId>spring-boot-starter-ojp</artifactId>
     <version>0.3.2-snapshot</version>
 </dependency>
 ```
@@ -88,9 +88,9 @@ For full server setup options see the [Server Configuration Guide](../../configu
 
 ---
 
-## Manual Configuration (Spring Boot 2.7.x / Java 11)
+## Manual Configuration (Spring Boot 3.x / Java 11)
 
-If you cannot use the starter (e.g., Spring Boot 2.7.x or Java 11 projects), follow these steps:
+If you cannot use the starter (e.g., Java 11 projects), follow these steps:
 
 ### 1. Add the JDBC driver dependency
 

@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
@@ -15,8 +14,7 @@ import org.springframework.context.annotation.Bean;
  * <p>This auto-configuration activates when:</p>
  * <ol>
  *   <li>The OJP JDBC driver class ({@code org.openjproxy.jdbc.Driver}) is on the classpath.</li>
- *   <li>The property {@code spring.datasource.url} starts with {@code jdbc:ojp} (checked via
- *       the {@code spring.datasource.url} property containing the OJP prefix).</li>
+ *   <li>The property {@code spring.datasource.url} is present in the environment.</li>
  * </ol>
  *
  * <p>What this auto-configuration does:</p>
@@ -29,21 +27,27 @@ import org.springframework.context.annotation.Bean;
  *       {@code DatasourcePropertiesLoader} reads them with the highest precedence.</li>
  * </ul>
  *
- * <p>The auto-configuration runs <em>before</em> {@link DataSourceAutoConfiguration} so
- * that system properties are set before any {@code DataSource} bean is created.</p>
+ * <p>The auto-configuration is ordered before the JDBC {@code DataSourceAutoConfiguration}
+ * (both Spring Boot 3.x and 4.x packages are listed) so that system properties are set
+ * before any {@code DataSource} bean is created.</p>
  *
  * <p><strong>Minimal {@code application.properties} required to use OJP:</strong></p>
  * <pre>
  * spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user&#64;localhost/mydb
  * spring.datasource.username=user
- * spring.datasource.password=secret
+ * spring.datasource.******
  * </pre>
  *
  * <p>The {@link OjpEnvironmentPostProcessor} automatically sets
  * {@code spring.datasource.driver-class-name} and {@code spring.datasource.type} when
  * the OJP URL is detected, so users do not need to configure those manually.</p>
  */
-@AutoConfiguration(before = DataSourceAutoConfiguration.class)
+@AutoConfiguration(beforeName = {
+        // Spring Boot 3.x location
+        "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
+        // Spring Boot 4.x location (moved to spring-boot-jdbc module)
+        "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration"
+})
 @ConditionalOnClass(name = "org.openjproxy.jdbc.Driver")
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url", matchIfMissing = false)
 @EnableConfigurationProperties(OjpProperties.class)
