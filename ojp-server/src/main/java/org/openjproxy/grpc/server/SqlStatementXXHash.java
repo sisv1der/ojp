@@ -27,11 +27,7 @@ import java.nio.charset.StandardCharsets;
  * and provides more than enough uniqueness for non-cryptographic use cases—making it ideal for lightweight query identification.
  */
 public class SqlStatementXXHash {
-    // Use fastestJavaInstance() to avoid JNI native library loading, which can cause
-    // NoClassDefFoundError / ExceptionInInitializerError on certain platforms or
-    // when running from a shaded uber-jar. The pure-Java implementation is fast
-    // enough for SQL query hashing and has no native-library dependency.
-    private static final XXHashFactory factory = XXHashFactory.fastestJavaInstance();
+    private static final XXHashFactory factory = XXHashFactory.fastestInstance();
     private static final long SEED = 0x9747b28c; // Arbitrary seed, can be any long
 
     /**
