@@ -102,12 +102,15 @@ public class OjpXADataSource implements XADataSource {
             // Load ojp.properties file and extract datasource-specific configuration
             Properties ojpProperties = DatasourcePropertiesLoader.loadOjpPropertiesForDataSource(dataSourceName);
             if (ojpProperties != null && !ojpProperties.isEmpty()) {
-                // Merge ojp.properties with any manually set properties
+                // Merge ojp.properties with any manually set properties, then always enforce
+                // the name inferred from the URL (ojp.datasource.name is never user-configurable)
                 for (String key : ojpProperties.stringPropertyNames()) {
                     if (!properties.containsKey(key)) {
                         properties.setProperty(key, ojpProperties.getProperty(key));
                     }
                 }
+                // Always use the name inferred from the URL, regardless of what may have been set
+                properties.setProperty("ojp.datasource.name", dataSourceName);
                 log.debug("Loaded ojp.properties with {} properties for dataSource: {}", ojpProperties.size(), dataSourceName);
             }
 

@@ -9,22 +9,34 @@ import java.util.Properties;
 /**
  * Utility class for loading datasource-specific properties from ojp.properties file.
  * Shared by Driver, OjpXADataSource, and MultinodeConnectionManager to avoid code duplication.
+ *
+ * <p>Each named datasource is identified by the prefix it uses in ojp.properties.
+ * For example, properties prefixed with {@code mainApp.ojp.connection.pool.*} belong to
+ * the datasource named {@code mainApp}. Unprefixed {@code ojp.connection.pool.*} properties
+ * belong to the implicit {@code "default"} datasource.
  */
 @Slf4j
 public class DatasourcePropertiesLoader {
 
     /**
-     * Load ojp.properties and extract configuration specific to the given dataSource.
-     * 
-     * Property precedence (highest to lowest):
-     * 1. Environment variables (e.g., MULTINODE_OJP_CONNECTION_POOL_ENABLED=false)
-     * 2. System properties (e.g., -Dmultinode.ojp.connection.pool.enabled=false)
-     * 3. Properties file (ojp.properties)
-     * 
-     * @param dataSourceName The datasource name to load properties for
-     * @return Properties for the specified datasource, or null if none found
+     * Load ojp.properties and extract configuration for the datasource identified by
+     * {@code datasourceName}. The name is the prefix used for that datasource's properties
+     * (e.g. {@code "mainApp"} loads all {@code mainApp.ojp.connection.pool.*} entries,
+     * stripping the prefix before returning them).
+     *
+     * <p>Pass {@code "default"} to load unprefixed {@code ojp.connection.pool.*} properties.
+     *
+     * <p>Property precedence (highest to lowest):
+     * <ol>
+     *   <li>Environment variables (e.g. {@code MAINAPP_OJP_CONNECTION_POOL_ENABLED=false})</li>
+     *   <li>System properties (e.g. {@code -Dmainapp.ojp.connection.pool.enabled=false})</li>
+     *   <li>Properties file (ojp.properties)</li>
+     * </ol>
+     *
+     * @param datasourceName the prefix/name of the datasource to load
+     * @return properties for the datasource, or {@code null} if none found
      */
-    public static Properties loadOjpPropertiesForDataSource(String dataSourceName) {
+    public static Properties loadOjpPropertiesForDataSource(String datasourceName) {
         Properties allProperties = loadOjpProperties();
         if (allProperties == null || allProperties.isEmpty()) {
             return null;
@@ -32,17 +44,17 @@ public class DatasourcePropertiesLoader {
         
         Properties dataSourceProperties = new Properties();
         
-        // Look for dataSource-prefixed properties first: {dataSourceName}.ojp.connection.pool.*
-        // Also look for XA-specific properties: {dataSourceName}.ojp.xa.connection.pool.*
-        String poolPrefix = dataSourceName + ".ojp.connection.pool.";
-        String xaPoolPrefix = dataSourceName + ".ojp.xa.connection.pool.";
-        String xaPrefix = dataSourceName + ".ojp.xa.";
+        // Look for dataSource-prefixed properties first: {datasourceName}.ojp.connection.pool.*
+        // Also look for XA-specific properties: {datasourceName}.ojp.xa.connection.pool.*
+        String poolPrefix = datasourceName + ".ojp.connection.pool.";
+        String xaPoolPrefix = datasourceName + ".ojp.xa.connection.pool.";
+        String xaPrefix = datasourceName + ".ojp.xa.";
         boolean foundDataSourceSpecific = false;
         
         for (String key : allProperties.stringPropertyNames()) {
             if (key.startsWith(poolPrefix) || key.startsWith(xaPoolPrefix) || key.startsWith(xaPrefix)) {
                 // Remove the dataSource prefix and keep the standard property name
-                String standardKey = key.substring(dataSourceName.length() + 1); // Remove "{dataSourceName}."
+                String standardKey = key.substring(datasourceName.length() + 1); // Remove "{datasourceName}."
                 dataSourceProperties.setProperty(standardKey, allProperties.getProperty(key));
                 foundDataSourceSpecific = true;
             }
@@ -50,7 +62,7 @@ public class DatasourcePropertiesLoader {
         
         // If no dataSource-specific properties found, and this is the "default" dataSource,
         // look for unprefixed properties: ojp.connection.pool.*, ojp.xa.connection.pool.*, ojp.xa.*
-        if (!foundDataSourceSpecific && "default".equals(dataSourceName)) {
+        if (!foundDataSourceSpecific && "default".equals(datasourceName)) {
             for (String key : allProperties.stringPropertyNames()) {
                 if (key.startsWith("ojp.connection.pool.") || 
                     key.startsWith("ojp.xa.connection.pool.") || 
@@ -66,7 +78,7 @@ public class DatasourcePropertiesLoader {
         for (String key : systemProps.stringPropertyNames()) {
             if (key.startsWith(poolPrefix) || key.startsWith(xaPoolPrefix) || key.startsWith(xaPrefix)) {
                 // Remove the dataSource prefix and keep the standard property name
-                String standardKey = key.substring(dataSourceName.length() + 1);
+                String standardKey = key.substring(datasourceName.length() + 1);
                 dataSourceProperties.setProperty(standardKey, systemProps.getProperty(key));
                 foundDataSourceSpecific = true;
                 log.debug("Overriding property from system property: {} = {}", standardKey, systemProps.getProperty(key));
@@ -74,7 +86,7 @@ public class DatasourcePropertiesLoader {
         }
         
         // For "default" datasource, also check unprefixed system properties
-        if ("default".equals(dataSourceName)) {
+        if ("default".equals(datasourceName)) {
             for (String key : systemProps.stringPropertyNames()) {
                 if (key.startsWith("ojp.connection.pool.") || 
                     key.startsWith("ojp.xa.connection.pool.") || 
@@ -98,7 +110,7 @@ public class DatasourcePropertiesLoader {
             
             if (propertyKey.startsWith(poolPrefix) || propertyKey.startsWith(xaPoolPrefix) || propertyKey.startsWith(xaPrefix)) {
                 // Remove the dataSource prefix and keep the standard property name
-                String standardKey = propertyKey.substring(dataSourceName.length() + 1);
+                String standardKey = propertyKey.substring(datasourceName.length() + 1);
                 dataSourceProperties.setProperty(standardKey, envValue);
                 foundDataSourceSpecific = true;
                 log.debug("Overriding property from environment variable: {} = {}", standardKey, envValue);
@@ -106,7 +118,7 @@ public class DatasourcePropertiesLoader {
         }
         
         // For "default" datasource, also check unprefixed environment variables
-        if ("default".equals(dataSourceName)) {
+        if ("default".equals(datasourceName)) {
             for (java.util.Map.Entry<String, String> entry : System.getenv().entrySet()) {
                 String envKey = entry.getKey();
                 String envValue = entry.getValue();
@@ -123,16 +135,15 @@ public class DatasourcePropertiesLoader {
             }
         }
         
-        // If we found any properties, also include the dataSource name as a single property
-        // Note: The dataSource-prefixed properties (e.g., "webApp.ojp.connection.pool.*") 
-        // are sent to the server with their prefixes removed (e.g., "ojp.connection.pool.*"),
-        // and the dataSource name itself is sent separately as "ojp.datasource.name"
+        // If we found any properties, also include the dataSource name.
+        // The name is always inferred from the JDBC URL prefix (e.g., "webApp.ojp.connection.pool.*"
+        // → name "webApp") and is never read from the properties file.
         if (!dataSourceProperties.isEmpty()) {
-            dataSourceProperties.setProperty("ojp.datasource.name", dataSourceName);
+            dataSourceProperties.setProperty("ojp.datasource.name", datasourceName);
         }
         
         log.debug("Loaded {} properties for dataSource '{}': {}", 
-                dataSourceProperties.size(), dataSourceName, dataSourceProperties);
+                dataSourceProperties.size(), datasourceName, dataSourceProperties);
         
         return dataSourceProperties.isEmpty() ? null : dataSourceProperties;
     }
