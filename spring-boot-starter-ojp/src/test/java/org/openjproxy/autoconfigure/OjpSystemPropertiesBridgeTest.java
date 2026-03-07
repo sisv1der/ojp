@@ -15,7 +15,6 @@ class OjpSystemPropertiesBridgeTest {
     private static final String PROP_IDLE_TIMEOUT = "ojp.connection.pool.idleTimeout";
     private static final String PROP_MAX_LIFETIME = "ojp.connection.pool.maxLifetime";
     private static final String PROP_MAX_INBOUND = "ojp.grpc.maxInboundMessageSize";
-    private static final String PROP_ENVIRONMENT = "ojp.environment";
 
     @BeforeEach
     void clearProperties() {
@@ -34,13 +33,11 @@ class OjpSystemPropertiesBridgeTest {
         System.clearProperty(PROP_IDLE_TIMEOUT);
         System.clearProperty(PROP_MAX_LIFETIME);
         System.clearProperty(PROP_MAX_INBOUND);
-        System.clearProperty(PROP_ENVIRONMENT);
     }
 
     @Test
     void shouldSetAllPoolProperties() {
         OjpProperties props = new OjpProperties();
-        props.setEnvironment("prod");
 
         OjpProperties.Connection.Pool pool = new OjpProperties.Connection.Pool();
         pool.setMaximumPoolSize(20);
@@ -60,7 +57,6 @@ class OjpSystemPropertiesBridgeTest {
         OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
         bridge.applySystemProperties();
 
-        assertEquals("prod", System.getProperty(PROP_ENVIRONMENT));
         assertEquals("20", System.getProperty(PROP_MAX_POOL_SIZE));
         assertEquals("5", System.getProperty(PROP_MIN_IDLE));
         assertEquals("30000", System.getProperty(PROP_CONN_TIMEOUT));
@@ -77,7 +73,6 @@ class OjpSystemPropertiesBridgeTest {
         OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
         bridge.applySystemProperties();
 
-        assertNull(System.getProperty(PROP_ENVIRONMENT));
         assertNull(System.getProperty(PROP_MAX_POOL_SIZE));
         assertNull(System.getProperty(PROP_MAX_INBOUND));
     }

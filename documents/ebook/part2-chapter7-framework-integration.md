@@ -82,9 +82,6 @@ ojp.connection.pool.max-lifetime=1800000
 
 # gRPC transport settings (increase for large LOB data)
 ojp.grpc.max-inbound-message-size=16777216
-
-# Environment profile: loads ojp-{environment}.properties first when set
-ojp.environment=prod
 ```
 
 > **Tip — Named datasource:** To target a named pool configuration on the OJP server, embed the

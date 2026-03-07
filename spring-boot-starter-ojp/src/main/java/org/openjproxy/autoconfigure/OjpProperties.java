@@ -19,9 +19,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * # OJP gRPC settings
  * ojp.grpc.max-inbound-message-size=16777216
- *
- * # OJP environment profile (loads ojp-{environment}.properties first)
- * ojp.environment=prod
  * </pre>
  *
  * <p>The datasource name is specified directly in the OJP JDBC URL using parentheses:
@@ -34,13 +31,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class OjpProperties {
 
     /**
-     * OJP environment profile name.
-     * When set, OJP will attempt to load {@code ojp-{environment}.properties}
-     * before falling back to {@code ojp.properties}.
-     */
-    private String environment;
-
-    /**
      * OJP server-side connection pool settings.
      * These are forwarded to the OJP proxy server to configure the server-side pool.
      */
@@ -50,14 +40,6 @@ public class OjpProperties {
      * OJP gRPC transport settings.
      */
     private Grpc grpc = new Grpc();
-
-    public String getEnvironment() {
-        return environment;
-    }
-
-    public void setEnvironment(String environment) {
-        this.environment = environment;
-    }
 
     public Connection getConnection() {
         return connection;

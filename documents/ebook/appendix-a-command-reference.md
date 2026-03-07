@@ -255,7 +255,6 @@ ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000
 ojp.grpc.max-inbound-message-size=16777216
-ojp.environment=prod
 
 # To use a named datasource pool on the OJP server, embed the name in the URL:
 # spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://localhost:5432/mydb

@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code ojp.connection.pool.idle-timeout}      → {@code ojp.connection.pool.idleTimeout}</li>
  *   <li>{@code ojp.connection.pool.max-lifetime}      → {@code ojp.connection.pool.maxLifetime}</li>
  *   <li>{@code ojp.grpc.max-inbound-message-size}     → {@code ojp.grpc.maxInboundMessageSize}</li>
- *   <li>{@code ojp.environment}                       → {@code ojp.environment}</li>
  * </ul>
  *
  * <p>The datasource name is embedded in the OJP JDBC URL using parentheses notation:
@@ -50,8 +49,6 @@ public class OjpSystemPropertiesBridge {
      */
     @PostConstruct
     public void applySystemProperties() {
-        setIfAbsent("ojp.environment", ojpProperties.getEnvironment());
-
         if (ojpProperties.getConnection() != null && ojpProperties.getConnection().getPool() != null) {
             OjpProperties.Connection.Pool pool = ojpProperties.getConnection().getPool();
             setIfAbsent("ojp.connection.pool.maximumPoolSize",

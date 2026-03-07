@@ -77,17 +77,4 @@ class OjpAutoConfigurationTest {
                     assertThat(props.getGrpc().getMaxInboundMessageSize()).isEqualTo(33554432);
                 });
     }
-
-    @Test
-    void shouldBindEnvironmentProperty() {
-        contextRunner
-                .withPropertyValues(
-                        "spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb",
-                        "ojp.environment=prod"
-                )
-                .run(context -> {
-                    OjpProperties props = context.getBean(OjpProperties.class);
-                    assertThat(props.getEnvironment()).isEqualTo("prod");
-                });
-    }
 }

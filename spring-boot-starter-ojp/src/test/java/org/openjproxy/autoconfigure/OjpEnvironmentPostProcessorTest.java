@@ -1,6 +1,8 @@
 package org.openjproxy.autoconfigure;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -12,10 +14,15 @@ class OjpEnvironmentPostProcessorTest {
     private final OjpEnvironmentPostProcessor processor = new OjpEnvironmentPostProcessor();
     private final SpringApplication application = new SpringApplication();
 
-    @Test
-    void shouldSetDefaultsWhenOjpUrlIsPresent() {
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb",
+            "jdbc:ojp[localhost:1059(mainApp)]_postgresql://user@localhost/mydb",
+            "jdbc:ojp[host1:1059,host2:1059]_postgresql://user@localhost/mydb"
+    })
+    void shouldSetDefaultsWhenOjpUrlIsPresent(String ojpUrl) {
         MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("spring.datasource.url", "jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb");
+        environment.setProperty("spring.datasource.url", ojpUrl);
 
         processor.postProcessEnvironment(environment, application);
 
@@ -70,33 +77,5 @@ class OjpEnvironmentPostProcessorTest {
 
         assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DRIVER_CLASS_NAME));
         assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DATASOURCE_TYPE));
-    }
-
-    @Test
-    void shouldHandleOjpUrlWithDataSourceName() {
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("spring.datasource.url",
-                "jdbc:ojp[localhost:1059(mainApp)]_postgresql://user@localhost/mydb");
-
-        processor.postProcessEnvironment(environment, application);
-
-        assertEquals(OjpEnvironmentPostProcessor.OJP_DRIVER_CLASS,
-                environment.getProperty(OjpEnvironmentPostProcessor.DRIVER_CLASS_NAME));
-        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
-                environment.getProperty(OjpEnvironmentPostProcessor.DATASOURCE_TYPE));
-    }
-
-    @Test
-    void shouldHandleMultinodeOjpUrl() {
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("spring.datasource.url",
-                "jdbc:ojp[host1:1059,host2:1059]_postgresql://user@localhost/mydb");
-
-        processor.postProcessEnvironment(environment, application);
-
-        assertEquals(OjpEnvironmentPostProcessor.OJP_DRIVER_CLASS,
-                environment.getProperty(OjpEnvironmentPostProcessor.DRIVER_CLASS_NAME));
-        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
-                environment.getProperty(OjpEnvironmentPostProcessor.DATASOURCE_TYPE));
     }
 }
