@@ -83,7 +83,9 @@ Setting the datasource type to `SimpleDriverDataSource` is crucial. This tells S
 You can also tune the OJP server-side connection pool directly from `application.properties`:
 
 ```properties
-# Server-side HikariCP pool settings (forwarded to the OJP server)
+# OJP server-side connection pool settings (forwarded to the OJP server).
+# Always use ojp.connection.pool.* in application.properties; the starter
+# auto-prefixes these with the datasource name when ojp.datasource.name is set.
 ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000

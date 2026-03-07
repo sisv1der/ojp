@@ -256,15 +256,15 @@ Maven dependency:
 </dependency>
 ```
 
-`application.properties` (starter handles driver and datasource type automatically):
+Complete `application.properties` (starter handles driver and datasource type automatically; all `ojp.*` settings go in the same file):
 ```properties
 spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
 spring.datasource.username=dbuser
 spring.datasource.password=dbpass
-```
 
-Optional OJP pool and gRPC tuning:
-```properties
+# Optional: OJP pool settings (forwarded to the OJP server).
+# Always use ojp.connection.pool.* here; the starter auto-prefixes these
+# with the datasource name when ojp.datasource.name is set.
 ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000

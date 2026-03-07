@@ -14,7 +14,7 @@ connection URL property.
 ### 1. Replace the default `spring-boot-starter-jdbc` with the OJP starter
 
 ```xml
-<!-- Remove the default starter that bundles HikariCP -->
+<!-- Remove the default starter that bundles a local connection pool (e.g., HikariCP) -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -34,8 +34,8 @@ connection URL property.
 </dependency>
 ```
 
-> **Why exclude HikariCP?** OJP manages connection pooling centrally on the proxy server. A local
-> HikariCP pool inside the application would add unnecessary overhead. The OJP Spring Boot Starter
+> **Why exclude the local connection pool?** OJP manages connection pooling centrally on the proxy server. A local
+> pool inside the application would add unnecessary overhead. The OJP Spring Boot Starter
 > automatically configures `SimpleDriverDataSource` instead.
 
 ### 2. Set your connection URL in `application.properties`
@@ -56,7 +56,10 @@ That is all! The starter automatically sets:
 OJP's connection pool lives on the proxy server. You can tune it directly from `application.properties`:
 
 ```properties
-# Server-side HikariCP pool settings (forwarded to the OJP server via gRPC)
+# OJP server-side connection pool settings (forwarded to the OJP server via gRPC).
+# Always use the ojp.connection.pool.* prefix in application.properties;
+# the starter automatically forwards these as {name}.ojp.connection.pool.* system
+# properties when ojp.datasource.name is set, so DatasourcePropertiesLoader finds them.
 ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000
@@ -66,7 +69,8 @@ ojp.connection.pool.max-lifetime=1800000
 # gRPC transport settings (increase for large LOB data)
 ojp.grpc.max-inbound-message-size=16777216
 
-# Named datasource (matches the (dataSourceName) segment in the JDBC URL)
+# Named datasource (matches the (dataSourceName) segment in the JDBC URL).
+# When set to a non-default value, pool settings above are forwarded with this name as prefix.
 ojp.datasource.name=myApp
 
 # Environment profile: loads ojp-{environment}.properties first when set
@@ -123,7 +127,7 @@ If you cannot use the starter (e.g., Java 11 projects), follow these steps:
 ```properties
 spring.datasource.url=jdbc:ojp[localhost:1059]_h2:~/test
 spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver
-# Sets the datasource to not use HikariCP and open single connections instead
+# Sets the datasource to not use a local pool and open single connections instead
 spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource
 ```
 

@@ -20,7 +20,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Property name mapping (Spring Boot → system property):</p>
  * <ul>
- *   <li>{@code ojp.connection.pool.maximum-pool-size} → {@code ojp.connection.pool.maximumPoolSize}</li>
+ *   <li>{@code ojp.connection.pool.maximum-pool-size} → {@code ojp.connection.pool.maximumPoolSize}
+ *       (or {@code {name}.ojp.connection.pool.maximumPoolSize} when a non-default datasource name is set)</li>
  *   <li>{@code ojp.connection.pool.minimum-idle}      → {@code ojp.connection.pool.minimumIdle}</li>
  *   <li>{@code ojp.connection.pool.connection-timeout} → {@code ojp.connection.pool.connectionTimeout}</li>
  *   <li>{@code ojp.connection.pool.idle-timeout}      → {@code ojp.connection.pool.idleTimeout}</li>
@@ -29,6 +30,11 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code ojp.datasource.name}                   → {@code ojp.datasource.name}</li>
  *   <li>{@code ojp.environment}                       → {@code ojp.environment}</li>
  * </ul>
+ *
+ * <p>When {@code ojp.datasource.name} is set to a non-default value (e.g., {@code myApp}),
+ * connection pool properties are forwarded with the datasource name prefix so that
+ * {@code DatasourcePropertiesLoader} can look them up per-datasource:
+ * {@code myApp.ojp.connection.pool.maximumPoolSize=20}.</p>
  */
 public class OjpSystemPropertiesBridge {
 
@@ -44,26 +50,37 @@ public class OjpSystemPropertiesBridge {
      * Sets OJP system properties after the bean is constructed.
      * Only properties explicitly set in {@code application.properties} (non-null values)
      * are written, so they do not override existing system properties or environment variables.
+     *
+     * <p>When a non-default datasource name is configured, pool properties are set with
+     * the {@code {name}.ojp.connection.pool.*} prefix so that {@code DatasourcePropertiesLoader}
+     * resolves them correctly for the named datasource.</p>
      */
     @PostConstruct
     public void applySystemProperties() {
         setIfAbsent("ojp.environment", ojpProperties.getEnvironment());
 
+        String datasourceName = null;
         if (ojpProperties.getDatasource() != null) {
-            setIfAbsent("ojp.datasource.name", ojpProperties.getDatasource().getName());
+            datasourceName = ojpProperties.getDatasource().getName();
+            setIfAbsent("ojp.datasource.name", datasourceName);
         }
+
+        // Determine pool property prefix:
+        // - named (non-default) datasource → "{name}.ojp.connection.pool."
+        // - default or no name             → "ojp.connection.pool."
+        String poolPrefix = determinePoolPrefix(datasourceName);
 
         if (ojpProperties.getConnection() != null && ojpProperties.getConnection().getPool() != null) {
             OjpProperties.Connection.Pool pool = ojpProperties.getConnection().getPool();
-            setIfAbsent("ojp.connection.pool.maximumPoolSize",
+            setIfAbsent(poolPrefix + "maximumPoolSize",
                     pool.getMaximumPoolSize() != null ? pool.getMaximumPoolSize().toString() : null);
-            setIfAbsent("ojp.connection.pool.minimumIdle",
+            setIfAbsent(poolPrefix + "minimumIdle",
                     pool.getMinimumIdle() != null ? pool.getMinimumIdle().toString() : null);
-            setIfAbsent("ojp.connection.pool.connectionTimeout",
+            setIfAbsent(poolPrefix + "connectionTimeout",
                     pool.getConnectionTimeout() != null ? pool.getConnectionTimeout().toString() : null);
-            setIfAbsent("ojp.connection.pool.idleTimeout",
+            setIfAbsent(poolPrefix + "idleTimeout",
                     pool.getIdleTimeout() != null ? pool.getIdleTimeout().toString() : null);
-            setIfAbsent("ojp.connection.pool.maxLifetime",
+            setIfAbsent(poolPrefix + "maxLifetime",
                     pool.getMaxLifetime() != null ? pool.getMaxLifetime().toString() : null);
         }
 
@@ -72,6 +89,24 @@ public class OjpSystemPropertiesBridge {
                     ojpProperties.getGrpc().getMaxInboundMessageSize() != null
                             ? ojpProperties.getGrpc().getMaxInboundMessageSize().toString() : null);
         }
+    }
+
+    /**
+     * Determines the system property prefix for pool settings.
+     *
+     * <p>When a non-default datasource name is configured, pool properties are prefixed
+     * with {@code {name}.} so that {@code DatasourcePropertiesLoader} resolves them for
+     * the correct named datasource. For the default datasource (or when no name is set),
+     * the standard {@code ojp.connection.pool.} prefix is used.</p>
+     *
+     * @param datasourceName the configured datasource name, or {@code null} if not set
+     * @return the pool property prefix including trailing dot
+     */
+    private String determinePoolPrefix(String datasourceName) {
+        if (datasourceName != null && !datasourceName.isEmpty() && !"default".equals(datasourceName)) {
+            return datasourceName + ".ojp.connection.pool.";
+        }
+        return "ojp.connection.pool.";
     }
 
     /**
