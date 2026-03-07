@@ -3,6 +3,7 @@ package org.openjproxy.jdbc.xa;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.openjproxy.constants.CommonConstants;
 import org.openjproxy.grpc.client.MultinodeConnectionManager;
 import org.openjproxy.grpc.client.MultinodeStatementService;
 import org.openjproxy.grpc.client.MultinodeUrlParser;
@@ -110,7 +111,7 @@ public class OjpXADataSource implements XADataSource {
                     }
                 }
                 // Always use the name inferred from the URL, regardless of what may have been set
-                properties.setProperty("ojp.datasource.name", dataSourceName);
+                properties.setProperty(CommonConstants.DATASOURCE_NAME_PROPERTY, dataSourceName);
                 log.debug("Loaded ojp.properties with {} properties for dataSource: {}", ojpProperties.size(), dataSourceName);
             }
 

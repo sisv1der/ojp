@@ -2,6 +2,8 @@ package org.openjproxy.jdbc;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.openjproxy.constants.CommonConstants;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -136,10 +138,10 @@ public class DatasourcePropertiesLoader {
         }
         
         // If we found any properties, also include the dataSource name.
-        // The name is always inferred from the JDBC URL prefix (e.g., "webApp.ojp.connection.pool.*"
-        // → name "webApp") and is never read from the properties file.
+        // The name is always the prefix used in ojp.properties (e.g. "webApp.ojp.connection.pool.*"
+        // -> name "webApp") and is never read from the properties file.
         if (!dataSourceProperties.isEmpty()) {
-            dataSourceProperties.setProperty("ojp.datasource.name", datasourceName);
+            dataSourceProperties.setProperty(CommonConstants.DATASOURCE_NAME_PROPERTY, datasourceName);
         }
         
         log.debug("Loaded {} properties for dataSource '{}': {}", 
