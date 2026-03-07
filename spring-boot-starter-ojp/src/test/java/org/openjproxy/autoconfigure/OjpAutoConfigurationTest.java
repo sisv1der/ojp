@@ -1,5 +1,7 @@
 package org.openjproxy.autoconfigure;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -11,40 +13,32 @@ class OjpAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(OjpAutoConfiguration.class));
 
+    @BeforeEach
+    @AfterEach
+    void clearOjpSystemProperties() {
+        System.clearProperty("ojp.connection.pool.maximumPoolSize");
+        System.clearProperty("ojp.connection.pool.minimumIdle");
+        System.clearProperty("ojp.connection.pool.connectionTimeout");
+        System.clearProperty("ojp.connection.pool.idleTimeout");
+        System.clearProperty("ojp.connection.pool.maxLifetime");
+        System.clearProperty("ojp.grpc.maxInboundMessageSize");
+    }
+
     @Test
-    void shouldRegisterBeansWhenOjpUrlIsConfigured() {
+    void shouldRegisterBridgeBeanWhenOjpUrlIsConfigured() {
         contextRunner
                 .withPropertyValues("spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb")
-                .run(context -> {
-                    assertThat(context).hasSingleBean(OjpProperties.class);
-                    assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class);
-                });
+                .run(context -> assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class));
     }
 
     @Test
     void shouldNotActivateWhenNoDatasourceUrlIsConfigured() {
         contextRunner
-                .run(context -> {
-                    assertThat(context).doesNotHaveBean(OjpSystemPropertiesBridge.class);
-                });
+                .run(context -> assertThat(context).doesNotHaveBean(OjpSystemPropertiesBridge.class));
     }
 
     @Test
-    void shouldNotActivateWhenNonOjpUrlIsConfigured() {
-        contextRunner
-                .withPropertyValues("spring.datasource.url=jdbc:postgresql://localhost:5432/mydb")
-                .run(context -> {
-                    // OjpAutoConfiguration has @ConditionalOnProperty for spring.datasource.url
-                    // and is @ConditionalOnClass for org.openjproxy.jdbc.Driver.
-                    // When a non-OJP URL is set, the auto-configuration still loads
-                    // but the SystemPropertiesBridge won't set any properties (no OJP props set).
-                    // The beans ARE created, but that is harmless.
-                    assertThat(context).hasSingleBean(OjpProperties.class);
-                });
-    }
-
-    @Test
-    void shouldBindPoolProperties() {
+    void shouldForwardPoolPropertiesToSystemProperties() {
         contextRunner
                 .withPropertyValues(
                         "spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb",
@@ -55,26 +49,25 @@ class OjpAutoConfigurationTest {
                         "ojp.connection.pool.max-lifetime=900000"
                 )
                 .run(context -> {
-                    assertThat(context).hasSingleBean(OjpProperties.class);
-                    OjpProperties props = context.getBean(OjpProperties.class);
-                    assertThat(props.getConnection().getPool().getMaximumPoolSize()).isEqualTo(30);
-                    assertThat(props.getConnection().getPool().getMinimumIdle()).isEqualTo(5);
-                    assertThat(props.getConnection().getPool().getConnectionTimeout()).isEqualTo(15000L);
-                    assertThat(props.getConnection().getPool().getIdleTimeout()).isEqualTo(300000L);
-                    assertThat(props.getConnection().getPool().getMaxLifetime()).isEqualTo(900000L);
+                    assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class);
+                    assertThat(System.getProperty("ojp.connection.pool.maximumPoolSize")).isEqualTo("30");
+                    assertThat(System.getProperty("ojp.connection.pool.minimumIdle")).isEqualTo("5");
+                    assertThat(System.getProperty("ojp.connection.pool.connectionTimeout")).isEqualTo("15000");
+                    assertThat(System.getProperty("ojp.connection.pool.idleTimeout")).isEqualTo("300000");
+                    assertThat(System.getProperty("ojp.connection.pool.maxLifetime")).isEqualTo("900000");
                 });
     }
 
     @Test
-    void shouldBindGrpcProperties() {
+    void shouldForwardGrpcPropertiesToSystemProperties() {
         contextRunner
                 .withPropertyValues(
                         "spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb",
                         "ojp.grpc.max-inbound-message-size=33554432"
                 )
                 .run(context -> {
-                    OjpProperties props = context.getBean(OjpProperties.class);
-                    assertThat(props.getGrpc().getMaxInboundMessageSize()).isEqualTo(33554432);
+                    assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class);
+                    assertThat(System.getProperty("ojp.grpc.maxInboundMessageSize")).isEqualTo("33554432");
                 });
     }
 }

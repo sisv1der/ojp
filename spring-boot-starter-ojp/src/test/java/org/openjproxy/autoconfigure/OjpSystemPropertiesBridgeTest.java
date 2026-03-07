@@ -3,6 +3,7 @@ package org.openjproxy.autoconfigure;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -36,26 +37,16 @@ class OjpSystemPropertiesBridgeTest {
     }
 
     @Test
-    void shouldSetAllPoolProperties() {
-        OjpProperties props = new OjpProperties();
+    void shouldSetAllPoolPropertiesFromEnvironment() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("ojp.connection.pool.maximum-pool-size", "20");
+        env.setProperty("ojp.connection.pool.minimum-idle", "5");
+        env.setProperty("ojp.connection.pool.connection-timeout", "30000");
+        env.setProperty("ojp.connection.pool.idle-timeout", "600000");
+        env.setProperty("ojp.connection.pool.max-lifetime", "1800000");
+        env.setProperty("ojp.grpc.max-inbound-message-size", "16777216");
 
-        OjpProperties.Connection.Pool pool = new OjpProperties.Connection.Pool();
-        pool.setMaximumPoolSize(20);
-        pool.setMinimumIdle(5);
-        pool.setConnectionTimeout(30000L);
-        pool.setIdleTimeout(600000L);
-        pool.setMaxLifetime(1800000L);
-
-        OjpProperties.Connection conn = new OjpProperties.Connection();
-        conn.setPool(pool);
-        props.setConnection(conn);
-
-        OjpProperties.Grpc grpc = new OjpProperties.Grpc();
-        grpc.setMaxInboundMessageSize(16777216);
-        props.setGrpc(grpc);
-
-        OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
-        bridge.applySystemProperties();
+        new OjpSystemPropertiesBridge(env).applySystemProperties();
 
         assertEquals("20", System.getProperty(PROP_MAX_POOL_SIZE));
         assertEquals("5", System.getProperty(PROP_MIN_IDLE));
@@ -66,12 +57,21 @@ class OjpSystemPropertiesBridgeTest {
     }
 
     @Test
-    void shouldNotSetPropertiesForNullValues() {
-        OjpProperties props = new OjpProperties();
-        // Leave all values null
+    void shouldForwardAlreadyCamelCaseKeys() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("ojp.connection.pool.maximumPoolSize", "25");
 
-        OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
-        bridge.applySystemProperties();
+        new OjpSystemPropertiesBridge(env).applySystemProperties();
+
+        assertEquals("25", System.getProperty(PROP_MAX_POOL_SIZE));
+    }
+
+    @Test
+    void shouldNotSetPropertiesWhenNoOjpPropertiesPresent() {
+        MockEnvironment env = new MockEnvironment();
+        // No ojp.* properties set
+
+        new OjpSystemPropertiesBridge(env).applySystemProperties();
 
         assertNull(System.getProperty(PROP_MAX_POOL_SIZE));
         assertNull(System.getProperty(PROP_MAX_INBOUND));
@@ -81,16 +81,10 @@ class OjpSystemPropertiesBridgeTest {
     void shouldNotOverrideExistingSystemProperties() {
         System.setProperty(PROP_MAX_POOL_SIZE, "50");
 
-        OjpProperties props = new OjpProperties();
-        OjpProperties.Connection.Pool pool = new OjpProperties.Connection.Pool();
-        pool.setMaximumPoolSize(10);
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("ojp.connection.pool.maximum-pool-size", "10");
 
-        OjpProperties.Connection conn = new OjpProperties.Connection();
-        conn.setPool(pool);
-        props.setConnection(conn);
-
-        OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
-        bridge.applySystemProperties();
+        new OjpSystemPropertiesBridge(env).applySystemProperties();
 
         // Existing system property should not be overwritten
         assertEquals("50", System.getProperty(PROP_MAX_POOL_SIZE));
@@ -98,19 +92,29 @@ class OjpSystemPropertiesBridgeTest {
 
     @Test
     void shouldOnlySetExplicitlyConfiguredProperties() {
-        OjpProperties props = new OjpProperties();
-        OjpProperties.Connection.Pool pool = new OjpProperties.Connection.Pool();
-        pool.setMaximumPoolSize(25);
-        // minimumIdle intentionally left null
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("ojp.connection.pool.maximum-pool-size", "25");
+        // minimumIdle intentionally not set
 
-        OjpProperties.Connection conn = new OjpProperties.Connection();
-        conn.setPool(pool);
-        props.setConnection(conn);
-
-        OjpSystemPropertiesBridge bridge = new OjpSystemPropertiesBridge(props);
-        bridge.applySystemProperties();
+        new OjpSystemPropertiesBridge(env).applySystemProperties();
 
         assertEquals("25", System.getProperty(PROP_MAX_POOL_SIZE));
         assertNull(System.getProperty(PROP_MIN_IDLE));
+    }
+
+    @Test
+    void kebabToCamelCaseShouldConvertCorrectly() {
+        assertEquals("ojp.connection.pool.maximumPoolSize",
+                OjpSystemPropertiesBridge.kebabToCamelCase("ojp.connection.pool.maximum-pool-size"));
+        assertEquals("ojp.grpc.maxInboundMessageSize",
+                OjpSystemPropertiesBridge.kebabToCamelCase("ojp.grpc.max-inbound-message-size"));
+        assertEquals("ojp.connection.pool.minimumIdle",
+                OjpSystemPropertiesBridge.kebabToCamelCase("ojp.connection.pool.minimum-idle"));
+    }
+
+    @Test
+    void kebabToCamelCaseShouldLeaveAlreadyCamelCaseUnchanged() {
+        assertEquals("ojp.connection.pool.maximumPoolSize",
+                OjpSystemPropertiesBridge.kebabToCamelCase("ojp.connection.pool.maximumPoolSize"));
     }
 }

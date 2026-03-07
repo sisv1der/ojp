@@ -5,8 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 /**
  * Spring Boot auto-configuration for OJP (Open J Proxy).
@@ -19,12 +19,12 @@ import org.springframework.context.annotation.Bean;
  *
  * <p>What this auto-configuration does:</p>
  * <ul>
- *   <li>Enables {@link OjpProperties} so OJP settings can be configured in
- *       {@code application.properties} under the {@code ojp.*} prefix.</li>
- *   <li>Registers an {@link OjpSystemPropertiesBridge} bean that propagates
- *       {@code ojp.*} properties from Spring's {@link org.springframework.core.env.Environment}
- *       to JVM system properties, where the OJP driver's
- *       {@code DatasourcePropertiesLoader} reads them with the highest precedence.</li>
+ *   <li>Registers an {@link OjpSystemPropertiesBridge} bean that iterates all
+ *       {@code ojp.*} properties from Spring's {@link Environment}, converts their
+ *       names from kebab-case to camelCase, and forwards them to JVM system properties,
+ *       where the OJP driver's {@code DatasourcePropertiesLoader} reads them with the
+ *       highest precedence. Any new OJP property is forwarded automatically without
+ *       code changes.</li>
  * </ul>
  *
  * <p>The auto-configuration is ordered before the JDBC {@code DataSourceAutoConfiguration}
@@ -50,7 +50,6 @@ import org.springframework.context.annotation.Bean;
 })
 @ConditionalOnClass(name = "org.openjproxy.jdbc.Driver")
 @ConditionalOnProperty(prefix = "spring.datasource", name = "url", matchIfMissing = false)
-@EnableConfigurationProperties(OjpProperties.class)
 public class OjpAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(OjpAutoConfiguration.class);
@@ -58,16 +57,17 @@ public class OjpAutoConfiguration {
     /**
      * Registers the {@link OjpSystemPropertiesBridge} bean.
      *
-     * <p>This bean bridges OJP configuration from Spring Boot's {@code application.properties}
-     * to JVM system properties, making the settings available to the OJP driver's
-     * {@code DatasourcePropertiesLoader} before the first database connection is made.</p>
+     * <p>This bean iterates all {@code ojp.*} properties in the Spring
+     * {@link Environment} and forwards them as JVM system properties, making them
+     * available to the OJP driver's {@code DatasourcePropertiesLoader} before the
+     * first database connection is made.</p>
      *
-     * @param ojpProperties the bound {@link OjpProperties}
+     * @param environment the Spring environment
      * @return the system properties bridge
      */
     @Bean
-    public OjpSystemPropertiesBridge ojpSystemPropertiesBridge(OjpProperties ojpProperties) {
+    public OjpSystemPropertiesBridge ojpSystemPropertiesBridge(Environment environment) {
         log.debug("Registering OjpSystemPropertiesBridge");
-        return new OjpSystemPropertiesBridge(ojpProperties);
+        return new OjpSystemPropertiesBridge(environment);
     }
 }

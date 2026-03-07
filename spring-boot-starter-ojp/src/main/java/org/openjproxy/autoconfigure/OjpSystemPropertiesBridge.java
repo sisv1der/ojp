@@ -3,6 +3,13 @@ package org.openjproxy.autoconfigure;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.PropertySource;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Bridges OJP configuration from Spring Boot's {@code application.properties}
@@ -10,23 +17,21 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The OJP JDBC driver's {@code DatasourcePropertiesLoader} reads pool and gRPC
  * settings from three sources (in descending priority): environment variables,
- * system properties, and {@code ojp.properties} file. This bridge sets system
- * properties from the {@link OjpProperties} bean so that {@code ojp.*} settings
- * declared in {@code application.properties} are transparently forwarded to the
- * driver without requiring a separate {@code ojp.properties} file.</p>
+ * system properties, and {@code ojp.properties} file. This bridge iterates all
+ * {@code ojp.*} properties in Spring's {@link Environment} and forwards them to JVM
+ * system properties so that settings declared in {@code application.properties} are
+ * transparently available to the driver without a separate {@code ojp.properties}
+ * file. Any new OJP property is picked up automatically without code changes.</p>
  *
- * <p>Only non-null property values are written as system properties, preserving
- * any existing system-property or environment-variable overrides.</p>
+ * <p>Property keys written in Spring's kebab-case format are automatically
+ * converted to camelCase before being set as system properties:</p>
+ * <pre>
+ *   ojp.connection.pool.maximum-pool-size  →  ojp.connection.pool.maximumPoolSize
+ *   ojp.grpc.max-inbound-message-size      →  ojp.grpc.maxInboundMessageSize
+ * </pre>
  *
- * <p>Property name mapping (Spring Boot → system property):</p>
- * <ul>
- *   <li>{@code ojp.connection.pool.maximum-pool-size} → {@code ojp.connection.pool.maximumPoolSize}</li>
- *   <li>{@code ojp.connection.pool.minimum-idle}      → {@code ojp.connection.pool.minimumIdle}</li>
- *   <li>{@code ojp.connection.pool.connection-timeout} → {@code ojp.connection.pool.connectionTimeout}</li>
- *   <li>{@code ojp.connection.pool.idle-timeout}      → {@code ojp.connection.pool.idleTimeout}</li>
- *   <li>{@code ojp.connection.pool.max-lifetime}      → {@code ojp.connection.pool.maxLifetime}</li>
- *   <li>{@code ojp.grpc.max-inbound-message-size}     → {@code ojp.grpc.maxInboundMessageSize}</li>
- * </ul>
+ * <p>Only non-null property values are written as system properties, and existing
+ * system-property or environment-variable values are never overridden.</p>
  *
  * <p>The datasource name is embedded in the OJP JDBC URL using parentheses notation:
  * {@code jdbc:ojp[localhost:1059(myApp)]_...}. The OJP driver extracts this name
@@ -35,52 +40,63 @@ import org.slf4j.LoggerFactory;
 public class OjpSystemPropertiesBridge {
 
     private static final Logger log = LoggerFactory.getLogger(OjpSystemPropertiesBridge.class);
+    private static final String OJP_PREFIX = "ojp.";
 
-    private final OjpProperties ojpProperties;
+    private final Environment environment;
 
-    public OjpSystemPropertiesBridge(OjpProperties ojpProperties) {
-        this.ojpProperties = ojpProperties;
+    public OjpSystemPropertiesBridge(Environment environment) {
+        this.environment = environment;
     }
 
     /**
-     * Sets OJP system properties after the bean is constructed.
-     * Only properties explicitly set in {@code application.properties} (non-null values)
-     * are written, so they do not override existing system properties or environment variables.
+     * Iterates all {@code ojp.*} keys in the Spring {@link Environment}, converts
+     * kebab-case names to camelCase, and sets them as JVM system properties.
+     * Only non-null values are written, and existing system properties are preserved.
      */
     @PostConstruct
     public void applySystemProperties() {
-        if (ojpProperties.getConnection() != null && ojpProperties.getConnection().getPool() != null) {
-            OjpProperties.Connection.Pool pool = ojpProperties.getConnection().getPool();
-            setIfAbsent("ojp.connection.pool.maximumPoolSize",
-                    pool.getMaximumPoolSize() != null ? pool.getMaximumPoolSize().toString() : null);
-            setIfAbsent("ojp.connection.pool.minimumIdle",
-                    pool.getMinimumIdle() != null ? pool.getMinimumIdle().toString() : null);
-            setIfAbsent("ojp.connection.pool.connectionTimeout",
-                    pool.getConnectionTimeout() != null ? pool.getConnectionTimeout().toString() : null);
-            setIfAbsent("ojp.connection.pool.idleTimeout",
-                    pool.getIdleTimeout() != null ? pool.getIdleTimeout().toString() : null);
-            setIfAbsent("ojp.connection.pool.maxLifetime",
-                    pool.getMaxLifetime() != null ? pool.getMaxLifetime().toString() : null);
+        if (!(environment instanceof ConfigurableEnvironment configurableEnvironment)) {
+            log.warn("Environment is not a ConfigurableEnvironment; OJP system properties will not be applied.");
+            return;
         }
-
-        if (ojpProperties.getGrpc() != null) {
-            setIfAbsent("ojp.grpc.maxInboundMessageSize",
-                    ojpProperties.getGrpc().getMaxInboundMessageSize() != null
-                            ? ojpProperties.getGrpc().getMaxInboundMessageSize().toString() : null);
+        Set<String> processed = new HashSet<>();
+        for (PropertySource<?> source : configurableEnvironment.getPropertySources()) {
+            if (source instanceof EnumerablePropertySource<?> enumerable) {
+                for (String name : enumerable.getPropertyNames()) {
+                    if (name.startsWith(OJP_PREFIX) && processed.add(name)) {
+                        String value = environment.getProperty(name);
+                        if (value != null) {
+                            setIfAbsent(kebabToCamelCase(name), value);
+                        }
+                    }
+                }
+            }
         }
     }
 
     /**
-     * Sets a system property only if the given value is non-null and the property
-     * is not already set (preserving existing system-property or env-var overrides).
+     * Converts a kebab-case property key to camelCase.
+     * For example, {@code ojp.connection.pool.maximum-pool-size} becomes
+     * {@code ojp.connection.pool.maximumPoolSize}.
      *
-     * @param key   system property key
-     * @param value value to set, or {@code null} to skip
+     * @param key the property key, potentially containing hyphens
+     * @return the same key with each {@code -x} sequence replaced by {@code X}
      */
-    private void setIfAbsent(String key, String value) {
-        if (value == null) {
-            return;
+    static String kebabToCamelCase(String key) {
+        StringBuilder result = new StringBuilder(key.length());
+        boolean capitalize = false;
+        for (char c : key.toCharArray()) {
+            if (c == '-') {
+                capitalize = true;
+            } else {
+                result.append(capitalize ? Character.toUpperCase(c) : c);
+                capitalize = false;
+            }
         }
+        return result.toString();
+    }
+
+    private void setIfAbsent(String key, String value) {
         if (System.getProperty(key) == null) {
             System.setProperty(key, value);
             log.debug("Set OJP system property: {}={}", key, value);
