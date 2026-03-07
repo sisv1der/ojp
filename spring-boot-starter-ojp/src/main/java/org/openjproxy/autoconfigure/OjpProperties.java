@@ -20,12 +20,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * # OJP gRPC settings
  * ojp.grpc.max-inbound-message-size=16777216
  *
- * # OJP datasource name (maps to the (dataSourceName) in the JDBC URL)
- * ojp.datasource.name=myApp
- *
  * # OJP environment profile (loads ojp-{environment}.properties first)
  * ojp.environment=prod
  * </pre>
+ *
+ * <p>The datasource name is specified directly in the OJP JDBC URL using parentheses:
+ * {@code jdbc:ojp[localhost:1059(myApp)]_postgresql://...}</p>
  *
  * <p>These properties are automatically propagated as system properties so that
  * {@code DatasourcePropertiesLoader} can pick them up with the highest precedence.</p>
@@ -41,15 +41,8 @@ public class OjpProperties {
     private String environment;
 
     /**
-     * OJP datasource name.
-     * Identifies which named datasource configuration to use on the OJP server.
-     * This corresponds to the {@code (dataSourceName)} segment in the OJP JDBC URL.
-     */
-    private Datasource datasource = new Datasource();
-
-    /**
      * OJP server-side connection pool settings.
-     * These are forwarded to the OJP proxy server to configure HikariCP.
+     * These are forwarded to the OJP proxy server to configure the server-side pool.
      */
     private Connection connection = new Connection();
 
@@ -64,14 +57,6 @@ public class OjpProperties {
 
     public void setEnvironment(String environment) {
         this.environment = environment;
-    }
-
-    public Datasource getDatasource() {
-        return datasource;
-    }
-
-    public void setDatasource(Datasource datasource) {
-        this.datasource = datasource;
     }
 
     public Connection getConnection() {
@@ -91,26 +76,6 @@ public class OjpProperties {
     }
 
     /**
-     * OJP datasource identification settings.
-     */
-    public static class Datasource {
-
-        /**
-         * Named datasource identifier used for per-datasource pool configuration
-         * on the OJP server. Corresponds to the {@code (dataSourceName)} in the JDBC URL.
-         */
-        private String name;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-    }
-
-    /**
      * OJP connection pool settings forwarded to the OJP proxy server.
      */
     public static class Connection {
@@ -126,7 +91,7 @@ public class OjpProperties {
         }
 
         /**
-         * Server-side HikariCP pool size and timeout settings.
+         * Server-side connection pool size and timeout settings.
          */
         public static class Pool {
 

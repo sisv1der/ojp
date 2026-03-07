@@ -31,6 +31,22 @@
             <version>0.3.2-snapshot</version>
         </dependency>
 
+        <!-- Spring Boot JDBC Starter (pool excluded — OJP handles pooling server-side).
+             Including this as a compile-scope dependency so that consumers only need to
+             add spring-boot-starter-ojp and get Spring JDBC + autoconfiguration support
+             without a local connection pool. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <version>${spring-boot.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.zaxxer</groupId>
+                    <artifactId>HikariCP</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Spring Boot Autoconfigure - provided, will be pulled in by the app -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -41,8 +57,8 @@
 
         <!--
             spring-boot-jdbc contains DataSourceAutoConfiguration in Spring Boot 4.x.
-            It was in spring-boot-autoconfigure in Spring Boot 3.x.
-            Declared as provided so the consuming app brings it via spring-boot-starter-jdbc.
+            Also pulled in transitively via spring-boot-starter-jdbc above.
+            Declared as provided to avoid duplicate on the compile classpath.
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

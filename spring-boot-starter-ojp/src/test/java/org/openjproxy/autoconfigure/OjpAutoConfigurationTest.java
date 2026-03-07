@@ -79,19 +79,6 @@ class OjpAutoConfigurationTest {
     }
 
     @Test
-    void shouldBindDatasourceNameProperty() {
-        contextRunner
-                .withPropertyValues(
-                        "spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://user@localhost/mydb",
-                        "ojp.datasource.name=myApp"
-                )
-                .run(context -> {
-                    OjpProperties props = context.getBean(OjpProperties.class);
-                    assertThat(props.getDatasource().getName()).isEqualTo("myApp");
-                });
-    }
-
-    @Test
     void shouldBindEnvironmentProperty() {
         contextRunner
                 .withPropertyValues(

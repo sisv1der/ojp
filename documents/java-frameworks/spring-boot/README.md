@@ -11,22 +11,12 @@ connection URL property.
 
 ## Quickstart with the Spring Boot Starter (Recommended)
 
-### 1. Replace the default `spring-boot-starter-jdbc` with the OJP starter
+### 1. Add the OJP starter
+
+Replace any existing `spring-boot-starter-jdbc` in your `pom.xml` with the OJP starter:
 
 ```xml
-<!-- Remove the default starter that bundles a local connection pool (e.g., HikariCP) -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-jdbc</artifactId>
-    <exclusions>
-        <exclusion>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
-
-<!-- Add the OJP Spring Boot Starter -->
+<!-- Add the OJP Spring Boot Starter (replaces spring-boot-starter-jdbc) -->
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
@@ -34,9 +24,9 @@ connection URL property.
 </dependency>
 ```
 
-> **Why exclude the local connection pool?** OJP manages connection pooling centrally on the proxy server. A local
-> pool inside the application would add unnecessary overhead. The OJP Spring Boot Starter
-> automatically configures `SimpleDriverDataSource` instead.
+> **Why replace the JDBC starter?** OJP manages connection pooling centrally on the proxy server.
+> The OJP Spring Boot Starter includes the necessary Spring JDBC support without a local connection
+> pool, and automatically configures `SimpleDriverDataSource` to create connections on demand.
 
 ### 2. Set your connection URL in `application.properties`
 
@@ -56,10 +46,7 @@ That is all! The starter automatically sets:
 OJP's connection pool lives on the proxy server. You can tune it directly from `application.properties`:
 
 ```properties
-# OJP server-side connection pool settings (forwarded to the OJP server via gRPC).
-# Always use the ojp.connection.pool.* prefix in application.properties;
-# the starter automatically forwards these as {name}.ojp.connection.pool.* system
-# properties when ojp.datasource.name is set, so DatasourcePropertiesLoader finds them.
+# OJP server-side connection pool settings (forwarded to the OJP server via gRPC)
 ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000
@@ -69,13 +56,13 @@ ojp.connection.pool.max-lifetime=1800000
 # gRPC transport settings (increase for large LOB data)
 ojp.grpc.max-inbound-message-size=16777216
 
-# Named datasource (matches the (dataSourceName) segment in the JDBC URL).
-# When set to a non-default value, pool settings above are forwarded with this name as prefix.
-ojp.datasource.name=myApp
-
 # Environment profile: loads ojp-{environment}.properties first when set
 ojp.environment=prod
 ```
+
+> **Tip — Named datasource:** To use a named datasource pool configuration on the server, embed the
+> name directly in the JDBC URL using parentheses:
+> `spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://...`
 
 ### 4. Start the OJP Server
 
@@ -127,7 +114,7 @@ If you cannot use the starter (e.g., Java 11 projects), follow these steps:
 ```properties
 spring.datasource.url=jdbc:ojp[localhost:1059]_h2:~/test
 spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver
-# Sets the datasource to not use a local pool and open single connections instead
+# SimpleDriverDataSource creates and closes connections on demand without local pooling
 spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource
 ```
 

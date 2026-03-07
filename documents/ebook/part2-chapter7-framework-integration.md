@@ -40,22 +40,10 @@ OJP ships a dedicated Spring Boot Starter—`spring-boot-starter-ojp`—that rem
 
 ### Using the Spring Boot Starter (Recommended)
 
-The `spring-boot-starter-ojp` artifact provides zero-configuration Spring Boot integration for both Spring Boot 4.x (Java 17+) and Spring Boot 3.x. Replace the default `spring-boot-starter-jdbc` with the OJP starter:
+The `spring-boot-starter-ojp` artifact provides zero-configuration Spring Boot integration for both Spring Boot 4.x (Java 17+) and Spring Boot 3.x. Replace `spring-boot-starter-jdbc` with the OJP starter:
 
 ```xml
 <!-- Replace spring-boot-starter-jdbc with the OJP starter -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-jdbc</artifactId>
-    <exclusions>
-        <exclusion>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
-
-<!-- Add the OJP Spring Boot Starter -->
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
@@ -95,12 +83,13 @@ ojp.connection.pool.max-lifetime=1800000
 # gRPC transport settings (increase for large LOB data)
 ojp.grpc.max-inbound-message-size=16777216
 
-# Named datasource (matches the (dataSourceName) segment in the JDBC URL)
-ojp.datasource.name=myApp
-
 # Environment profile: loads ojp-{environment}.properties first when set
 ojp.environment=prod
 ```
+
+> **Tip — Named datasource:** To target a named pool configuration on the OJP server, embed the
+> datasource name in the JDBC URL:
+> `spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://...`
 
 The starter's `OjpSystemPropertiesBridge` bean propagates these `ojp.*` properties to JVM system properties before any DataSource bean is created, so the OJP driver's `DatasourcePropertiesLoader` picks them up with the highest precedence—overriding any `ojp.properties` file on the classpath.
 

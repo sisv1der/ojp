@@ -236,19 +236,7 @@ connectionTestQuery=SELECT 1
 
 Maven dependency:
 ```xml
-<!-- spring-boot-starter-jdbc without HikariCP -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-jdbc</artifactId>
-    <exclusions>
-        <exclusion>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
-
-<!-- OJP Spring Boot Starter — auto-configures driver and datasource type -->
+<!-- OJP Spring Boot Starter — replaces spring-boot-starter-jdbc -->
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
@@ -262,15 +250,15 @@ spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
 spring.datasource.username=dbuser
 spring.datasource.password=dbpass
 
-# Optional: OJP pool settings (forwarded to the OJP server).
-# Always use ojp.connection.pool.* here; the starter auto-prefixes these
-# with the datasource name when ojp.datasource.name is set.
+# Optional: OJP pool settings (forwarded to the OJP server)
 ojp.connection.pool.maximum-pool-size=20
 ojp.connection.pool.minimum-idle=5
 ojp.connection.pool.connection-timeout=30000
 ojp.grpc.max-inbound-message-size=16777216
-ojp.datasource.name=myApp
 ojp.environment=prod
+
+# To use a named datasource pool on the OJP server, embed the name in the URL:
+# spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://localhost:5432/mydb
 ```
 
 **Manual — Spring Boot 3.x / Java 11 (without starter):**
