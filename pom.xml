@@ -68,6 +68,13 @@
                 <artifactId>jackson-core</artifactId>
                 <version>${jackson-core.version}</version>
             </dependency>
+
+            <!-- Force logback-core to fix CVE-2026-1225 (ACE in config processing, affects ≤1.5.24) -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
