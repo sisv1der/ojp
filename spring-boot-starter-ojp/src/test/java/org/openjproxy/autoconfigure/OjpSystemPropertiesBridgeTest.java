@@ -117,4 +117,107 @@ class OjpSystemPropertiesBridgeTest {
         assertEquals("ojp.connection.pool.maximumPoolSize",
                 OjpSystemPropertiesBridge.kebabToCamelCase("ojp.connection.pool.maximumPoolSize"));
     }
+
+    // ---- toSystemPropertyKey ------------------------------------------------
+
+    @Test
+    void toSystemPropertyKeyShouldHandleDefaultPoolKeys() {
+        assertEquals("ojp.connection.pool.maximumPoolSize",
+                OjpSystemPropertiesBridge.toSystemPropertyKey("ojp.connection.pool.maximum-pool-size"));
+        assertEquals("ojp.grpc.maxInboundMessageSize",
+                OjpSystemPropertiesBridge.toSystemPropertyKey("ojp.grpc.max-inbound-message-size"));
+    }
+
+    @Test
+    void toSystemPropertyKeyShouldHandleNamedPoolKebabKeys() {
+        assertEquals("high-performance.ojp.connection.pool.maximumPoolSize",
+                OjpSystemPropertiesBridge.toSystemPropertyKey(
+                        "high-performance.ojp.connection.pool.maximum-pool-size"));
+        assertEquals("postgres.ojp.connection.pool.minimumIdle",
+                OjpSystemPropertiesBridge.toSystemPropertyKey(
+                        "postgres.ojp.connection.pool.minimum-idle"));
+        assertEquals("postgres2.ojp.grpc.maxInboundMessageSize",
+                OjpSystemPropertiesBridge.toSystemPropertyKey(
+                        "postgres2.ojp.grpc.max-inbound-message-size"));
+    }
+
+    @Test
+    void toSystemPropertyKeyShouldPreserveHyphensInPoolName() {
+        // Pool name contains hyphens – must NOT be camelCased
+        assertEquals("high-performance.ojp.connection.pool.maximumPoolSize",
+                OjpSystemPropertiesBridge.toSystemPropertyKey(
+                        "high-performance.ojp.connection.pool.maximumPoolSize"));
+    }
+
+    @Test
+    void toSystemPropertyKeyShouldReturnNullForUnrelatedKeys() {
+        assertNull(OjpSystemPropertiesBridge.toSystemPropertyKey("spring.datasource.url"));
+        assertNull(OjpSystemPropertiesBridge.toSystemPropertyKey("server.port"));
+        assertNull(OjpSystemPropertiesBridge.toSystemPropertyKey(""));
+    }
+
+    // ---- named-pool end-to-end forwarding -----------------------------------
+
+    @Test
+    void shouldSetNamedPoolPropertiesFromEnvironment() {
+        String propMaxPool = "high-performance.ojp.connection.pool.maximumPoolSize";
+        String propMinIdle  = "postgres.ojp.connection.pool.minimumIdle";
+        String propMaxInbound = "postgres2.ojp.grpc.maxInboundMessageSize";
+        System.clearProperty(propMaxPool);
+        System.clearProperty(propMinIdle);
+        System.clearProperty(propMaxInbound);
+        try {
+            MockEnvironment env = new MockEnvironment();
+            env.setProperty("high-performance.ojp.connection.pool.maximum-pool-size", "50");
+            env.setProperty("postgres.ojp.connection.pool.minimum-idle", "3");
+            env.setProperty("postgres2.ojp.grpc.max-inbound-message-size", "8388608");
+
+            new OjpSystemPropertiesBridge(env).applySystemProperties();
+
+            assertEquals("50",      System.getProperty(propMaxPool));
+            assertEquals("3",       System.getProperty(propMinIdle));
+            assertEquals("8388608", System.getProperty(propMaxInbound));
+        } finally {
+            System.clearProperty(propMaxPool);
+            System.clearProperty(propMinIdle);
+            System.clearProperty(propMaxInbound);
+        }
+    }
+
+    @Test
+    void shouldNotOverrideExistingSystemPropertiesForNamedPool() {
+        String prop = "postgres.ojp.connection.pool.maximumPoolSize";
+        System.setProperty(prop, "99");
+        try {
+            MockEnvironment env = new MockEnvironment();
+            env.setProperty("postgres.ojp.connection.pool.maximum-pool-size", "10");
+
+            new OjpSystemPropertiesBridge(env).applySystemProperties();
+
+            assertEquals("99", System.getProperty(prop));
+        } finally {
+            System.clearProperty(prop);
+        }
+    }
+
+    @Test
+    void shouldSetBothDefaultAndNamedPoolPropertiesFromSameEnvironment() {
+        String defaultProp = "ojp.connection.pool.maximumPoolSize";
+        String namedProp   = "postgres.ojp.connection.pool.maximumPoolSize";
+        System.clearProperty(defaultProp);
+        System.clearProperty(namedProp);
+        try {
+            MockEnvironment env = new MockEnvironment();
+            env.setProperty("ojp.connection.pool.maximum-pool-size", "20");
+            env.setProperty("postgres.ojp.connection.pool.maximum-pool-size", "30");
+
+            new OjpSystemPropertiesBridge(env).applySystemProperties();
+
+            assertEquals("20", System.getProperty(defaultProp));
+            assertEquals("30", System.getProperty(namedProp));
+        } finally {
+            System.clearProperty(defaultProp);
+            System.clearProperty(namedProp);
+        }
+    }
 }
