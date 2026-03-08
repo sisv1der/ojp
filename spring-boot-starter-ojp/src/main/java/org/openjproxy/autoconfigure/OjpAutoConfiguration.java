@@ -4,8 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
 
 /**
@@ -14,7 +14,8 @@ import org.springframework.core.env.Environment;
  * <p>This auto-configuration activates when:</p>
  * <ol>
  *   <li>The OJP JDBC driver class ({@code org.openjproxy.jdbc.Driver}) is on the classpath.</li>
- *   <li>The property {@code spring.datasource.url} is present in the environment.</li>
+ *   <li>At least one datasource URL ({@code spring.datasource.url} or
+ *       {@code spring.datasource.{name}.url}) starts with {@code jdbc:ojp}.</li>
  * </ol>
  *
  * <p>What this auto-configuration does:</p>
@@ -31,11 +32,17 @@ import org.springframework.core.env.Environment;
  * (both Spring Boot 3.x and 4.x packages are listed) so that system properties are set
  * before any {@code DataSource} bean is created.</p>
  *
- * <p><strong>Minimal {@code application.properties} required to use OJP:</strong></p>
+ * <p><strong>Minimal {@code application.properties} for single-datasource OJP setup:</strong></p>
  * <pre>
  * spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user&#64;localhost/mydb
  * spring.datasource.username=user
  * spring.datasource.******
+ * </pre>
+ *
+ * <p><strong>Named-datasource setup example:</strong></p>
+ * <pre>
+ * spring.datasource.catalog.url=jdbc:ojp[localhost:1059]_postgresql://user&#64;localhost/catalog
+ * spring.datasource.checkout.url=jdbc:ojp[localhost:1059]_postgresql://user&#64;localhost/checkout
  * </pre>
  *
  * <p>The {@link OjpEnvironmentPostProcessor} automatically sets
@@ -49,7 +56,7 @@ import org.springframework.core.env.Environment;
         "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration"
 })
 @ConditionalOnClass(name = "org.openjproxy.jdbc.Driver")
-@ConditionalOnProperty(prefix = "spring.datasource", name = "url", matchIfMissing = false)
+@Conditional(OnAnyOjpDatasourceUrlCondition.class)
 public class OjpAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(OjpAutoConfiguration.class);
