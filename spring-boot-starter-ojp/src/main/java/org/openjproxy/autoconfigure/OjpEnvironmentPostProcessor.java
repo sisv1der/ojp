@@ -3,7 +3,7 @@ package org.openjproxy.autoconfigure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.EnvironmentPostProcessor;
+import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -27,10 +27,9 @@ import java.util.Map;
  * connection pooling centrally on the proxy server, so a local pool is unnecessary and
  * would consume extra resources.</p>
  *
- * <p>This processor is registered via {@code META-INF/spring.factories} under both the
- * Spring Boot 3.x key ({@code org.springframework.boot.env.EnvironmentPostProcessor})
- * and the Spring Boot 4.x key ({@code org.springframework.boot.EnvironmentPostProcessor})
- * to ensure compatibility with both major versions.</p>
+ * <p>This processor is registered via {@code META-INF/spring.factories} under the
+ * {@code org.springframework.boot.env.EnvironmentPostProcessor} key, which is supported
+ * across Spring Boot 3.x and 4.x.</p>
  *
  * <p>No action is taken when the URL is not an OJP URL, making this safe to include
  * in projects that conditionally use OJP.</p>
