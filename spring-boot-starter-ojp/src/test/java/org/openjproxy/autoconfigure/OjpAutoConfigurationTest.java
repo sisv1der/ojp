@@ -32,8 +32,32 @@ class OjpAutoConfigurationTest {
     }
 
     @Test
+    void shouldRegisterBridgeBeanWhenNamedDatasourceOjpUrlIsConfigured() {
+        contextRunner
+                .withPropertyValues("spring.datasource.catalog.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/catalog")
+                .run(context -> assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class));
+    }
+
+    @Test
+    void shouldRegisterBridgeBeanWhenMultipleNamedDatasourceOjpUrlsAreConfigured() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.datasource.catalog.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/catalog",
+                        "spring.datasource.checkout.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/checkout"
+                )
+                .run(context -> assertThat(context).hasSingleBean(OjpSystemPropertiesBridge.class));
+    }
+
+    @Test
     void shouldNotActivateWhenNoDatasourceUrlIsConfigured() {
         contextRunner
+                .run(context -> assertThat(context).doesNotHaveBean(OjpSystemPropertiesBridge.class));
+    }
+
+    @Test
+    void shouldNotActivateWhenNamedDatasourceUrlIsNotOjp() {
+        contextRunner
+                .withPropertyValues("spring.datasource.catalog.url=jdbc:postgresql://localhost:5432/catalog")
                 .run(context -> assertThat(context).doesNotHaveBean(OjpSystemPropertiesBridge.class));
     }
 

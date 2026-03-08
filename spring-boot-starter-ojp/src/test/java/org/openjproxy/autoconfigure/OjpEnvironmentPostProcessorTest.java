@@ -78,4 +78,69 @@ class OjpEnvironmentPostProcessorTest {
         assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DRIVER_CLASS_NAME));
         assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DATASOURCE_TYPE));
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"catalog", "checkout", "primary"})
+    void shouldSetDefaultsForNamedDatasourceOjpUrl(String dsName) {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("spring.datasource." + dsName + ".url",
+                "jdbc:ojp[localhost:1059]_postgresql://user@localhost/" + dsName);
+
+        processor.postProcessEnvironment(environment, application);
+
+        assertEquals(OjpEnvironmentPostProcessor.OJP_DRIVER_CLASS,
+                environment.getProperty("spring.datasource." + dsName + ".driver-class-name"));
+        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
+                environment.getProperty("spring.datasource." + dsName + ".type"));
+        // Default datasource properties should NOT be set
+        assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DRIVER_CLASS_NAME));
+        assertNull(environment.getProperty(OjpEnvironmentPostProcessor.DATASOURCE_TYPE));
+    }
+
+    @Test
+    void shouldSetDefaultsForMultipleNamedDatasourceOjpUrls() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("spring.datasource.catalog.url",
+                "jdbc:ojp[localhost:1059]_postgresql://user@localhost/catalog");
+        environment.setProperty("spring.datasource.checkout.url",
+                "jdbc:ojp[localhost:1059]_postgresql://user@localhost/checkout");
+
+        processor.postProcessEnvironment(environment, application);
+
+        assertEquals(OjpEnvironmentPostProcessor.OJP_DRIVER_CLASS,
+                environment.getProperty("spring.datasource.catalog.driver-class-name"));
+        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
+                environment.getProperty("spring.datasource.catalog.type"));
+        assertEquals(OjpEnvironmentPostProcessor.OJP_DRIVER_CLASS,
+                environment.getProperty("spring.datasource.checkout.driver-class-name"));
+        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
+                environment.getProperty("spring.datasource.checkout.type"));
+    }
+
+    @Test
+    void shouldNotSetDefaultsForNamedDatasourceWhenUrlIsNotOjp() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("spring.datasource.catalog.url",
+                "jdbc:postgresql://localhost:5432/catalog");
+
+        processor.postProcessEnvironment(environment, application);
+
+        assertNull(environment.getProperty("spring.datasource.catalog.driver-class-name"));
+        assertNull(environment.getProperty("spring.datasource.catalog.type"));
+    }
+
+    @Test
+    void shouldNotOverrideExplicitDriverClassNameForNamedDatasource() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("spring.datasource.catalog.url",
+                "jdbc:ojp[localhost:1059]_postgresql://user@localhost/catalog");
+        environment.setProperty("spring.datasource.catalog.driver-class-name", "com.custom.Driver");
+
+        processor.postProcessEnvironment(environment, application);
+
+        assertEquals("com.custom.Driver",
+                environment.getProperty("spring.datasource.catalog.driver-class-name"));
+        assertEquals(OjpEnvironmentPostProcessor.SIMPLE_DRIVER_DATASOURCE,
+                environment.getProperty("spring.datasource.catalog.type"));
+    }
 }
