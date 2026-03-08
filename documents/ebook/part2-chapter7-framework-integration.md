@@ -34,16 +34,72 @@ Let's see how this pattern applies to each major framework.
 
 ## 7.2 Spring Boot Integration
 
-Spring Boot is the most widely used Java framework, and integrating OJP with it showcases the typical challenges and solutions. Spring Boot applications by default include HikariCP as their connection pool implementation. This tight integration makes Spring Boot applications fast and efficient out of the box, but it also means you need to explicitly remove HikariCP when using OJP.
+Spring Boot is the most widely used Java framework, and integrating OJP with it showcases the typical challenges and solutions. Spring Boot applications by default include HikariCP as their connection pool implementation. This tight integration makes Spring Boot applications fast and efficient out of the box, but it also means you need to prevent the local pool from interfering with OJP's server-side connection management.
 
-The integration starts with your Maven or Gradle build file. You'll add the OJP JDBC driver dependency and modify your Spring Boot JDBC starter to exclude HikariCP. Maven makes this straightforward with the exclusions mechanism:
+OJP ships a dedicated Spring Boot Starter—`spring-boot-starter-ojp`—that removes all of this friction. Add a single dependency, set your OJP JDBC URL, and the starter handles everything else automatically.
+
+### Using the Spring Boot Starter (Recommended)
+
+The `spring-boot-starter-ojp` artifact provides zero-configuration Spring Boot integration for both Spring Boot 4.x (Java 17+) and Spring Boot 3.x. Replace `spring-boot-starter-jdbc` with the OJP starter:
+
+```xml
+<!-- Replace spring-boot-starter-jdbc with the OJP starter -->
+<dependency>
+    <groupId>org.openjproxy</groupId>
+    <artifactId>spring-boot-starter-ojp</artifactId>
+    <version>0.3.2-snapshot</version>
+</dependency>
+```
+
+With the starter on the classpath, a minimal `application.properties` is all you need:
+
+```properties
+# OJP connection URL — the only required setting
+spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://user@localhost/mydb
+spring.datasource.username=myuser
+spring.datasource.password=mypassword
+```
+
+The starter automatically detects the OJP URL and sets:
+- `spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver`
+- `spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource`
+
+Setting the datasource type to `SimpleDriverDataSource` is crucial. This tells Spring Boot to obtain single connections directly rather than attempting to pool them. Since OJP already provides pooling centrally on the proxy server, this configuration avoids double-pooling while maintaining Spring's transaction management and other datasource features.
+
+**[IMAGE PROMPT: Create a side-by-side code comparison showing application.properties transformation. Left side labeled "Before OJP (manual)": Shows three explicit settings for url, driver-class-name, and type. Right side labeled "With OJP Starter": Shows only the url property, with annotations showing the two settings automatically injected by the starter. Style: Clean code comparison with syntax highlighting and arrows pointing to the automatic values.]**
+
+You can also tune the OJP server-side connection pool directly from `application.properties`:
+
+```properties
+# OJP server-side connection pool settings (forwarded to the OJP server).
+# Always use ojp.connection.pool.* in application.properties; the starter
+# auto-prefixes these with the datasource name when ojp.datasource.name is set.
+ojp.connection.pool.maximum-pool-size=20
+ojp.connection.pool.minimum-idle=5
+ojp.connection.pool.connection-timeout=30000
+ojp.connection.pool.idle-timeout=600000
+ojp.connection.pool.max-lifetime=1800000
+
+# gRPC transport settings (increase for large LOB data)
+ojp.grpc.max-inbound-message-size=16777216
+```
+
+> **Tip — Named datasource:** To target a named pool configuration on the OJP server, embed the
+> datasource name in the JDBC URL:
+> `spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://...`
+
+The starter's `OjpSystemPropertiesBridge` bean propagates these `ojp.*` properties to JVM system properties before any DataSource bean is created, so the OJP driver's `DatasourcePropertiesLoader` picks them up with the highest precedence—overriding any `ojp.properties` file on the classpath.
+
+### Manual Configuration (Spring Boot 3.x / Java 11)
+
+If you cannot use the starter (for example, in Java 11 projects where the starter's Java 17 requirement cannot be met), the manual three-step approach still works. Add the JDBC driver dependency and exclude HikariCP explicitly:
 
 ```xml
 <!-- Add OJP JDBC Driver -->
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.3.2-snapshot</version>
 </dependency>
 
 <!-- Spring JDBC Starter WITHOUT HikariCP -->
@@ -59,14 +115,10 @@ The integration starts with your Maven or Gradle build file. You'll add the OJP 
 </dependency>
 ```
 
-With the dependencies configured, turn your attention to the application configuration. Spring Boot's `application.properties` or `application.yml` file controls datasource settings. You'll update three properties: the JDBC URL to point to OJP, the driver class name to use OJP's driver, and the datasource type to prevent pooling.
-
-**[IMAGE PROMPT: Create a side-by-side code comparison showing application.properties transformation. Left side labeled "Before OJP": Shows traditional config with `spring.datasource.url=jdbc:postgresql://localhost:5432/mydb` and default HikariCP settings. Right side labeled "With OJP": Shows `spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb`, `spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver`, and `spring.datasource.type=SimpleDriverDataSource`. Highlight the changes with arrows and annotations. Style: Clean code comparison with syntax highlighting and change indicators.]**
-
-Here's a complete configuration example:
+Then set all three datasource properties explicitly:
 
 ```properties
-# application.properties with OJP
+# application.properties — manual OJP configuration
 spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
 spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver
 spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource
@@ -74,19 +126,17 @@ spring.datasource.username=myuser
 spring.datasource.password=mypassword
 ```
 
-The URL format deserves attention. You insert `ojp[hostname:port]_` immediately after `jdbc:`, where hostname and port identify your OJP server. The remainder of the URL is your standard database-specific JDBC URL. Spring Boot parses this URL and connects to the OJP server, which then manages the real database connections.
-
-Setting the datasource type to `SimpleDriverDataSource` is crucial. This tells Spring Boot to obtain single connections directly rather than attempting to pool them. Since OJP already provides pooling, this configuration avoids double-pooling while maintaining Spring's transaction management and other datasource features.
+The URL format inserts `ojp[hostname:port]_` immediately after `jdbc:`, where hostname and port identify your OJP server. The remainder of the URL is your standard database-specific JDBC URL.
 
 ### Spring Boot with JPA and Hibernate
 
-Spring Boot applications often use Spring Data JPA with Hibernate for object-relational mapping. The good news is that OJP integrates seamlessly with this stack. Your JPA repositories, entity mappings, and `@Transactional` annotations all work exactly as before. Hibernate doesn't know or care that connections come from OJP—it just sees standard JDBC connections.
+Spring Boot applications often use Spring Data JPA with Hibernate for object-relational mapping. The good news is that OJP integrates seamlessly with this stack regardless of whether you use the starter or manual configuration. Your JPA repositories, entity mappings, and `@Transactional` annotations all work exactly as before. Hibernate doesn't know or care that connections come from OJP—it just sees standard JDBC connections.
 
 ```properties
-# Full configuration with JPA/Hibernate
+# Full configuration with JPA/Hibernate (using the starter)
 spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
-spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver
-spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource
+spring.datasource.username=myuser
+spring.datasource.password=mypassword
 
 spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.hibernate.ddl-auto=validate
@@ -467,10 +517,10 @@ graph TD
 
 Integrating OJP with modern Java frameworks is straightforward once you understand the core principle: disable local connection pooling and configure the OJP JDBC driver. Spring Boot, Quarkus, and Micronaut all support this integration, though each uses different configuration mechanisms.
 
-Spring Boot users exclude HikariCP and use SimpleDriverDataSource. Quarkus users enable unpooled JDBC mode. Micronaut users create a custom DataSource factory. All three approaches achieve the same goal: creating single connections that connect to OJP rather than maintaining local connection pools.
+Spring Boot users have the easiest path: add the `spring-boot-starter-ojp` dependency and set a single connection URL. The starter's auto-configuration automatically selects the correct driver and datasource type, and its `OjpSystemPropertiesBridge` forwards any `ojp.*` properties from `application.properties` to the driver without a separate `ojp.properties` file. For Java 11 projects that cannot use the starter, the manual path—exclude HikariCP, add the driver, set `SimpleDriverDataSource`—achieves the same result. Quarkus users enable unpooled JDBC mode. Micronaut users create a custom DataSource factory. All approaches achieve the same goal: creating single connections that connect to OJP rather than maintaining local connection pools.
 
 The beauty of this integration is that your application code doesn't change. Repositories, services, transactions, and ORM mappings all work exactly as before. OJP integration happens entirely at the configuration layer, making it low-risk and reversible if needed.
 
 Choose your framework based on your application requirements, not OJP compatibility—all three work excellently with OJP. Focus on properly disabling local pooling, configuring appropriate timeouts, and monitoring connection behavior to ensure your integration works correctly.
 
-**[IMAGE PROMPT: Create a summary diagram showing the three frameworks (Spring Boot, Quarkus, Micronaut logos) all connecting to a central OJP Server icon, which then connects to a database. Above each framework, show the key integration requirements in small text: "Exclude HikariCP + SimpleDriverDataSource", "Unpooled=true", "Custom DataSource Factory". Below the database, show benefits: "Centralized Pooling", "Coordinated Management", "Transparent to App Code". Style: Clean architectural summary with icons and clear relationships.]**
+**[IMAGE PROMPT: Create a summary diagram showing the three frameworks (Spring Boot, Quarkus, Micronaut logos) all connecting to a central OJP Server icon, which then connects to a database. Above Spring Boot show "spring-boot-starter-ojp (zero config)" with a green star. Above Quarkus show "Unpooled=true". Above Micronaut show "Custom DataSource Factory". Below the database, show benefits: "Centralized Pooling", "Coordinated Management", "Transparent to App Code". Style: Clean architectural summary with icons and clear relationships.]**

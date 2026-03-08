@@ -14,9 +14,9 @@ This comprehensive e-book provides complete documentation for Open-J-Proxy (OJP)
 
 **Last Updated Against Main Branch Commit:**
 ```
-Commit: 05c75a6333926bda9931d6172900e6905473b927
-Date: 2026-01-19 20:50:25 +0000
-Message: Merge pull request #284 from Open-J-Proxy/copilot/evaluate-abandoned-sessions
+Commit: 4ff5e1acd388b0d4c86f5a9fdcfcad82c7745ac6
+Date: 2026-03-07
+Message: feat: Spring Boot starter module for zero-config OJP autoconfiguration
 ```
 
 ## Table of Contents

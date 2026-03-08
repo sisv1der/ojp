@@ -541,15 +541,35 @@ graph TD
 
 **Spring Boot Example**:
 
+The easiest way to integrate OJP with Spring Boot is the `spring-boot-starter-ojp` (Java 17+, Spring Boot 3.x/4.x). Add the starter dependency (excluding HikariCP) and set only the URL:
+
+```xml
+<!-- With starter: driver and datasource type are set automatically -->
+<dependency>
+    <groupId>org.openjproxy</groupId>
+    <artifactId>spring-boot-starter-ojp</artifactId>
+    <version>0.3.2-snapshot</version>
+</dependency>
+```
+
+```properties
+# application.properties — starter handles everything else
+spring.datasource.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
+spring.datasource.username=myuser
+spring.datasource.password=mypassword
+```
+
+For Java 11 or manual configuration, set the datasource type explicitly:
+
 ```yaml
-# application.yml - Use SimpleDataSource (NO pooling)
+# application.yml - manual configuration (no starter)
 spring:
   datasource:
     url: jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
     username: myuser
     password: mypassword
-    # IMPORTANT: Use SimpleDataSource instead of HikariCP
-    type: org.openjproxy.jdbc.SimpleDataSource
+    # IMPORTANT: Use SimpleDriverDataSource instead of HikariCP
+    type: org.springframework.jdbc.datasource.SimpleDriverDataSource
 ```
 
 **Note**: For best results, remove HikariCP entirely from your Maven/Gradle dependencies when using OJP. This prevents any accidental pooling configuration and ensures clean integration with OJP's server-side pooling.
