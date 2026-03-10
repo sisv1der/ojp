@@ -11,13 +11,10 @@ import org.openjproxy.grpc.server.MultinodeXaCoordinator;
 import org.openjproxy.grpc.server.ServerConfiguration;
 import org.openjproxy.grpc.server.SessionManager;
 import org.openjproxy.grpc.server.SlowQuerySegregationManager;
-import org.openjproxy.grpc.server.UnpooledConnectionDetails;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.xa.XADataSourceFactory;
-import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
-import javax.sql.DataSource;
 import javax.sql.XADataSource;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,7 +29,7 @@ class HandleUnpooledXAConnectionActionTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void testExecuteCreatesSlowQuerySegregationManager() throws Exception {
+    void testExecuteCreatesSlowQuerySegregationManager() {
         // Arrange
         Map<String, SlowQuerySegregationManager> slowQueryManagers = new ConcurrentHashMap<>();
 
@@ -54,7 +51,8 @@ class HandleUnpooledXAConnectionActionTest {
                 new ClusterHealthTracker(),
                 sessionManager,
                 circuitBreakerRegistry,
-                serverConfiguration);
+                serverConfiguration,
+                null);
 
         ConnectionDetails connectionDetails = ConnectionDetails.newBuilder()
                 .setUrl("ojp:postgresql://localhost:5432/testdb")
