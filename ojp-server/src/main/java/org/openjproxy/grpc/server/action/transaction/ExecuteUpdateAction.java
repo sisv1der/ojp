@@ -13,7 +13,6 @@ import org.openjproxy.grpc.server.*;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
-import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
 import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
@@ -30,18 +29,16 @@ import java.util.Map;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
 
+@SuppressWarnings("java:S6548")
 @Slf4j
 public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
-
-    private final SqlStatementMetrics sqlStatementMetrics;
 
     private static final String UPDATE = "update";
 
     private static final ExecuteUpdateAction INSTANCE = new ExecuteUpdateAction();
 
-
     private ExecuteUpdateAction() {
-        this.sqlStatementMetrics = createSqlStatementMetrics();
+        // Private empty constructor
     }
 
     /**
@@ -69,6 +66,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
     /**
      * Internal method for executing updates without segregation logic.
      */
+    @SuppressWarnings("unchecked")
     private OpResult executeUpdateInternal(ActionContext actionContext, StatementRequest request) throws SQLException {
         int updated = 0;
         SessionInfo returnSessionInfo;
@@ -172,8 +170,8 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
      * This resolves SonarQube duplication issues.
      */
     private void executeWithResilience(ActionContext context, StatementRequest request,
-                                       StreamObserver<OpResult> responseObserver,
-                                       StatementExecution executionLogic) {
+            StreamObserver<OpResult> responseObserver,
+            StatementExecution executionLogic) {
 
         // Ensure session isn't null
         if (StringUtils.isBlank(request.getSession().getConnHash())) {
@@ -236,7 +234,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             String sql = request.getSql();
             if (!sql.isEmpty()) {
                 long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
-                sqlStatementMetrics.recordSqlExecution(
+                context.getSqlStatementMetrics().recordSqlExecution(
                         sql, executionTimeMs, manager.isSlowOperation(stmtHash));
             }
         }
@@ -271,21 +269,6 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             slowQuerySegregationManagers.put(connHash, manager);
         }
         return manager;
-    }
-
-    /**
-     * Creates SQL statement metrics using the registered OpenTelemetry instance.
-     * Falls back to no-op metrics when OpenTelemetry is unavailable.
-     */
-    private org.openjproxy.grpc.server.metrics.SqlStatementMetrics createSqlStatementMetrics() {
-        io.opentelemetry.api.OpenTelemetry openTelemetry = org.openjproxy.xa.pool.commons.metrics.OpenTelemetryHolder
-                .getInstance();
-        if (openTelemetry != null) {
-            log.info("OpenTelemetry instance available – enabling SQL statement metrics");
-            return new org.openjproxy.grpc.server.metrics.OpenTelemetrySqlStatementMetrics(openTelemetry);
-        }
-        log.info("OpenTelemetry not available – SQL statement metrics disabled (no-op)");
-        return org.openjproxy.grpc.server.metrics.NoOpSqlStatementMetrics.INSTANCE;
     }
 
     @FunctionalInterface

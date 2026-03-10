@@ -118,7 +118,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 clusterHealthTracker,
                 sessionManager,
                 circuitBreakerRegistry,
-                serverConfiguration);
+                serverConfiguration,
+                sqlStatementMetrics);
     }
 
     /**
