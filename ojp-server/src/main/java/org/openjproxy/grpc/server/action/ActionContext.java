@@ -8,6 +8,7 @@ import org.openjproxy.grpc.server.CircuitBreakerRegistry;
 import org.openjproxy.grpc.server.ServerConfiguration;
 import org.openjproxy.grpc.server.SlowQuerySegregationManager;
 import org.openjproxy.grpc.server.UnpooledConnectionDetails;
+import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
@@ -118,6 +119,12 @@ public class ActionContext {
      */
     private final ServerConfiguration serverConfiguration;
 
+
+    /**
+     * SQL statement metrics from the registered OpenTelemetry instance
+     */
+    private final SqlStatementMetrics sqlStatementMetrics;
+
     // ========== Constructors ==========
     
     public ActionContext(
@@ -132,7 +139,8 @@ public class ActionContext {
             ClusterHealthTracker clusterHealthTracker,
             SessionManager sessionManager,
             CircuitBreakerRegistry circuitBreakerRegistry,
-            ServerConfiguration serverConfiguration) {
+            ServerConfiguration serverConfiguration,
+            SqlStatementMetrics sqlStatementMetrics) {
         
         this.datasourceMap = datasourceMap;
         this.xaDataSourceMap = xaDataSourceMap;
@@ -146,6 +154,7 @@ public class ActionContext {
         this.sessionManager = sessionManager;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.serverConfiguration = serverConfiguration;
+        this.sqlStatementMetrics = sqlStatementMetrics;
     }
     
     // ========== Getters ==========
@@ -201,5 +210,9 @@ public class ActionContext {
     
     public ServerConfiguration getServerConfiguration() {
         return serverConfiguration;
+    }
+
+    public SqlStatementMetrics getSqlStatementMetrics() {
+        return sqlStatementMetrics;
     }
 }
