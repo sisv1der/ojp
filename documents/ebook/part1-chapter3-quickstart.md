@@ -69,7 +69,7 @@ For firewall configuration, port 1059 must be accessible to all application inst
 
 ## 3.2 Installation Options
 
-OJP Server can be deployed in three ways: Docker (fastest), Runnable JAR, or built from source.
+OJP Server can be deployed in three ways: Docker (fastest), Runnable JAR (from Maven Central), or built from source.
 
 ### Option 1: Docker Deployment (Batteries Included) ⭐ Recommended
 
@@ -148,38 +148,42 @@ Place your proprietary JDBC driver JARs in `/path/to/drivers` on your host machi
 Use terminal screenshots with highlighted commands
 Professional technical documentation style
 
-If Docker isn't available, use the standalone executable JAR.
+If Docker isn't available, use the standalone executable JAR. From version **0.4.0-beta** onwards, the OJP Server JAR is available on Maven Central — no build tools required.
 
 > **🚨 Important for Version 0.4.0-beta and Later:**  
-> JDBC drivers must be downloaded. See [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md) for details.
+> JDBC drivers must be downloaded separately. See [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md) for details.
 
-**Download or Build the JAR**:
+**Download the JAR from Maven Central**:
 
 ```bash
-# Option A: Download pre-built JAR (when available)
-# wget https://github.com/Open-J-Proxy/ojp/releases/download/v0.4.0-beta/ojp-server.jar
-# This is a placeholder OJP does not currently release ojp server jars. 
-
-# Option B: Build from source
-git clone https://github.com/Open-J-Proxy/ojp.git
-cd ojp
-mvn clean install -DskipTests
-
-# JAR location: ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+# Download the OJP Server JAR from Maven Central
+wget https://repo1.maven.org/maven2/org/openjproxy/ojp-server/0.4.0-beta/ojp-server-0.4.0-beta-shaded.jar
+chmod +x ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Download Database Drivers**:
 
 ```bash
-cd ojp-server
-bash download-drivers.sh
-# Downloads H2, PostgreSQL, MySQL, MariaDB drivers to ./ojp-libs
+# Create drivers directory and download open source drivers
+mkdir -p ojp-libs
+
+# PostgreSQL
+wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
+
+# MySQL (optional)
+wget -P ojp-libs https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar
+
+# MariaDB (optional)
+wget -P ojp-libs https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.2/mariadb-java-client-3.5.2.jar
+
+# H2 (optional)
+wget -P ojp-libs https://repo1.maven.org/maven2/com/h2database/h2/2.3.232/h2-2.3.232.jar
 ```
 
 **Start the Server**:
 
 ```bash
-java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **With Custom Configuration**:
@@ -189,14 +193,14 @@ java \
   -Dojp.server.port=9059 \
   -Dojp.prometheus.port=9090 \
   -Dojp.server.logLevel=DEBUG \
-  -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+  -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Run as Background Service**:
 
 ```bash
 # Start in background
-nohup java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar \
+nohup java -jar ojp-server-0.4.0-beta-shaded.jar \
   > ojp-server.log 2>&1 &
 
 # Check it's running
@@ -206,6 +210,8 @@ ps aux | grep ojp-server
 kill $(ps aux | grep 'ojp-server.*jar' | grep -v grep | awk '{print $2}')
 ```
 
+📖 See [Executable JAR Setup Guide](../runnable-jar/README.md) for full details including proprietary database drivers.
+
 ### Option 3: Building from Source
 
 **[IMAGE PROMPT 4]**: Create a development workflow diagram showing:
@@ -213,7 +219,7 @@ Git clone → Maven build → Run tests → Start server
 Include relevant logos (Git, Maven, Java)
 Developer-focused technical diagram style
 
-For developers who want to modify or contribute to OJP:
+For developers who want to modify or contribute to OJP. Full instructions are available in [Building OJP Server from Source](../runnable-jar/BUILDING_FROM_SOURCE.md).
 
 **Complete Build Process**:
 
