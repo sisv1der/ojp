@@ -153,19 +153,19 @@
                 </executions>
             </plugin>-->
             <!--Deploys to maven central-->
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.8.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <publishingServerId>central</publishingServerId>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+    <!--<plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.8.0</version>
+        <extensions>true</extensions>
+        <configuration>
+            <publishingServerId>central</publishingServerId>
+        </configuration>
+    </plugin>-->
+</plugins>
+</build>
 
-    <!-- Add SCM and project info for Maven Central requirements -->
+<!-- Add SCM and project info for Maven Central requirements -->
     <scm>
         <url>https://github.com/Open-J-Proxy/ojp</url>
         <connection>scm:git:https://github.com/Open-J-Proxy/ojp.git</connection>

@@ -206,7 +206,7 @@
                 </executions>
             </plugin>
             <!--Signs the JARs for deployments-->
-            <plugin>
+            <!--<plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-gpg-plugin</artifactId>
                 <version>3.1.0</version>
@@ -219,21 +219,21 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin>-->
             <!--Deploys to maven central-->
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.8.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <publishingServerId>central</publishingServerId>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+    <!--<plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.8.0</version>
+        <extensions>true</extensions>
+        <configuration>
+            <publishingServerId>central</publishingServerId>
+        </configuration>
+    </plugin>-->
+</plugins>
+</build>
 
-    <!-- Add SCM and project info for Maven Central requirements -->
+<!-- Add SCM and project info for Maven Central requirements -->
     <scm>
         <url>https://github.com/Open-J-Proxy/ojp</url>
         <connection>scm:git:https://github.com/Open-J-Proxy/ojp.git</connection>
@@ -253,10 +253,6 @@
         <developer>
             <id>rrobetti</id>
             <name>Rogerio Robetti</name>
-        </developer>
-        <developer>
-            <id>petruki</id>
-            <name>Roger Floriano</name>
         </developer>
     </developers>
 
