@@ -2,6 +2,9 @@
 
 The OJP Server supports comprehensive configuration through both JVM system properties and environment variables. This document covers all available configuration options including server settings, connection pools, slow query segregation, and client-side configuration.
 
+> **⚠️ Important JVM Property:**  
+> Always start the server with `-Duser.timezone=UTC`. The OJP Server handles date/time values from multiple databases and client timezones. Running the JVM in UTC ensures consistent and predictable temporal conversions. Omitting this setting can cause incorrect date/time handling when clients and databases use different timezones.
+
 ## Server Configuration
 
 The server supports configuration through both JVM system properties and environment variables. JVM system properties take precedence over environment variables when both are specified.
@@ -48,7 +51,8 @@ OJP Server uses Logback for logging with fully configurable options. All logging
 
 **Production logging setup:**
 ```bash
-java -Dojp.server.logLevel=INFO \
+java -Duser.timezone=UTC \
+     -Dojp.server.logLevel=INFO \
      -Dojp.server.log.file=/var/log/ojp/server.log \
      -Dojp.server.log.maxHistory=90 \
      -Dojp.server.log.totalSizeCap=10GB \
@@ -74,7 +78,8 @@ OJP Server supports property placeholders in JDBC URLs to enable server-side SSL
 **Configuration example:**
 ```bash
 # JVM properties
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.server.sslrootcert=/etc/ojp/certs/ca-cert.pem \
   -Dojp.server.sslcert=/etc/ojp/certs/client-cert.pem
 
@@ -119,7 +124,8 @@ Distributed tracing is **disabled by default**. When enabled, OJP emits OpenTele
 
 **Enable Zipkin tracing:**
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.endpoint=http://zipkin:9411/api/v2/spans \
   -Dojp.tracing.serviceName=my-ojp-server
@@ -127,7 +133,8 @@ java -jar ojp-server.jar \
 
 **Enable OTLP tracing (Jaeger / Grafana Tempo / OpenTelemetry Collector):**
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.exporter=otlp \
   -Dojp.tracing.endpoint=http://jaeger:4317 \
@@ -197,7 +204,8 @@ The SQL Enhancer provides query optimization using Apache Calcite with real data
 **Testing/Development setup (NOT FOR PRODUCTION):**
 ```bash
 # WARNING: For testing/development only
-java -Dojp.sql.enhancer.enabled=true \
+java -Duser.timezone=UTC \
+     -Dojp.sql.enhancer.enabled=true \
      -Dojp.sql.enhancer.schema.refresh.enabled=true \
      -Dojp.sql.enhancer.schema.refresh.interval.hours=12 \
      -Dojp.sql.enhancer.schema.load.timeout.seconds=30 \
@@ -284,7 +292,8 @@ For JDBC driver and client-side connection pool configuration, see:
 Set configuration using JVM system properties when starting the server:
 
 ```bash
-java -Dojp.server.port=8080 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=8080 \
      -Dojp.prometheus.port=9091 \
      -Dojp.telemetry.enabled=false \
      -Dojp.server.threadPoolSize=100 \
@@ -310,7 +319,7 @@ export OJP_SERVER_CIRCUITBREAKERTHRESHOLD=3
 export OJP_SERVER_SLOWQUERYSEGREGATION_ENABLED=true
 export OJP_SERVER_SLOWQUERYSEGREGATION_SLOWSLOTPERCENTAGE=25
 export OJP_SERVER_ALLOWEDIPS="192.168.1.0/24,10.0.0.1"
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 ### 3. Docker Environment Variables
@@ -429,7 +438,8 @@ ojp.server.slowQuerySegregation.fastSlotTimeout=60000
 ### Development Environment
 
 ```bash
-java -Dojp.server.port=1059 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=1059 \
      -Dojp.prometheus.port=9159 \
      -Dojp.server.logLevel=DEBUG \
      -Dojp.server.log.file=logs/ojp-dev.log \
@@ -441,7 +451,8 @@ java -Dojp.server.port=1059 \
 ### Production Environment
 
 ```bash
-java -Dojp.server.port=1059 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=1059 \
      -Dojp.prometheus.port=9159 \
      -Dojp.server.logLevel=INFO \
      -Dojp.server.log.file=/var/log/ojp/server.log \
@@ -460,7 +471,8 @@ java -Dojp.server.port=1059 \
 ### High-Throughput Environment
 
 ```bash
-java -Dojp.server.port=1059 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=1059 \
      -Dojp.server.threadPoolSize=500 \
      -Dojp.server.maxRequestSize=16777216 \
      -Dojp.server.connectionIdleTimeout=60000 \

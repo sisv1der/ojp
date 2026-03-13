@@ -191,7 +191,7 @@ The script handles everything automatically. It downloads drivers from Maven Cen
 bash download-drivers.sh /opt/ojp/drivers
 
 # Update server startup
-java -Dojp.libs.path=/opt/ojp/drivers -jar ojp-server.jar
+java -Duser.timezone=UTC -Dojp.libs.path=/opt/ojp/drivers -jar ojp-server.jar
 ```
 
 ### Driver Verification
@@ -321,7 +321,7 @@ ls -lh ojp-libs/ojdbc11.jar
 **Runnable JAR with Oracle**:
 
 ```bash
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server-0.4.0-beta-shaded.jar
 # Server will automatically load ojdbc11.jar from ./ojp-libs
 ```
 
@@ -631,7 +631,7 @@ java -Dojp.libs.path=/opt/ojp/drivers \
 ```bash
 # Alternative: use environment variable
 export OJP_LIBS_PATH=/opt/ojp/drivers
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 **Docker Volume Mount**:

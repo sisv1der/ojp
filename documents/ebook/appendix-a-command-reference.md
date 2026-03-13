@@ -18,7 +18,7 @@ The most common way to start the OJP server is using the standalone JAR download
 ```bash
 wget https://repo1.maven.org/maven2/org/openjproxy/ojp-server/0.4.0-beta/ojp-server-0.4.0-beta-shaded.jar
 chmod +x ojp-server-0.4.0-beta-shaded.jar
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server-0.3.0.jar
 ```
 
 For development with custom configuration, you can specify properties:

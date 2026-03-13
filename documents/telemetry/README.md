@@ -67,7 +67,8 @@ The telemetry system can be configured through JVM system properties or environm
 
 **Enable Zipkin tracing (JVM properties):**
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.endpoint=http://zipkin:9411/api/v2/spans \
   -Dojp.tracing.serviceName=my-ojp-server
@@ -75,7 +76,8 @@ java -jar ojp-server.jar \
 
 **Enable OTLP tracing (e.g. Jaeger, Grafana Tempo):**
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.exporter=otlp \
   -Dojp.tracing.endpoint=http://jaeger:4317 \
@@ -89,7 +91,7 @@ export OJP_PROMETHEUS_PORT=9159
 export OJP_PROMETHEUS_ALLOWED_IPS=127.0.0.1,10.0.0.0/8
 export OJP_TRACING_ENABLED=true
 export OJP_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 ## SQL Execution Metrics
@@ -193,7 +195,8 @@ docker run -d -p 9411:9411 openzipkin/zipkin
 
 Start OJP with tracing enabled:
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.endpoint=http://localhost:9411/api/v2/spans
 ```
@@ -212,7 +215,8 @@ docker run -d \
 
 Start OJP with OTLP tracing enabled:
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.exporter=otlp \
   -Dojp.tracing.endpoint=http://localhost:4317

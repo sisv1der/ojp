@@ -85,7 +85,7 @@ The configuration hierarchy works simply: JVM properties take precedence over en
 Here's how you configure OJP's telemetry using JVM properties. This approach works well when you're starting OJP directly from the command line or when you want to override environment-based configuration in specific scenarios:
 
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC -jar ojp-server.jar \
   -Dojp.telemetry.enabled=true \
   -Dojp.prometheus.port=9159 \
   -Dojp.prometheus.allowedIps=127.0.0.1,10.0.0.0/8
@@ -99,7 +99,7 @@ For containerized deployments, environment variables provide a cleaner configura
 export OJP_TELEMETRY_ENABLED=true
 export OJP_PROMETHEUS_PORT=9159
 export OJP_PROMETHEUS_ALLOWED_IPS=127.0.0.1,10.0.0.0/8
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 In Kubernetes environments, you might configure these through ConfigMaps or directly in your deployment manifests. The ojp-helm chart provides convenient parameters for telemetry configuration, making it easy to enable monitoring in cloud-native deployments.
@@ -153,7 +153,7 @@ docker run -d -p 9411:9411 openzipkin/zipkin
 Start OJP with tracing enabled:
 
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.endpoint=http://localhost:9411/api/v2/spans \
   -Dojp.tracing.serviceName=my-ojp-server
@@ -175,7 +175,7 @@ docker run -d \
 Start OJP with OTLP tracing enabled:
 
 ```bash
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC -jar ojp-server.jar \
   -Dojp.tracing.enabled=true \
   -Dojp.tracing.exporter=otlp \
   -Dojp.tracing.endpoint=http://localhost:4317 \
@@ -193,7 +193,7 @@ export OJP_TRACING_ENABLED=true
 export OJP_TRACING_EXPORTER=zipkin
 export OJP_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
 export OJP_TRACING_SERVICENAME=ojp-server
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 ### Docker Compose Example (OJP + Zipkin)

@@ -83,7 +83,7 @@ The external libraries directory is configurable:
 export OJP_DRIVERS_PATH=/opt/ojp/external-libs
 
 # JVM system property
-java -Dojp.drivers.path=/opt/ojp/external-libs -jar ojp-server.jar
+java -Duser.timezone=UTC -Dojp.drivers.path=/opt/ojp/external-libs -jar ojp-server.jar
 ```
 
 **Default**: `./ojp-libs`
@@ -127,7 +127,7 @@ cp ~/Downloads/mssql-jdbc-12.4.2.jar ./ojp-libs/
 
 **Step 3**: Run OJP Server:
 ```bash
-java -jar ojp-server-with-dependencies.jar
+java -Duser.timezone=UTC -jar ojp-server-with-dependencies.jar
 # Automatically loads drivers from ./ojp-libs
 ```
 
