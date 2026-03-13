@@ -9,10 +9,14 @@ This document outlines the planned releases and key milestones for the Open J Pr
 **Theme: Service Provider Interfaces & Query Enhancement**
 
 - Full implementation of OJP Service Provider Interfaces (SPIs), enabling custom connection pool providers and extensibility hooks
-- Experimental integration with [Apache Calcite](https://calcite.apache.org/) for SQL query optimization (disabled by default)
+- Spring Boot integration via spring-boot-starter-ojp with automatic datasource configuration
+- Official TestContainers integration module for reproducible integration testing
+- Mutual TLS (mTLS) support between the JDBC driver and OJP server
 - Expanded observability: additional OpenTelemetry metrics and distributed tracing spans
 - Improved developer experience: refined configuration, better error messages, and expanded documentation
 - Enhanced test coverage and integration testing infrastructure
+- Experimental integration with [Apache Calcite](https://calcite.apache.org/) for SQL query optimization (disabled by default)
+
 
 ---
 
