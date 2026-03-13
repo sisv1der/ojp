@@ -172,13 +172,14 @@ bash download-drivers.sh
 **Start the Server**:
 
 ```bash
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **With Custom Configuration**:
 
 ```bash
 java \
+  -Duser.timezone=UTC \
   -Dojp.server.port=9059 \
   -Dojp.prometheus.port=9090 \
   -Dojp.server.logLevel=DEBUG \
@@ -189,7 +190,7 @@ java \
 
 ```bash
 # Start in background
-nohup java -jar ojp-server-0.4.0-beta-shaded.jar \
+nohup java -Duser.timezone=UTC -jar ojp-server-0.4.0-beta-shaded.jar \
   > ojp-server.log 2>&1 &
 
 # Check it's running
@@ -606,7 +607,7 @@ kill <PID>
 docker run -e OJP_SERVER_PORT=9059 -e OJP_PROMETHEUS_PORT=9090 ...
 
 # JAR
-java -Dojp.server.port=9059 -Dojp.prometheus.port=9090 -jar ojp-server.jar
+java -Duser.timezone=UTC -Dojp.server.port=9059 -Dojp.prometheus.port=9090 -jar ojp-server.jar
 
 # Then update your JDBC URL
 jdbc:ojp[localhost:9059]_postgresql://...

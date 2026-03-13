@@ -71,8 +71,7 @@ chmod +x ojp-server-0.4.0-beta-shaded.jar
 # Download open source JDBC drivers
 curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
 bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
-
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 📖 See [Executable JAR Setup Guide](documents/runnable-jar/README.md) for details.
