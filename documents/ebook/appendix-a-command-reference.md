@@ -240,7 +240,7 @@ Maven dependency:
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -278,7 +278,7 @@ Maven dependency (no starter):
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>

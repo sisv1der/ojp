@@ -437,7 +437,7 @@ classDiagram
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -1096,7 +1096,7 @@ The fastest way to get started is using the pre-built Docker image that includes
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  rrobetti/ojp:0.3.2-beta
+  rrobetti/ojp:0.4.0-beta
 ```
 
 This command accomplishes several things in one step. It downloads the OJP Server image (approximately 50MB), which includes drivers for H2, PostgreSQL, MySQL, and MariaDB out of the box. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
@@ -1149,7 +1149,7 @@ Professional code documentation style
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -1157,7 +1157,7 @@ Professional code documentation style
 
 ```groovy
 dependencies {
-    implementation 'org.openjproxy:ojp-jdbc-driver:0.3.2-beta'
+    implementation 'org.openjproxy:ojp-jdbc-driver:0.4.0-beta'
 }
 ```
 
@@ -1165,7 +1165,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("org.openjproxy:ojp-jdbc-driver:0.3.2-beta")
+    implementation("org.openjproxy:ojp-jdbc-driver:0.4.0-beta")
 }
 ```
 
@@ -1946,7 +1946,7 @@ version: '3.8'
 
 services:
   ojp-server:
-    image: rrobetti/ojp:0.3.2-beta
+    image: rrobetti/ojp:0.4.0-beta
     ports:
       - "1059:1059"
       - "9159:9159"

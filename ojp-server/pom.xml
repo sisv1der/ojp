@@ -5,12 +5,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>ojp-server</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 
     <parent>
         <groupId>org.openjproxy</groupId>
         <artifactId>ojp-parent</artifactId>
-        <version>0.3.2-snapshot</version>
+        <version>0.4.0-beta</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -38,26 +38,26 @@
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-grpc-commons</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
         </dependency>
 
         <!-- OJP Datasource API and default HikariCP provider -->
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-datasource-api</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
         </dependency>
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-datasource-hikari</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
         </dependency>
         
         <!-- OJP XA Pool Commons (Phase 1 integration) -->
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-xa-pool-commons</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
         </dependency>
 
         <dependency>
@@ -294,7 +294,7 @@
                         <image>eclipse-temurin:22-jre</image>
                     </from>
                     <to>
-                        <image>rrobetti/ojp:0.3.2-snapshot</image>
+                        <image>rrobetti/ojp:0.4.0-beta</image>
                     </to>
                     <container>
                         <mainClass>org.openjproxy.grpc.server.GrpcServer</mainClass>

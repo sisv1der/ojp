@@ -58,7 +58,7 @@ cd ..
 docker run --rm -d \
   --network host \
   -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
-  rrobetti/ojp:0.3.2-beta
+  rrobetti/ojp:0.4.0-beta
 ```
 
 **Alternative: Runnable JAR (No Docker)**
@@ -67,7 +67,7 @@ docker run --rm -d \
 # Download OJP Server JAR and open source drivers
 cd ojp-server
 bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
-java -jar ojp-server-0.3.2-snapshot-shaded.jar
+java -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 📖 See [Executable JAR Setup Guide](documents/runnable-jar/README.md) for details.
@@ -77,7 +77,7 @@ java -jar ojp-server-0.3.2-snapshot-shaded.jar
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 

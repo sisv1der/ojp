@@ -6,12 +6,12 @@
 
     <name>OJP JDBC Driver</name>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 
     <parent>
         <groupId>org.openjproxy</groupId>
         <artifactId>ojp-parent</artifactId>
-        <version>0.3.2-snapshot</version>
+        <version>0.4.0-beta</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -25,7 +25,7 @@
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-grpc-commons</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
         </dependency>
 
 
@@ -133,7 +133,7 @@
         <dependency>
             <groupId>org.openjproxy</groupId>
             <artifactId>ojp-testcontainers</artifactId>
-            <version>0.3.2-snapshot</version>
+            <version>0.4.0-beta</version>
             <scope>test</scope>
         </dependency>
 
@@ -206,7 +206,7 @@
                 </executions>
             </plugin>
             <!--Signs the JARs for deployments-->
-            <!--<plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-gpg-plugin</artifactId>
                 <version>3.1.0</version>
@@ -219,7 +219,7 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>-->
+            </plugin>
             <!--Deploys to maven central-->
             <plugin>
                 <groupId>org.sonatype.central</groupId>

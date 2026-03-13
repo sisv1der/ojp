@@ -20,7 +20,7 @@ Replace any existing `spring-boot-starter-jdbc` in your `pom.xml` with the OJP s
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -86,7 +86,7 @@ If you cannot use the starter (e.g., Java 11 projects), follow these steps:
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -140,7 +140,7 @@ As of OJP version 0.3.2, the logging implementation has been updated to be compa
 
 For detailed information about configuring OJP Server logging (log levels, file locations, rotation policies), see the [OJP Server Configuration Guide](../../configuration/ojp-server-configuration.md#logging-settings).
 
-**For older versions (0.3.2-beta and earlier):**
+**For older versions (0.4.0-beta and earlier):**
 
 If you're using an older version of OJP, you may encounter a conflict because the OJP JDBC driver bundled SLF4J Simple, which conflicts with Spring Boot's default Logback implementation.
 

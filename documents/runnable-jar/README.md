@@ -57,7 +57,7 @@ After successful build, the runnable JAR will be located at:
 ojp-server/target/ojp-server-<version>-shaded.jar
 ```
 
-For example: `ojp-server/target/ojp-server-0.3.2-beta-shaded.jar`
+For example: `ojp-server/target/ojp-server-0.4.0-beta-shaded.jar`
 
 The runnable JAR size is approximately **20MB** (without drivers). Open-source JDBC drivers are downloaded separately to reduce JAR size and provide flexibility.
 
@@ -141,10 +141,10 @@ The server automatically loads drivers from the `./ojp-libs` directory:
 
 ```bash
 # Default location (./ojp-libs)
-java -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 
 # Or specify custom path
-java -Dojp.libs.path=./ojp-libs -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -Dojp.libs.path=./ojp-libs -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 The server will automatically:
@@ -168,7 +168,7 @@ cd ojp-server
 bash download-drivers.sh
 
 # Then run the server
-java -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Basic Execution with Custom Driver Location
@@ -176,7 +176,7 @@ java -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
 Run the OJP Server with external libraries in a custom location:
 
 ```bash
-java -Dojp.libs.path=/opt/drivers -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -Dojp.libs.path=/opt/drivers -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Expected Output
@@ -200,7 +200,7 @@ You can customize the server configuration using system properties:
 java -Dojp.server.port=8080 \
      -Dojp.prometheus.port=9091 \
      -Dorg.slf4j.simpleLogger.defaultLogLevel=debug \
-     -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+     -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Running as Background Process
@@ -208,7 +208,7 @@ java -Dojp.server.port=8080 \
 To run the server in the background:
 
 ```bash
-nohup java -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar > ojp-server.log 2>&1 &
+nohup java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar > ojp-server.log 2>&1 &
 ```
 
 To stop the background process:
@@ -244,7 +244,7 @@ java -Dojp.server.port=8080 \
      -Dojp.libs.path=./ojp-libs \
      -Dojp.thread.pool.size=100 \
      -Dojp.max.request.size=8388608 \
-     -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+     -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ## Verification
@@ -320,7 +320,7 @@ mvn clean install -DskipTests
 
 **Solution**: Increase JVM heap size:
 ```bash
-java -Xmx2g -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -Xmx2g -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Problem**: Missing database drivers
@@ -349,7 +349,7 @@ bash download-drivers.sh
 cp ~/Downloads/ojdbc11.jar ojp-libs/
 
 # Run server
-java -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 See the [Downloading Open Source JDBC Drivers](#downloading-open-source-jdbc-drivers) and [Adding Proprietary Database Drivers](#adding-proprietary-database-drivers-optional) sections above for detailed instructions.
@@ -363,7 +363,7 @@ java -Xmx4g \
      -XX:+UseG1GC \
      -XX:MaxGCPauseMillis=100 \
      -Dojp.thread.pool.size=500 \
-     -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+     -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ## Logging Configuration
@@ -373,11 +373,11 @@ The server uses SLF4J Simple Logger. Configure logging levels:
 ```bash
 # Set log level to DEBUG
 java -Dorg.slf4j.simpleLogger.defaultLogLevel=debug \
-     -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+     -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 
 # Disable most logging (ERROR only)
 java -Dorg.slf4j.simpleLogger.defaultLogLevel=error \
-     -jar ojp-server/target/ojp-server-0.3.2-beta-shaded.jar
+     -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ## Next Steps

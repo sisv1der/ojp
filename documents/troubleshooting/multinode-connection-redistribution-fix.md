@@ -135,6 +135,6 @@ The Multinode Integration Test workflow should now:
 
 ## Version Information
 
-- **Fixed in**: 0.3.2-beta
+- **Fixed in**: 0.4.0-beta
 - **Branch**: copilot/fix-postgresql-connection-issue  
 - **Date**: 2025-11-24

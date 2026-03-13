@@ -89,7 +89,7 @@ The fastest way to get started is using the pre-built Docker image that includes
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  rrobetti/ojp:0.3.2-beta
+  rrobetti/ojp:0.4.0-beta
 ```
 
 This command accomplishes several things in one step. It downloads the OJP Server image (approximately 50MB), which includes drivers for H2, PostgreSQL, MySQL, and MariaDB out of the box. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
@@ -122,7 +122,7 @@ docker run --rm -d \
   -e OJP_SERVER_PORT=9059 \
   -e OJP_PROMETHEUS_PORT=9090 \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
-  rrobetti/ojp:0.3.2-beta
+  rrobetti/ojp:0.4.0-beta
 ```
 
 **For Proprietary Databases** (Oracle, SQL Server, DB2):
@@ -133,7 +133,7 @@ docker run --rm -d \
   --name ojp-server \
   --network host \
   -v /path/to/drivers:/ojp-libs \
-  rrobetti/ojp:0.3.2-beta
+  rrobetti/ojp:0.4.0-beta
 ```
 
 Place your proprietary JDBC driver JARs in `/path/to/drivers` on your host machine.
@@ -157,7 +157,7 @@ If Docker isn't available, use the standalone executable JAR.
 
 ```bash
 # Option A: Download pre-built JAR (when available)
-# wget https://github.com/Open-J-Proxy/ojp/releases/download/v0.3.2-beta/ojp-server.jar
+# wget https://github.com/Open-J-Proxy/ojp/releases/download/v0.4.0-beta/ojp-server.jar
 # This is a placeholder OJP does not currently release ojp server jars. 
 
 # Option B: Build from source
@@ -165,7 +165,7 @@ git clone https://github.com/Open-J-Proxy/ojp.git
 cd ojp
 mvn clean install -DskipTests
 
-# JAR location: ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar
+# JAR location: ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Download Database Drivers**:
@@ -179,7 +179,7 @@ bash download-drivers.sh
 **Start the Server**:
 
 ```bash
-java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar
+java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **With Custom Configuration**:
@@ -189,14 +189,14 @@ java \
   -Dojp.server.port=9059 \
   -Dojp.prometheus.port=9090 \
   -Dojp.server.logLevel=DEBUG \
-  -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar
+  -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Run as Background Service**:
 
 ```bash
 # Start in background
-nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar \
+nohup java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar \
   > ojp-server.log 2>&1 &
 
 # Check it's running
@@ -272,7 +272,7 @@ Professional code documentation style
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-jdbc-driver</artifactId>
-    <version>0.3.2-beta</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -280,7 +280,7 @@ Professional code documentation style
 
 ```groovy
 dependencies {
-    implementation 'org.openjproxy:ojp-jdbc-driver:0.3.2-beta'
+    implementation 'org.openjproxy:ojp-jdbc-driver:0.4.0-beta'
 }
 ```
 
@@ -288,7 +288,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("org.openjproxy:ojp-jdbc-driver:0.3.2-beta")
+    implementation("org.openjproxy:ojp-jdbc-driver:0.4.0-beta")
 }
 ```
 
@@ -548,7 +548,7 @@ The easiest way to integrate OJP with Spring Boot is the `spring-boot-starter-oj
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
-    <version>0.3.2-snapshot</version>
+    <version>0.4.0-beta</version>
 </dependency>
 ```
 
@@ -680,7 +680,7 @@ docker network create ojp-network
 docker run --network ojp-network --name postgres postgres:15
 
 # Start OJP Server
-docker run --network ojp-network --name ojp-server rrobetti/ojp:0.3.2-beta
+docker run --network ojp-network --name ojp-server rrobetti/ojp:0.4.0-beta
 
 # Application connects to: ojp-server:1059
 # OJP connects to: postgres:5432

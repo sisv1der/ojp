@@ -109,11 +109,11 @@ Distributed tracing is **disabled by default**. When enabled, OJP emits OpenTele
 
 | Property                    | Environment Variable        | Type    | Default                                   | Description                                                   | Since          |
 |-----------------------------|-----------------------------|---------|-------------------------------------------|---------------------------------------------------------------|----------------|
-| `ojp.tracing.enabled`       | `OJP_TRACING_ENABLED`       | boolean | false                                     | Enable/disable distributed tracing (disabled by default)      | 0.3.2-snapshot |
-| `ojp.tracing.exporter`      | `OJP_TRACING_EXPORTER`      | string  | zipkin                                    | Trace exporter type: `zipkin` or `otlp`                      | 0.3.2-snapshot |
-| `ojp.tracing.endpoint`      | `OJP_TRACING_ENDPOINT`      | string  | http://localhost:9411/api/v2/spans        | Exporter endpoint URL                                         | 0.3.2-snapshot |
-| `ojp.tracing.serviceName`   | `OJP_TRACING_SERVICENAME`   | string  | ojp-server                                | Service name attached to all spans                           | 0.3.2-snapshot |
-| `ojp.tracing.sampleRate`    | `OJP_TRACING_SAMPLERATE`    | double  | 1.0                                       | Fraction of requests to sample (0.0–1.0)                     | 0.3.2-snapshot |
+| `ojp.tracing.enabled`       | `OJP_TRACING_ENABLED`       | boolean | false                                     | Enable/disable distributed tracing (disabled by default)      | 0.4.0-beta |
+| `ojp.tracing.exporter`      | `OJP_TRACING_EXPORTER`      | string  | zipkin                                    | Trace exporter type: `zipkin` or `otlp`                      | 0.4.0-beta |
+| `ojp.tracing.endpoint`      | `OJP_TRACING_ENDPOINT`      | string  | http://localhost:9411/api/v2/spans        | Exporter endpoint URL                                         | 0.4.0-beta |
+| `ojp.tracing.serviceName`   | `OJP_TRACING_SERVICENAME`   | string  | ojp-server                                | Service name attached to all spans                           | 0.4.0-beta |
+| `ojp.tracing.sampleRate`    | `OJP_TRACING_SAMPLERATE`    | double  | 1.0                                       | Fraction of requests to sample (0.0–1.0)                     | 0.4.0-beta |
 
 #### Tracing Configuration Examples
 
