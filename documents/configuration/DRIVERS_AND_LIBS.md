@@ -131,10 +131,10 @@ cp ~/Downloads/ons.jar ./ojp-libs/
 
 ```bash
 # Default location (./ojp-libs)
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server-0.4.0-beta-shaded.jar
 
 # Custom location
-java -Dojp.libs.path=/path/to/ojp-libs -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -Dojp.libs.path=/path/to/ojp-libs -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Option 3: Docker with Custom Drivers (Volume Mount)
@@ -195,7 +195,7 @@ You can configure the external libraries directory using environment variables:
 export OJP_LIBS_PATH=/custom/path/to/ojp-libs
 
 # Or using JVM system property (dots and lowercase)
-java -Dojp.libs.path=/custom/path/to/ojp-libs -jar ojp-server.jar
+java -Duser.timezone=UTC -Dojp.libs.path=/custom/path/to/ojp-libs -jar ojp-server.jar
 ```
 
 ### Default Paths

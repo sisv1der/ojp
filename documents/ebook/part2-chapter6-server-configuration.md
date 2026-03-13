@@ -44,7 +44,8 @@ Here's how you configure these core settings:
 
 ```bash
 # Using JVM system properties
-java -Dojp.server.port=9059 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=9059 \
      -Dojp.prometheus.port=9091 \
      -Dojp.server.threadPoolSize=100 \
      -Dojp.server.maxRequestSize=8388608 \
@@ -60,7 +61,7 @@ export OJP_PROMETHEUS_PORT=9091
 export OJP_SERVER_THREADPOOLSIZE=100
 export OJP_SERVER_MAXREQUESTSIZE=8388608
 export OJP_SERVER_CONNECTIONIDLETIMEOUT=60000
-java -jar ojp-server.jar
+java -Duser.timezone=UTC -jar ojp-server.jar
 ```
 
 ```mermaid
@@ -98,7 +99,8 @@ A common pattern is to allow gRPC connections from your application network whil
 ```bash
 # Restrict gRPC to internal application network
 # Allow Prometheus from monitoring subnet only
-java -Dojp.server.allowedIps="10.0.0.0/8,172.16.0.0/12" \
+java -Duser.timezone=UTC \
+     -Dojp.server.allowedIps="10.0.0.0/8,172.16.0.0/12" \
      -Dojp.prometheus.allowedIps="192.168.100.0/24" \
      -jar ojp-server.jar
 ```

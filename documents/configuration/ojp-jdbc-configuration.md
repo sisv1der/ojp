@@ -662,7 +662,8 @@ analytics.ojp.datasource.url=jdbc:ojp[localhost:1059(analytics)]_oracle:thin:@db
 
 ```bash
 # Using JVM properties
-java -jar ojp-server.jar \
+java -Duser.timezone=UTC \
+  -jar ojp-server.jar \
   -Dojp.server.sslrootcert=/etc/ojp/certs/ca-cert.pem \
   -Dojp.server.mysql.truststore=file:///etc/ojp/certs/truststore.jks \
   -Dojp.server.oracle.wallet.location=/etc/ojp/wallet

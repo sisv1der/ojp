@@ -14,7 +14,7 @@ The most common way to start the OJP server is using the standalone JAR:
 > **⚠️ For v0.4.0-beta and later:** Download drivers first using `bash ojp-server/download-drivers.sh`
 
 ```bash
-java -jar ojp-server-0.3.0.jar
+java -Duser.timezone=UTC -jar ojp-server-0.3.0.jar
 ```
 
 For development with custom configuration, you can specify properties:

@@ -29,6 +29,7 @@ This starts the OJP Server with:
 - **Port 1059**: gRPC server for database connections
 - **Port 9159**: Prometheus metrics endpoint
 - **Included drivers**: H2, PostgreSQL, MySQL, MariaDB
+- **UTC timezone**: The image is built with `-Duser.timezone=UTC` for consistent date/time handling
 
 ---
 
@@ -58,7 +59,7 @@ Configure heap size and other memory settings:
 docker run -d \
   --name ojp-server \
   -p 1059:1059 \
-  -e JAVA_TOOL_OPTIONS="-Xmx2g -Xms1g" \
+  -e JAVA_TOOL_OPTIONS="-Xmx2g -Xms1g -Duser.timezone=UTC" \
   rrobetti/ojp:0.4.0-beta
 ```
 
@@ -103,6 +104,9 @@ docker run -d \
 | `-Duser.language` | Default language | `-Duser.language=en` |
 | `-Duser.country` | Default country | `-Duser.country=US` |
 
+> **⚠️ Keep `-Duser.timezone=UTC`:**  
+> The OJP Docker image is built with `-Duser.timezone=UTC` baked in. Always include this property when setting `JAVA_TOOL_OPTIONS` to ensure consistent date/time handling across all database types and client timezones.
+
 #### Debugging and Diagnostics
 
 | Parameter | Description | Example |
@@ -142,7 +146,7 @@ You can use both approaches together:
 docker run -d \
   --name ojp-server \
   -p 1059:1059 \
-  -e JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g -Dfile.encoding=UTF-8" \
+  -e JAVA_TOOL_OPTIONS="-Xmx4g -Xms2g -Dfile.encoding=UTF-8 -Duser.timezone=UTC" \
   -e OJP_SERVER_PORT=1059 \
   -e OJP_SERVER_LOGLEVEL=INFO \
   rrobetti/ojp:0.4.0-beta
@@ -288,7 +292,7 @@ docker run -d \
   --name ojp-debug \
   -p 1059:1059 \
   -p 5005:5005 \
-  -e JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" \
+  -e JAVA_TOOL_OPTIONS="-Duser.timezone=UTC -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
   rrobetti/ojp:0.4.0-beta
 ```
@@ -303,7 +307,7 @@ For applications requiring low latency:
 docker run -d \
   --name ojp-lowlatency \
   -p 1059:1059 \
-  -e JAVA_TOOL_OPTIONS="-Xmx8g -Xms8g -XX:+UseZGC -XX:+UnlockExperimentalVMOptions -Dfile.encoding=UTF-8" \
+  -e JAVA_TOOL_OPTIONS="-Xmx8g -Xms8g -XX:+UseZGC -XX:+UnlockExperimentalVMOptions -Dfile.encoding=UTF-8 -Duser.timezone=UTC" \
   -e OJP_SERVER_THREADPOOLSIZE=400 \
   rrobetti/ojp:0.4.0-beta
 ```

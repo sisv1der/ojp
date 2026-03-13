@@ -67,7 +67,7 @@ docker run --rm -d \
 # Download OJP Server JAR and open source drivers
 cd ojp-server
 bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
-java -jar ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 📖 See [Executable JAR Setup Guide](documents/runnable-jar/README.md) for details.

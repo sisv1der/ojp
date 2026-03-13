@@ -141,10 +141,10 @@ The server automatically loads drivers from the `./ojp-libs` directory:
 
 ```bash
 # Default location (./ojp-libs)
-java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 
 # Or specify custom path
-java -Dojp.libs.path=./ojp-libs -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -Dojp.libs.path=./ojp-libs -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 The server will automatically:
@@ -168,7 +168,7 @@ cd ojp-server
 bash download-drivers.sh
 
 # Then run the server
-java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Basic Execution with Custom Driver Location
@@ -176,7 +176,7 @@ java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 Run the OJP Server with external libraries in a custom location:
 
 ```bash
-java -Dojp.libs.path=/opt/drivers -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -Dojp.libs.path=/opt/drivers -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 ### Expected Output
@@ -197,7 +197,8 @@ When the server starts successfully, you should see output similar to:
 You can customize the server configuration using system properties:
 
 ```bash
-java -Dojp.server.port=8080 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=8080 \
      -Dojp.prometheus.port=9091 \
      -Dorg.slf4j.simpleLogger.defaultLogLevel=debug \
      -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
@@ -208,7 +209,7 @@ java -Dojp.server.port=8080 \
 To run the server in the background:
 
 ```bash
-nohup java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar > ojp-server.log 2>&1 &
+nohup java -Duser.timezone=UTC -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar > ojp-server.log 2>&1 &
 ```
 
 To stop the background process:
@@ -236,10 +237,14 @@ The OJP Server can be configured using system properties. Common options include
 | `ojp.circuit.breaker.timeout` | `60000` | Circuit breaker timeout in milliseconds |
 | `ojp.circuit.breaker.threshold` | `3` | Circuit breaker failure threshold |
 
+> **⚠️ Important JVM Property:**  
+> Always start the server with `-Duser.timezone=UTC`. The OJP Server handles date/time values from multiple databases and client timezones. Running the JVM in UTC ensures consistent and predictable behavior for all temporal operations. Omitting this setting can cause incorrect date/time conversions, especially when clients and databases are in different timezones.
+
 ### Example with Multiple Properties
 
 ```bash
-java -Dojp.server.port=8080 \
+java -Duser.timezone=UTC \
+     -Dojp.server.port=8080 \
      -Dojp.prometheus.port=9091 \
      -Dojp.libs.path=./ojp-libs \
      -Dojp.thread.pool.size=100 \
@@ -320,7 +325,7 @@ mvn clean install -DskipTests
 
 **Solution**: Increase JVM heap size:
 ```bash
-java -Xmx2g -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -Xmx2g -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 **Problem**: Missing database drivers
@@ -349,7 +354,7 @@ bash download-drivers.sh
 cp ~/Downloads/ojdbc11.jar ojp-libs/
 
 # Run server
-java -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
+java -Duser.timezone=UTC -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
 See the [Downloading Open Source JDBC Drivers](#downloading-open-source-jdbc-drivers) and [Adding Proprietary Database Drivers](#adding-proprietary-database-drivers-optional) sections above for detailed instructions.
@@ -359,7 +364,8 @@ See the [Downloading Open Source JDBC Drivers](#downloading-open-source-jdbc-dri
 For production environments, consider these JVM options:
 
 ```bash
-java -Xmx4g \
+java -Duser.timezone=UTC \
+     -Xmx4g \
      -XX:+UseG1GC \
      -XX:MaxGCPauseMillis=100 \
      -Dojp.thread.pool.size=500 \
@@ -372,11 +378,13 @@ The server uses SLF4J Simple Logger. Configure logging levels:
 
 ```bash
 # Set log level to DEBUG
-java -Dorg.slf4j.simpleLogger.defaultLogLevel=debug \
+java -Duser.timezone=UTC \
+     -Dorg.slf4j.simpleLogger.defaultLogLevel=debug \
      -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 
 # Disable most logging (ERROR only)
-java -Dorg.slf4j.simpleLogger.defaultLogLevel=error \
+java -Duser.timezone=UTC \
+     -Dorg.slf4j.simpleLogger.defaultLogLevel=error \
      -jar ojp-server/target/ojp-server-0.4.0-beta-shaded.jar
 ```
 
