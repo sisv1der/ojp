@@ -68,10 +68,9 @@ docker run --rm -d \
 wget https://repo1.maven.org/maven2/org/openjproxy/ojp-server/0.4.0-beta/ojp-server-0.4.0-beta-shaded.jar
 chmod +x ojp-server-0.4.0-beta-shaded.jar
 
-# Download open source drivers
-mkdir -p ojp-libs
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
-# (add other drivers as needed)
+# Download open source JDBC drivers
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
 
 java -jar ojp-server-0.4.0-beta-shaded.jar
 ```

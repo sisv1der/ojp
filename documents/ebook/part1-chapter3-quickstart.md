@@ -164,20 +164,9 @@ chmod +x ojp-server-0.4.0-beta-shaded.jar
 **Download Database Drivers**:
 
 ```bash
-# Create drivers directory and download open source drivers
-mkdir -p ojp-libs
-
-# PostgreSQL
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
-
-# MySQL (optional)
-wget -P ojp-libs https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar
-
-# MariaDB (optional)
-wget -P ojp-libs https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.2/mariadb-java-client-3.5.2.jar
-
-# H2 (optional)
-wget -P ojp-libs https://repo1.maven.org/maven2/com/h2database/h2/2.3.232/h2-2.3.232.jar
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
+# Downloads H2, PostgreSQL, MySQL, MariaDB drivers to ./ojp-libs
 ```
 
 **Start the Server**:

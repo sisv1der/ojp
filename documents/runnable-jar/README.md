@@ -55,47 +55,31 @@ The JAR size is approximately **20MB** (without drivers). Open-source JDBC drive
 
 ## Downloading Open Source JDBC Drivers
 
-The OJP Server requires JDBC drivers to connect to databases. Create an `ojp-libs` directory and download the drivers you need.
+The OJP Server requires JDBC drivers to connect to databases. For convenience, a script is provided to download open-source drivers.
 
-### 1. Create the Drivers Directory
-
-```bash
-mkdir -p ojp-libs
-```
-
-### 2. Download Drivers
-
-**Option A: Using the download script** (if you have the OJP source repository)
+### 1. Download Drivers Using the Script
 
 ```bash
-bash ojp-server/download-drivers.sh ./ojp-libs
+# Download the driver download script from the OJP repository
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
 ```
 
-**Option B: Download drivers directly from Maven Central**
+This script downloads the following drivers from Maven Central:
+- **H2** (v2.3.232) - Embedded/file-based database
+- **PostgreSQL** (v42.7.8) - PostgreSQL database
+- **MySQL** (v9.5.0) - MySQL database
+- **MariaDB** (v3.5.2) - MariaDB database
 
-```bash
-# H2 (embedded/file-based database)
-wget -P ojp-libs https://repo1.maven.org/maven2/com/h2database/h2/2.3.232/h2-2.3.232.jar
+The drivers will be placed in the `./ojp-libs` directory (approximately 7MB total).
 
-# PostgreSQL
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
-
-# MySQL
-wget -P ojp-libs https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar
-
-# MariaDB
-wget -P ojp-libs https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.2/mariadb-java-client-3.5.2.jar
-```
-
-Download only the drivers you need for your databases.
-
-### 3. Verify Downloaded Drivers
+### 2. Verify Downloaded Drivers
 
 ```bash
 ls -lh ojp-libs/
 ```
 
-Expected output:
+Expected output (exact versions depend on the script):
 ```
 -rw-rw-r-- 1 user user 2.6M h2-2.3.232.jar
 -rw-rw-r-- 1 user user 726K mariadb-java-client-3.5.2.jar
@@ -112,12 +96,8 @@ The runnable JAR includes infrastructure for loading JDBC drivers but does not i
 If you haven't already, download the open source drivers:
 
 ```bash
-mkdir -p ojp-libs
-
-# PostgreSQL
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
-
-# (add other open-source drivers as needed — see the section above)
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
 ```
 
 ### 2. Add Proprietary Driver JARs
@@ -174,10 +154,9 @@ For detailed information, see the [Drop-In External Libraries Documentation](../
 Run the OJP Server with default configuration (ensure drivers are downloaded first):
 
 ```bash
-# First, create ojp-libs and download open source drivers (see above)
-mkdir -p ojp-libs
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
-# (add other drivers as needed)
+# First, download open source drivers
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
 
 # Then run the server
 java -jar ojp-server-0.4.0-beta-shaded.jar
@@ -319,19 +298,26 @@ java -Xmx2g -jar ojp-server-0.4.0-beta-shaded.jar
 
 **Problem**: Missing database drivers
 
-**Solution**: Download the drivers to the `ojp-libs` directory (see [Downloading Open Source JDBC Drivers](#downloading-open-source-jdbc-drivers) above).
+**Solution**: Download the open source drivers using the provided script:
+
+```bash
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
+```
+
+This will download H2, PostgreSQL, MySQL, and MariaDB drivers to the `ojp-libs` directory.
 
 For Oracle, DB2, SQL Server or other proprietary databases:
 
-1. Download the open source drivers first (see above)
+1. Ensure open source drivers are downloaded (see above)
 2. Place proprietary driver JAR(s) in the same `ojp-libs` directory
 3. Start the server (drivers are automatically detected)
 
 Example:
 ```bash
-# Download open source drivers
-mkdir -p ojp-libs
-wget -P ojp-libs https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
+# Download open source drivers first
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
+bash download-drivers.sh
 
 # Add proprietary driver
 cp ~/Downloads/ojdbc11.jar ojp-libs/
