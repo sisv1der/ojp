@@ -9,12 +9,16 @@ This appendix provides a comprehensive quick reference for all commands, configu
 
 ### Starting the Server
 
-The most common way to start the OJP server is using the standalone JAR:
+The most common way to start the OJP server is using the standalone JAR downloaded from Maven Central:
 
-> **⚠️ For v0.4.0-beta and later:** Download drivers first using `bash ojp-server/download-drivers.sh`
+> **⚠️ For v0.4.0-beta and later:** Download JDBC drivers to `ojp-libs/` before starting the server. See [Chapter 4: Database Drivers](part2-chapter4-database-drivers.md) for complete setup instructions.
+
+**Download the JAR from Maven Central** (recommended):
 
 ```bash
-java -jar ojp-server-0.3.0.jar
+wget https://repo1.maven.org/maven2/org/openjproxy/ojp-server/0.4.0-beta/ojp-server-0.4.0-beta-shaded.jar
+chmod +x ojp-server-0.4.0-beta-shaded.jar
+java -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
 For development with custom configuration, you can specify properties:
@@ -23,10 +27,10 @@ For development with custom configuration, you can specify properties:
 java -Dojp.server.port=9059 \
      -Dojp.telemetry.enabled=true \
      -Dojp.telemetry.prometheus.enabled=true \
-     -jar ojp-server-0.3.0.jar
+     -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
-When running from source during development:
+When running from source during development (see [Building from Source](../runnable-jar/BUILDING_FROM_SOURCE.md)):
 
 ```bash
 cd ojp-server

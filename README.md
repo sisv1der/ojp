@@ -64,9 +64,14 @@ docker run --rm -d \
 **Alternative: Runnable JAR (No Docker)**
 
 ```bash
-# Download OJP Server JAR and open source drivers
-cd ojp-server
+# Download OJP Server JAR from Maven Central
+wget https://repo1.maven.org/maven2/org/openjproxy/ojp-server/0.4.0-beta/ojp-server-0.4.0-beta-shaded.jar
+chmod +x ojp-server-0.4.0-beta-shaded.jar
+
+# Download open source JDBC drivers
+curl -LO https://raw.githubusercontent.com/Open-J-Proxy/ojp/main/ojp-server/download-drivers.sh
 bash download-drivers.sh  # Downloads H2, PostgreSQL, MySQL, MariaDB to ojp-libs/
+
 java -jar ojp-server-0.4.0-beta-shaded.jar
 ```
 
@@ -105,9 +110,11 @@ That's it! Your application now uses intelligent connection pooling through OJP.
 
 ## Alternative Setup: Executable JAR (No Docker)
 
-If Docker is not available in your environment, you can build and run OJP Server as a standalone JAR file:
+If Docker is not available in your environment, you can run OJP Server as a standalone JAR file downloaded directly from Maven Central — no source code or build tools required:
 
-📖 **[Executable JAR Setup Guide](documents/runnable-jar/README.md)** - Complete instructions for building and running OJP Server as a standalone executable JAR with all dependencies included.
+📖 **[Executable JAR Setup Guide](documents/runnable-jar/README.md)** - Complete instructions for downloading from Maven Central and running OJP Server as a standalone executable JAR with all dependencies included.
+
+> **For contributors:** If you need to build the JAR from source, see [Building from Source](documents/runnable-jar/BUILDING_FROM_SOURCE.md).
 
 ---
 
