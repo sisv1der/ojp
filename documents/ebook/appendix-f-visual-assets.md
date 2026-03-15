@@ -351,7 +351,7 @@ graph TD
     style POOL fill:#ff8a65
 ```
 
-The server offers flexible deployment options to fit various infrastructure needs. You can run it as a Docker container with pre-built images that include open-source drivers, as a runnable JAR for standalone execution with external driver support, or deploy it to Kubernetes using Helm charts for cloud-native environments.
+The server offers flexible deployment options to fit various infrastructure needs. You can run it as a Docker container (drivers must be downloaded and mounted into the `ojp-libs` directory), as a runnable JAR for standalone execution with external driver support, or deploy it to Kubernetes using Helm charts for cloud-native environments.
 
 **Configuration**: Server behavior is controlled through environment variables or JVM system properties:
 
@@ -1081,25 +1081,36 @@ If you don't have Java 22+, you can download it from Eclipse Temurin at adoptium
 #### Prompt 2
 
 **[IMAGE PROMPT 2]**: Create a step-by-step visual guide showing:
-Step 1: Docker command in terminal
-Step 2: OJP Server starting up (container icon)
-Step 3: Server ready with ports exposed
-Step 4: Applications connecting to OJP
+Step 1: Download drivers using download-drivers.sh
+Step 2: Docker command in terminal with volume mount
+Step 3: OJP Server starting up (container icon)
+Step 4: Server ready with ports exposed
+Step 5: Applications connecting to OJP
 Use a horizontal timeline or numbered steps format
 Modern tutorial style with screenshots/mockups
 
-The fastest way to get started is using the pre-built Docker image that includes open-source database drivers (H2, PostgreSQL, MySQL, MariaDB).
+> **🚨 Important for Version 0.4.0-beta and Later:** JDBC drivers are **NO LONGER included** in the OJP Server Docker image. You must download drivers and mount them into the `ojp-libs` directory.
+
+The fastest way to get started is using the pre-built Docker image. Before running, you must download the JDBC drivers and mount them into the container.
 
 **Start OJP Server**:
 
 ```bash
+# Step 1: Download open source drivers
+mkdir -p ojp-libs
+cd ojp-server
+bash download-drivers.sh ../ojp-libs
+cd ..
+
+# Step 2: Run with drivers mounted
 docker run --rm -d \
   --name ojp-server \
   --network host \
+  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
-This command accomplishes several things in one step. It downloads the OJP Server image (approximately 50MB), which includes drivers for H2, PostgreSQL, MySQL, and MariaDB out of the box. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
+This downloads the OJP Server image (approximately 50MB) and starts it with your downloaded drivers mounted. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
 
 **Verify it's running**:
 
@@ -1769,7 +1780,7 @@ graph LR
 | Oracle | ojdbc11.jar | [Oracle JDBC Downloads](https://www.oracle.com/database/technologies/jdbc-downloads.html) |
 | SQL Server | mssql-jdbc-*.jar | [Microsoft JDBC Downloads](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server) |
 | DB2 | db2jcc*.jar | IBM Support / DB2 installation |
-| CockroachDB | postgresql-*.jar | Compatible with PostgreSQL driver (included!) |
+| CockroachDB | postgresql-*.jar | Compatible with PostgreSQL driver (download via script) |
 
 #### Prompt 6
 
@@ -1835,7 +1846,7 @@ Professional compatibility guide
 Good news! CockroachDB uses the PostgreSQL wire protocol:
 
 ```java
-// CockroachDB works with the included PostgreSQL driver!
+// CockroachDB works with the downloaded PostgreSQL driver!
 String url = "jdbc:ojp[localhost:1059]_postgresql://localhost:26257/mydb?" +
              "sslmode=disable";
 Connection conn = DriverManager.getConnection(url, "root", "");
@@ -1846,7 +1857,7 @@ String clusterUrl = "jdbc:ojp[localhost:1059]_postgresql://" +
                     "sslmode=require&load_balance=true";
 ```
 
-**No additional driver required** - the included PostgreSQL driver works out of the box!
+**No additional driver required** - CockroachDB works with the PostgreSQL driver (download via `download-drivers.sh`).
 
 ---
 

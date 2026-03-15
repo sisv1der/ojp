@@ -288,7 +288,7 @@ graph LR
 | Oracle | ojdbc11.jar | [Oracle JDBC Downloads](https://www.oracle.com/database/technologies/jdbc-downloads.html) |
 | SQL Server | mssql-jdbc-*.jar | [Microsoft JDBC Downloads](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server) |
 | DB2 | db2jcc*.jar | IBM Support / DB2 installation |
-| CockroachDB | postgresql-*.jar | Compatible with PostgreSQL driver (included!) |
+| CockroachDB | postgresql-*.jar | Compatible with PostgreSQL driver (download via script) |
 
 ### Oracle Database Setup
 
@@ -477,7 +477,7 @@ Professional compatibility guide
 Good news! CockroachDB uses the PostgreSQL wire protocol:
 
 ```java
-// CockroachDB works with the included PostgreSQL driver!
+// CockroachDB works with the downloaded PostgreSQL driver!
 String url = "jdbc:ojp[localhost:1059]_postgresql://localhost:26257/mydb?" +
              "sslmode=disable";
 Connection conn = DriverManager.getConnection(url, "root", "");
@@ -488,7 +488,7 @@ String clusterUrl = "jdbc:ojp[localhost:1059]_postgresql://" +
                     "sslmode=require&load_balance=true";
 ```
 
-**No additional driver required** - the included PostgreSQL driver works out of the box!
+**No additional driver required** - CockroachDB works with the PostgreSQL driver (download via `download-drivers.sh`).
 
 ---
 
@@ -685,7 +685,7 @@ Perfect for development and testing:
 
 ```bash
 # No separate database needed!
-# H2 driver is included
+# H2 driver must be downloaded first (see download-drivers.sh)
 
 # File-based H2 database
 String url = "jdbc:ojp[localhost:1059]_h2:~/testdb";
