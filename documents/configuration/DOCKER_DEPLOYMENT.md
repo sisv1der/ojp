@@ -15,20 +15,34 @@ This guide covers deploying OJP Server using Docker, including configuration opt
 
 ## Quick Start
 
-The fastest way to run OJP Server is using the pre-built Docker image:
+> **🚨 Important for Version 0.4.0-beta and Later:** JDBC drivers are **NO LONGER included** in the OJP Server Docker image. You **MUST** download drivers and mount them into the `ojp-libs` directory before running.
+
+> **Note**: Run the following commands from the root of the OJP repository (or any working directory of your choice). The `ojp-server/download-drivers.sh` script is included in the OJP repository.
+
+**Step 1: Download drivers**:
 
 ```bash
+# From the OJP repository root (or your chosen working directory):
+mkdir -p ojp-libs
+bash ojp-server/download-drivers.sh ./ojp-libs
+```
+
+**Step 2: Run OJP Server with drivers mounted**:
+
+```bash
+# Run from the same directory where ojp-libs was created
 docker run -d \
   --name ojp-server \
   -p 1059:1059 \
   -p 9159:9159 \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
 This starts the OJP Server with:
 - **Port 1059**: gRPC server for database connections
 - **Port 9159**: Prometheus metrics endpoint
-- **Included drivers**: H2, PostgreSQL, MySQL, MariaDB
+- **Drivers**: loaded from the mounted `ojp-libs` directory (H2, PostgreSQL, MySQL, MariaDB if downloaded via script)
 - **UTC timezone**: The image is built with `-Duser.timezone=UTC` for consistent date/time handling
 
 ---

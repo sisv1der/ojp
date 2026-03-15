@@ -71,28 +71,48 @@ For firewall configuration, port 1059 must be accessible to all application inst
 
 OJP Server can be deployed in three ways: Docker (fastest), Runnable JAR (from Maven Central), or built from source.
 
-### Option 1: Docker Deployment (Batteries Included) ⭐ Recommended
+### Option 1: Docker Deployment ⭐ Recommended
+
+> **🚨 Important for Version 0.4.0-beta and Later:**  
+> JDBC drivers are **NO LONGER included** in the OJP Server Docker image. You **MUST** download drivers and mount them into the `ojp-libs` folder before running ojp-server.
 
 **[IMAGE PROMPT 2]**: Create a step-by-step visual guide showing:
-Step 1: Docker command in terminal
-Step 2: OJP Server starting up (container icon)
-Step 3: Server ready with ports exposed
-Step 4: Applications connecting to OJP
+Step 1: Download drivers using download-drivers.sh
+Step 2: Docker command in terminal with volume mount
+Step 3: OJP Server starting up (container icon)
+Step 4: Server ready with ports exposed
+Step 5: Applications connecting to OJP
 Use a horizontal timeline or numbered steps format
 Modern tutorial style with screenshots/mockups
 
-The fastest way to get started is using the pre-built Docker image that includes open-source database drivers (H2, PostgreSQL, MySQL, MariaDB).
+The fastest way to get started is using the pre-built Docker image. Before running, you must download the JDBC drivers and mount them into the container.
 
-**Start OJP Server**:
+> **Note**: Run the following commands from the root of the OJP repository (or the directory where you want to store your drivers). The `ojp-server/download-drivers.sh` script is located inside the cloned OJP repository.
+
+**Step 1: Download Drivers**:
 
 ```bash
+# From the OJP repository root (or your working directory):
+
+# Create the external libraries directory
+mkdir -p ojp-libs
+
+# Download open source drivers (H2, PostgreSQL, MySQL, MariaDB)
+bash ojp-server/download-drivers.sh ./ojp-libs
+```
+
+**Step 2: Start OJP Server**:
+
+```bash
+# Run from the same directory where ojp-libs was created
 docker run --rm -d \
   --name ojp-server \
   --network host \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
-This command accomplishes several things in one step. It downloads the OJP Server image (approximately 50MB), which includes drivers for H2, PostgreSQL, MySQL, and MariaDB out of the box. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
+This command downloads the OJP Server image (approximately 50MB) and starts it with your downloaded drivers mounted. The server starts on port 1059 for gRPC communication and exposes metrics on port 9159 for Prometheus. The `-d` flag runs the container in detached mode, while `--rm` ensures the container is automatically removed when stopped.
 
 **Verify it's running**:
 
@@ -119,6 +139,7 @@ Expected log output:
 docker run --rm -d \
   --name ojp-server \
   --network host \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   -e OJP_SERVER_PORT=9059 \
   -e OJP_PROMETHEUS_PORT=9090 \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
@@ -128,15 +149,19 @@ docker run --rm -d \
 **For Proprietary Databases** (Oracle, SQL Server, DB2):
 
 ```bash
-# Mount external drivers directory
+# Add proprietary drivers to your ojp-libs directory (same directory as open source drivers)
+cp ~/Downloads/ojdbc11.jar ojp-libs/
+cp ~/Downloads/mssql-jdbc-12.jar ojp-libs/
+
+# Mount the directory when running the container
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -v /path/to/drivers:/ojp-libs \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
-Place your proprietary JDBC driver JARs in `/path/to/drivers` on your host machine.
+Place all required JDBC driver JARs in the `ojp-libs` directory on your host machine before starting the container.
 
 ### Option 2: Runnable JAR Setup
 
