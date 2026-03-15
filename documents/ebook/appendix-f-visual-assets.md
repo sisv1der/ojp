@@ -1095,18 +1095,18 @@ The fastest way to get started is using the pre-built Docker image. Before runni
 
 **Start OJP Server**:
 
-```bash
-# Step 1: Download open source drivers
-mkdir -p ojp-libs
-cd ojp-server
-bash download-drivers.sh ../ojp-libs
-cd ..
+> **Note**: Run the following commands from the root of the OJP repository (or any working directory of your choice).
 
-# Step 2: Run with drivers mounted
+```bash
+# Step 1: Download open source drivers (from your working directory)
+mkdir -p ojp-libs
+bash ojp-server/download-drivers.sh ./ojp-libs
+
+# Step 2: Run with drivers mounted (from the same directory)
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 

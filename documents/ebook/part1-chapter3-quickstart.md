@@ -87,25 +87,28 @@ Modern tutorial style with screenshots/mockups
 
 The fastest way to get started is using the pre-built Docker image. Before running, you must download the JDBC drivers and mount them into the container.
 
+> **Note**: Run the following commands from the root of the OJP repository (or the directory where you want to store your drivers). The `ojp-server/download-drivers.sh` script is located inside the cloned OJP repository.
+
 **Step 1: Download Drivers**:
 
 ```bash
+# From the OJP repository root (or your working directory):
+
 # Create the external libraries directory
 mkdir -p ojp-libs
 
 # Download open source drivers (H2, PostgreSQL, MySQL, MariaDB)
-cd ojp-server
-bash download-drivers.sh ../ojp-libs
-cd ..
+bash ojp-server/download-drivers.sh ./ojp-libs
 ```
 
 **Step 2: Start OJP Server**:
 
 ```bash
+# Run from the same directory where ojp-libs was created
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
@@ -136,7 +139,7 @@ Expected log output:
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   -e OJP_SERVER_PORT=9059 \
   -e OJP_PROMETHEUS_PORT=9090 \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
@@ -146,7 +149,7 @@ docker run --rm -d \
 **For Proprietary Databases** (Oracle, SQL Server, DB2):
 
 ```bash
-# Add proprietary drivers to your ojp-libs directory
+# Add proprietary drivers to your ojp-libs directory (same directory as open source drivers)
 cp ~/Downloads/ojdbc11.jar ojp-libs/
 cp ~/Downloads/mssql-jdbc-12.jar ojp-libs/
 
@@ -154,7 +157,7 @@ cp ~/Downloads/mssql-jdbc-12.jar ojp-libs/
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -v $(pwd)/ojp-libs:/opt/ojp/ojp-libs \
+  -v "$(pwd)/ojp-libs":/opt/ojp/ojp-libs \
   rrobetti/ojp:0.4.0-beta
 ```
 
