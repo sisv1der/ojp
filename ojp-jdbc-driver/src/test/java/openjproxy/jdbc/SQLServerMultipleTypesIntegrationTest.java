@@ -119,7 +119,8 @@ public class SQLServerMultipleTypesIntegrationTest {
         assertEquals(33333333333333L, resultSet.getLong(4));
         assertEquals(255, resultSet.getInt(5)); // SQL Server TINYINT max value
         assertEquals(32767, resultSet.getInt(6));
-        assertTrue( resultSet.getBoolean(7)); // SQL Server BIT
+        assertTrue(resultSet.getBoolean(7)); // SQL Server BIT
+        assertEquals(1, resultSet.getInt(7)); // SQL Server BIT as int
         assertEquals(new BigDecimal("10.00"), resultSet.getBigDecimal(8));
         assertEquals(20.20f+"", ""+resultSet.getFloat(9));
         
