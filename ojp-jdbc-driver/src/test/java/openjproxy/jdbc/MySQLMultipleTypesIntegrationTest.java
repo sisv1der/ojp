@@ -124,6 +124,17 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
         ResultSet resultSet = psSelect.executeQuery();
         resultSet.next();
 
+        // Validate basic numeric and boolean types
+        assertEquals(1, resultSet.getInt(1));
+        assertEquals("TITLE_1", resultSet.getString(2));
+        assertEquals(127, resultSet.getInt(5));
+        assertEquals(32767, resultSet.getInt(6));
+        // MySQL/MariaDB BOOLEAN is TINYINT(1) under the hood; MariaDB Connector/J returns Boolean
+        // for TINYINT(1)/BOOLEAN columns; getBoolean() must work for both Boolean and Integer values
+        assertTrue(resultSet.getBoolean(7));
+        // getInt() must work even when the stored value is a Boolean (MariaDB returns Boolean for TINYINT(1))
+        assertEquals(1, resultSet.getInt(7));
+
         // Validate columns 12, 13, 14 using getObject with java.time types
         Object valDateRet = resultSet.getObject(12);
         Object valTimeRet = resultSet.getObject(13);
@@ -203,6 +214,17 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
             assertEquals(valLocalTime.getMinute(), retrievedLt.getMinute());
             assertEquals(valLocalTime.getSecond(), retrievedLt.getSecond());
         }
+
+        // Validate basic types by column name
+        assertEquals(1, resultSet.getInt("val_int"));
+        assertEquals("TITLE_1", resultSet.getString("val_varchar"));
+        assertEquals(127, resultSet.getInt("val_tinyint"));
+        assertEquals(32767, resultSet.getInt("val_smallint"));
+        // Validate boolean column using both getBoolean() and getInt()
+        // MariaDB Connector/J returns Boolean for TINYINT(1)/BOOLEAN columns;
+        // getInt("val_boolean") must return 1 for true and not throw a parse error.
+        assertTrue(resultSet.getBoolean("val_boolean"));
+        assertEquals(1, resultSet.getInt("val_boolean"));
 
         resultSet.close();
         psSelect.close();
