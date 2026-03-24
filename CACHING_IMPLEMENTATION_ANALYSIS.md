@@ -3480,6 +3480,2414 @@ jdbc:ojp[localhost:1059]_postgresql://db:5432/mydb?ojpCacheEnabled=true&ojpCache
 
 ---
 
+## 14. Phased Implementation Plan (Local Caching Only)
+
+This section provides a **detailed, actionable implementation plan** for implementing query result caching in OJP, focusing on **local caching at individual nodes only** (excluding distributed cache coordination for now).
+
+---
+
+### 14.1 Overview
+
+**Scope:** Local query result caching on each OJP server node independently
+- ✅ Client-side configuration in `ojp.properties`
+- ✅ Pattern-based query matching
+- ✅ TTL-based cache expiration
+- ✅ Write-through cache invalidation
+- ❌ **NOT included**: Distributed cache coordination (JDBC driver relay)
+
+**Goal:** Implement a production-ready local query cache that:
+1. Works with any ORM/framework (Hibernate, Spring Data, MyBatis, jOOQ)
+2. Requires no changes to application code
+3. Provides immediate performance benefits for repeated queries
+4. Integrates seamlessly with existing OJP architecture
+
+---
+
+### 14.2 Phase 1: Foundation (Weeks 1-2)
+
+#### 14.2.1 Core Data Structures
+
+**Task 1.1: Create Cache Key Class**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/QueryCacheKey.java`
+
+```java
+package org.openjproxy.cache;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Immutable cache key for query results.
+ * Includes datasource name for isolation between datasources.
+ */
+public final class QueryCacheKey {
+    private final String datasourceName;
+    private final String normalizedSql;
+    private final List<Object> parameters;
+    private final int hashCode;
+    
+    public QueryCacheKey(String datasourceName, String sql, List<Object> params) {
+        this.datasourceName = Objects.requireNonNull(datasourceName);
+        this.normalizedSql = normalizeSql(sql);
+        this.parameters = params != null ? List.copyOf(params) : List.of();
+        this.hashCode = Objects.hash(datasourceName, normalizedSql, parameters);
+    }
+    
+    private String normalizeSql(String sql) {
+        // Remove extra whitespace, normalize to uppercase
+        return sql.trim().replaceAll("\\s+", " ").toUpperCase();
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof QueryCacheKey)) return false;
+        QueryCacheKey that = (QueryCacheKey) o;
+        return datasourceName.equals(that.datasourceName) &&
+               normalizedSql.equals(that.normalizedSql) &&
+               parameters.equals(that.parameters);
+    }
+    
+    @Override
+    public int hashCode() {
+        return hashCode;
+    }
+    
+    public String getDatasourceName() { return datasourceName; }
+    public String getNormalizedSql() { return normalizedSql; }
+    public List<Object> getParameters() { return parameters; }
+}
+```
+
+**Deliverable:** QueryCacheKey class with tests
+
+---
+
+**Task 1.2: Create Cache Entry Class**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/CachedQueryResult.java`
+
+```java
+package org.openjproxy.cache;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Cached query result with metadata.
+ */
+public final class CachedQueryResult {
+    private final List<List<Object>> rows;
+    private final List<String> columnNames;
+    private final List<String> columnTypes;
+    private final Instant cachedAt;
+    private final Instant expiresAt;
+    private final Set<String> dependentTables;
+    private final long sizeBytes;
+    
+    public CachedQueryResult(
+            List<List<Object>> rows,
+            List<String> columnNames,
+            List<String> columnTypes,
+            Instant cachedAt,
+            Instant expiresAt,
+            Set<String> dependentTables) {
+        this.rows = List.copyOf(rows);
+        this.columnNames = List.copyOf(columnNames);
+        this.columnTypes = List.copyOf(columnTypes);
+        this.cachedAt = cachedAt;
+        this.expiresAt = expiresAt;
+        this.dependentTables = Set.copyOf(dependentTables);
+        this.sizeBytes = estimateSize();
+    }
+    
+    private long estimateSize() {
+        // Rough estimate: rows * columns * avg 50 bytes per cell
+        return (long) rows.size() * columnNames.size() * 50;
+    }
+    
+    public boolean isExpired() {
+        return Instant.now().isAfter(expiresAt);
+    }
+    
+    public boolean isValid() {
+        return !isExpired();
+    }
+    
+    // Getters
+    public List<List<Object>> getRows() { return rows; }
+    public List<String> getColumnNames() { return columnNames; }
+    public List<String> getColumnTypes() { return columnTypes; }
+    public Instant getCachedAt() { return cachedAt; }
+    public Instant getExpiresAt() { return expiresAt; }
+    public Set<String> getDependentTables() { return dependentTables; }
+    public long getSizeBytes() { return sizeBytes; }
+}
+```
+
+**Deliverable:** CachedQueryResult class with tests
+
+---
+
+**Task 1.3: Create Cache Configuration Classes**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/CacheConfiguration.java`
+
+```java
+package org.openjproxy.cache;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+
+/**
+ * Cache configuration for a single datasource.
+ * Created from ojp.properties on client-side and sent to server during connection.
+ */
+public class CacheConfiguration {
+    private final boolean enabled;
+    private final boolean distribute;  // For future use (Phase 3+)
+    private final List<CacheRule> rules;
+    
+    public CacheConfiguration(boolean enabled, boolean distribute, List<CacheRule> rules) {
+        this.enabled = enabled;
+        this.distribute = distribute;
+        this.rules = new ArrayList<>(rules);
+    }
+    
+    public boolean isEnabled() { return enabled; }
+    public boolean isDistribute() { return distribute; }
+    public List<CacheRule> getRules() { return rules; }
+    
+    /**
+     * Find matching cache rule for a SQL query.
+     * Returns null if no rule matches or caching is disabled.
+     */
+    public CacheRule findMatchingRule(String sql) {
+        if (!enabled) {
+            return null;
+        }
+        
+        String normalizedSql = sql.trim().replaceAll("\\s+", " ");
+        
+        for (CacheRule rule : rules) {
+            if (rule.matches(normalizedSql)) {
+                return rule;
+            }
+        }
+        
+        return null;
+    }
+    
+    public static class CacheRule {
+        private final String patternString;
+        private final Pattern pattern;
+        private final Duration ttl;
+        private final List<String> invalidateOn;
+        
+        public CacheRule(String patternString, Duration ttl, List<String> invalidateOn) {
+            this.patternString = patternString;
+            this.pattern = Pattern.compile(patternString, Pattern.CASE_INSENSITIVE);
+            this.ttl = ttl;
+            this.invalidateOn = invalidateOn != null ? List.copyOf(invalidateOn) : List.of();
+        }
+        
+        public boolean matches(String sql) {
+            return pattern.matcher(sql).matches();
+        }
+        
+        public String getPatternString() { return patternString; }
+        public Duration getTtl() { return ttl; }
+        public List<String> getInvalidateOn() { return invalidateOn; }
+    }
+}
+```
+
+**Deliverable:** Configuration classes with tests
+
+---
+
+**Task 1.4: Create Cache Storage**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/QueryResultCache.java`
+
+```java
+package org.openjproxy.cache;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Local query result cache for a single OJP server.
+ * Thread-safe, TTL-based expiration, size-bounded.
+ */
+public class QueryResultCache {
+    private static final Logger logger = LoggerFactory.getLogger(QueryResultCache.class);
+    
+    private final Cache<QueryCacheKey, CachedQueryResult> cache;
+    private final ConcurrentHashMap<String, Set<QueryCacheKey>> tableIndex;
+    
+    // Metrics
+    private final AtomicLong hits = new AtomicLong(0);
+    private final AtomicLong misses = new AtomicLong(0);
+    private final AtomicLong evictions = new AtomicLong(0);
+    
+    public QueryResultCache(int maxSize, Duration maxAge) {
+        this.cache = Caffeine.newBuilder()
+                .maximumSize(maxSize)
+                .expireAfterWrite(maxAge)
+                .recordStats()
+                .evictionListener((key, value, cause) -> {
+                    evictions.incrementAndGet();
+                    logger.debug("Cache eviction: key={}, cause={}", key, cause);
+                })
+                .build();
+        
+        this.tableIndex = new ConcurrentHashMap<>();
+    }
+    
+    /**
+     * Get cached result if available and valid.
+     */
+    public CachedQueryResult get(QueryCacheKey key) {
+        CachedQueryResult result = cache.getIfPresent(key);
+        
+        if (result != null) {
+            if (result.isValid()) {
+                hits.incrementAndGet();
+                logger.debug("Cache HIT: datasource={}, sql={}", 
+                    key.getDatasourceName(), 
+                    key.getNormalizedSql());
+                return result;
+            } else {
+                // Expired - remove it
+                cache.invalidate(key);
+                misses.incrementAndGet();
+                logger.debug("Cache MISS (expired): datasource={}", key.getDatasourceName());
+                return null;
+            }
+        }
+        
+        misses.incrementAndGet();
+        logger.debug("Cache MISS: datasource={}, sql={}", 
+            key.getDatasourceName(), 
+            key.getNormalizedSql());
+        return null;
+    }
+    
+    /**
+     * Put result in cache and index by tables.
+     */
+    public void put(QueryCacheKey key, CachedQueryResult result) {
+        cache.put(key, result);
+        
+        // Index by tables for invalidation
+        for (String table : result.getDependentTables()) {
+            tableIndex.computeIfAbsent(table.toUpperCase(), k -> ConcurrentHashMap.newKeySet())
+                      .add(key);
+        }
+        
+        logger.debug("Cache PUT: datasource={}, sql={}, ttl={}s, tables={}", 
+            key.getDatasourceName(),
+            key.getNormalizedSql(),
+            Duration.between(result.getCachedAt(), result.getExpiresAt()).getSeconds(),
+            result.getDependentTables());
+    }
+    
+    /**
+     * Invalidate all cache entries that depend on specified table.
+     */
+    public void invalidateByTable(String datasourceName, String tableName) {
+        String tableKey = tableName.toUpperCase();
+        Set<QueryCacheKey> keysToInvalidate = tableIndex.get(tableKey);
+        
+        if (keysToInvalidate != null) {
+            int invalidated = 0;
+            for (QueryCacheKey key : keysToInvalidate) {
+                // Only invalidate if datasource matches
+                if (key.getDatasourceName().equals(datasourceName)) {
+                    cache.invalidate(key);
+                    invalidated++;
+                }
+            }
+            
+            // Clean up the index
+            keysToInvalidate.removeIf(key -> key.getDatasourceName().equals(datasourceName));
+            
+            logger.info("Cache invalidation: datasource={}, table={}, entries={}", 
+                datasourceName, tableName, invalidated);
+        }
+    }
+    
+    /**
+     * Clear all cache entries for a datasource.
+     */
+    public void clearDatasource(String datasourceName) {
+        cache.asMap().keySet().removeIf(key -> 
+            key.getDatasourceName().equals(datasourceName));
+        
+        logger.info("Cache cleared: datasource={}", datasourceName);
+    }
+    
+    /**
+     * Get cache statistics.
+     */
+    public CacheStats getStats() {
+        com.github.benmanes.caffeine.cache.stats.CacheStats stats = cache.stats();
+        return new CacheStats(
+            hits.get(),
+            misses.get(),
+            evictions.get(),
+            cache.estimatedSize(),
+            stats.hitRate()
+        );
+    }
+    
+    public static class CacheStats {
+        public final long hits;
+        public final long misses;
+        public final long evictions;
+        public final long size;
+        public final double hitRate;
+        
+        public CacheStats(long hits, long misses, long evictions, long size, double hitRate) {
+            this.hits = hits;
+            this.misses = misses;
+            this.evictions = evictions;
+            this.size = size;
+            this.hitRate = hitRate;
+        }
+    }
+}
+```
+
+**Deliverable:** QueryResultCache class with comprehensive tests
+
+---
+
+#### 14.2.2 Configuration Parsing
+
+**Task 1.5: Parse ojp.properties Cache Configuration**
+
+Location: `ojp-jdbc-driver/src/main/java/org/openjproxy/jdbc/CacheConfigurationParser.java`
+
+```java
+package org.openjproxy.jdbc;
+
+import org.openjproxy.cache.CacheConfiguration;
+import org.openjproxy.cache.CacheConfiguration.CacheRule;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
+
+/**
+ * Parses cache configuration from ojp.properties.
+ * Configuration format:
+ *   {datasource}.ojp.cache.enabled=true
+ *   {datasource}.ojp.cache.distribute=false
+ *   {datasource}.ojp.cache.queries.{N}.pattern=SELECT .* FROM products .*
+ *   {datasource}.ojp.cache.queries.{N}.ttl=600s
+ *   {datasource}.ojp.cache.queries.{N}.invalidateOn=products,categories
+ */
+public class CacheConfigurationParser {
+    
+    public static CacheConfiguration parse(Properties props, String datasourceName) {
+        String prefix = datasourceName + ".ojp.cache.";
+        
+        // Check if cache is enabled
+        boolean enabled = Boolean.parseBoolean(
+            props.getProperty(prefix + "enabled", "false"));
+        
+        if (!enabled) {
+            return new CacheConfiguration(false, false, List.of());
+        }
+        
+        // Check if distribution is enabled (for future use)
+        boolean distribute = Boolean.parseBoolean(
+            props.getProperty(prefix + "distribute", "false"));
+        
+        // Parse cache rules
+        List<CacheRule> rules = new ArrayList<>();
+        
+        for (int i = 1; i <= 100; i++) {  // Support up to 100 rules
+            String rulePrefix = prefix + "queries." + i + ".";
+            String pattern = props.getProperty(rulePrefix + "pattern");
+            
+            if (pattern == null) {
+                break;  // No more rules
+            }
+            
+            String ttlStr = props.getProperty(rulePrefix + "ttl", "300s");
+            Duration ttl = parseDuration(ttlStr);
+            
+            String invalidateOnStr = props.getProperty(rulePrefix + "invalidateOn", "");
+            List<String> invalidateOn = invalidateOnStr.isEmpty() 
+                ? List.of() 
+                : Arrays.asList(invalidateOnStr.split(","));
+            
+            rules.add(new CacheRule(pattern, ttl, invalidateOn));
+        }
+        
+        return new CacheConfiguration(enabled, distribute, rules);
+    }
+    
+    private static Duration parseDuration(String str) {
+        // Parse formats like "300s", "10m", "1h"
+        String value = str.substring(0, str.length() - 1);
+        char unit = str.charAt(str.length() - 1);
+        
+        long amount = Long.parseLong(value);
+        
+        return switch (unit) {
+            case 's' -> Duration.ofSeconds(amount);
+            case 'm' -> Duration.ofMinutes(amount);
+            case 'h' -> Duration.ofHours(amount);
+            case 'd' -> Duration.ofDays(amount);
+            default -> throw new IllegalArgumentException("Invalid duration: " + str);
+        };
+    }
+}
+```
+
+**Deliverable:** Parser with unit tests for various configuration formats
+
+---
+
+**Task 1.6: Update Connection Protocol**
+
+Location: `ojp-grpc-contract/src/main/proto/ojp.proto`
+
+Add cache configuration to connection request:
+
+```protobuf
+message ConnectRequest {
+    string datasource_name = 1;
+    map<string, string> properties = 2;
+    
+    // New: cache configuration for this datasource
+    CacheConfigurationProto cache_config = 3;
+}
+
+message CacheConfigurationProto {
+    bool enabled = 1;
+    bool distribute = 2;  // For future use
+    repeated CacheRuleProto rules = 3;
+}
+
+message CacheRuleProto {
+    string pattern = 1;
+    int64 ttl_seconds = 2;
+    repeated string invalidate_on = 3;
+}
+```
+
+**Deliverable:** Updated proto file and regenerated gRPC code
+
+---
+
+#### 14.2.3 Session Storage
+
+**Task 1.7: Store Cache Config in Session**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/ServerSession.java`
+
+Update `ServerSession` to store cache configuration:
+
+```java
+public class ServerSession {
+    private final String sessionId;
+    private final String datasourceName;
+    private final Connection dbConnection;
+    private final CacheConfiguration cacheConfig;  // NEW
+    
+    public ServerSession(
+            String sessionId, 
+            String datasourceName,
+            Connection dbConnection,
+            CacheConfiguration cacheConfig) {
+        this.sessionId = sessionId;
+        this.datasourceName = datasourceName;
+        this.dbConnection = dbConnection;
+        this.cacheConfig = cacheConfig;  // NEW
+    }
+    
+    public CacheConfiguration getCacheConfig() {
+        return cacheConfig;
+    }
+    
+    // ... existing methods
+}
+```
+
+**Deliverable:** Updated ServerSession with cache config storage
+
+---
+
+**Task 1.8: Update Connection Handler**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/OjpServiceImpl.java`
+
+Update `connect()` method to handle cache configuration:
+
+```java
+@Override
+public void connect(ConnectRequest request, StreamObserver<ConnectResponse> responseObserver) {
+    try {
+        String datasourceName = request.getDatasourceName();
+        
+        // Parse cache configuration from request
+        CacheConfiguration cacheConfig = parseCacheConfig(request.getCacheConfig());
+        
+        // Create database connection
+        Connection dbConnection = createDatabaseConnection(datasourceName, request.getProperties());
+        
+        // Create session with cache config
+        String sessionId = UUID.randomUUID().toString();
+        ServerSession session = new ServerSession(
+            sessionId, 
+            datasourceName, 
+            dbConnection,
+            cacheConfig);
+        
+        sessionManager.registerSession(session);
+        
+        logger.info("Session created: id={}, datasource={}, cacheEnabled={}", 
+            sessionId, datasourceName, cacheConfig.isEnabled());
+        
+        responseObserver.onNext(ConnectResponse.newBuilder()
+            .setSessionId(sessionId)
+            .build());
+        responseObserver.onCompleted();
+        
+    } catch (Exception e) {
+        logger.error("Connection failed", e);
+        responseObserver.onError(e);
+    }
+}
+
+private CacheConfiguration parseCacheConfig(CacheConfigurationProto proto) {
+    if (proto == null || !proto.getEnabled()) {
+        return new CacheConfiguration(false, false, List.of());
+    }
+    
+    List<CacheConfiguration.CacheRule> rules = new ArrayList<>();
+    for (CacheRuleProto ruleProto : proto.getRulesList()) {
+        rules.add(new CacheConfiguration.CacheRule(
+            ruleProto.getPattern(),
+            Duration.ofSeconds(ruleProto.getTtlSeconds()),
+            ruleProto.getInvalidateOnList()
+        ));
+    }
+    
+    return new CacheConfiguration(
+        proto.getEnabled(),
+        proto.getDistribute(),
+        rules
+    );
+}
+```
+
+**Deliverable:** Updated connection handling with cache config support
+
+---
+
+**Task 1.9: Update JDBC Driver Connection**
+
+Location: `ojp-jdbc-driver/src/main/java/org/openjproxy/jdbc/OjpConnection.java`
+
+Update driver to send cache configuration during connection:
+
+```java
+public Connection connect(String url, Properties info) throws SQLException {
+    // Parse connection URL to get datasource name
+    String datasourceName = parseDataSourceName(url);
+    
+    // Parse cache configuration for this datasource
+    CacheConfiguration cacheConfig = CacheConfigurationParser.parse(info, datasourceName);
+    
+    // Convert to proto
+    CacheConfigurationProto.Builder configProtoBuilder = CacheConfigurationProto.newBuilder()
+        .setEnabled(cacheConfig.isEnabled())
+        .setDistribute(cacheConfig.isDistribute());
+    
+    for (CacheConfiguration.CacheRule rule : cacheConfig.getRules()) {
+        configProtoBuilder.addRules(CacheRuleProto.newBuilder()
+            .setPattern(rule.getPatternString())
+            .setTtlSeconds(rule.getTtl().getSeconds())
+            .addAllInvalidateOn(rule.getInvalidateOn())
+            .build());
+    }
+    
+    // Connect to OJP server with cache config
+    ConnectRequest request = ConnectRequest.newBuilder()
+        .setDatasourceName(datasourceName)
+        .putAllProperties(convertProperties(info))
+        .setCacheConfig(configProtoBuilder.build())  // NEW
+        .build();
+    
+    ConnectResponse response = stub.connect(request);
+    
+    logger.info("Connected: sessionId={}, cacheEnabled={}", 
+        response.getSessionId(), cacheConfig.isEnabled());
+    
+    return new OjpConnectionImpl(response.getSessionId(), stub, cacheConfig);
+}
+```
+
+**Deliverable:** Updated JDBC driver with cache config transmission
+
+---
+
+#### 14.2.4 Testing Infrastructure
+
+**Task 1.10: Create Test Fixtures**
+
+Location: `ojp-server/src/test/java/org/openjproxy/cache/CacheTestFixtures.java`
+
+```java
+package org.openjproxy.cache;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+public class CacheTestFixtures {
+    
+    public static CacheConfiguration createTestConfig() {
+        return new CacheConfiguration(
+            true,  // enabled
+            false, // distribute (not used in Phase 1-2)
+            List.of(
+                new CacheConfiguration.CacheRule(
+                    "SELECT .* FROM products .*",
+                    Duration.ofMinutes(10),
+                    List.of("products")
+                ),
+                new CacheConfiguration.CacheRule(
+                    "SELECT .* FROM users WHERE id = .*",
+                    Duration.ofMinutes(5),
+                    List.of("users")
+                )
+            )
+        );
+    }
+    
+    public static QueryCacheKey createTestKey(String datasource, String sql) {
+        return new QueryCacheKey(datasource, sql, List.of());
+    }
+    
+    public static CachedQueryResult createTestResult(Set<String> tables, Duration ttl) {
+        Instant now = Instant.now();
+        return new CachedQueryResult(
+            List.of(List.of("value1", "value2")),
+            List.of("col1", "col2"),
+            List.of("VARCHAR", "VARCHAR"),
+            now,
+            now.plus(ttl),
+            tables
+        );
+    }
+}
+```
+
+**Deliverable:** Test fixtures and utilities
+
+---
+
+**Task 1.11: Unit Tests**
+
+Create comprehensive unit tests:
+
+```java
+// Test files to create:
+// - QueryCacheKeyTest.java - Test key equality, hashing, normalization
+// - CachedQueryResultTest.java - Test expiration, size estimation
+// - CacheConfigurationTest.java - Test pattern matching, rule ordering
+// - CacheConfigurationParserTest.java - Test parsing from properties
+// - QueryResultCacheTest.java - Test cache operations, eviction, invalidation
+```
+
+**Deliverable:** 5 test classes with >90% code coverage
+
+---
+
+**Estimated Time for Phase 1:** 2 weeks  
+**Deliverables:**
+- ✅ Core cache data structures (key, entry, config)
+- ✅ Cache storage with TTL and eviction
+- ✅ Configuration parsing from ojp.properties
+- ✅ Updated connection protocol (proto)
+- ✅ Session-based cache config storage
+- ✅ Comprehensive unit tests (>90% coverage)
+
+**Risk Mitigation:**
+- Use Caffeine library (proven, high-performance)
+- Extensive unit testing before integration
+- Follow existing OJP patterns (session management, proto)
+
+---
+
+### 14.3 Phase 2: Query Execution Integration (Weeks 3-4)
+
+#### 14.3.1 Cache Lookup in Query Execution
+
+**Task 2.1: Integrate Cache into ExecuteQueryAction**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/action/ExecuteQueryAction.java`
+
+Update query execution to check cache first:
+
+```java
+public class ExecuteQueryAction implements Action<ExecuteQueryRequest, ExecuteQueryResponse> {
+    
+    private final QueryResultCache cache;
+    
+    @Override
+    public ExecuteQueryResponse execute(ExecuteQueryRequest request, ServerSession session) {
+        String sql = request.getSql();
+        List<Object> parameters = request.getParametersList();
+        
+        // Get cache configuration for this session
+        CacheConfiguration cacheConfig = session.getCacheConfig();
+        
+        // Check if query should be cached
+        CacheConfiguration.CacheRule rule = cacheConfig.findMatchingRule(sql);
+        
+        if (rule != null) {
+            // Try to get from cache
+            QueryCacheKey cacheKey = new QueryCacheKey(
+                session.getDatasourceName(),
+                sql,
+                parameters
+            );
+            
+            CachedQueryResult cachedResult = cache.get(cacheKey);
+            
+            if (cachedResult != null) {
+                // Cache HIT - return cached result
+                logger.debug("Returning cached result: datasource={}, sql={}", 
+                    session.getDatasourceName(), sql);
+                
+                return buildResponseFromCache(cachedResult);
+            }
+            
+            // Cache MISS - execute query and cache result
+            logger.debug("Cache miss, executing query: datasource={}, sql={}", 
+                session.getDatasourceName(), sql);
+            
+            ExecuteQueryResponse response = executeQueryOnDatabase(request, session);
+            
+            // Cache the result
+            CachedQueryResult resultToCache = buildCachedResult(
+                response,
+                rule.getTtl(),
+                rule.getInvalidateOn()
+            );
+            
+            cache.put(cacheKey, resultToCache);
+            
+            return response;
+        }
+        
+        // No cache rule matched - execute normally
+        return executeQueryOnDatabase(request, session);
+    }
+    
+    private ExecuteQueryResponse executeQueryOnDatabase(
+            ExecuteQueryRequest request, 
+            ServerSession session) {
+        // Existing query execution logic
+        // ...
+    }
+    
+    private ExecuteQueryResponse buildResponseFromCache(CachedQueryResult cached) {
+        ExecuteQueryResponse.Builder responseBuilder = ExecuteQueryResponse.newBuilder();
+        
+        // Add column metadata
+        for (int i = 0; i < cached.getColumnNames().size(); i++) {
+            responseBuilder.addColumns(ColumnMetadata.newBuilder()
+                .setName(cached.getColumnNames().get(i))
+                .setType(cached.getColumnTypes().get(i))
+                .build());
+        }
+        
+        // Add rows
+        for (List<Object> row : cached.getRows()) {
+            RowData.Builder rowBuilder = RowData.newBuilder();
+            for (Object value : row) {
+                rowBuilder.addValues(convertToProtoValue(value));
+            }
+            responseBuilder.addRows(rowBuilder.build());
+        }
+        
+        return responseBuilder.build();
+    }
+    
+    private CachedQueryResult buildCachedResult(
+            ExecuteQueryResponse response,
+            Duration ttl,
+            List<String> invalidateOn) {
+        
+        // Extract column names and types
+        List<String> columnNames = response.getColumnsList().stream()
+            .map(ColumnMetadata::getName)
+            .toList();
+        
+        List<String> columnTypes = response.getColumnsList().stream()
+            .map(ColumnMetadata::getType)
+            .toList();
+        
+        // Extract rows
+        List<List<Object>> rows = response.getRowsList().stream()
+            .map(row -> row.getValuesList().stream()
+                .map(this::convertFromProtoValue)
+                .toList())
+            .toList();
+        
+        Instant now = Instant.now();
+        
+        return new CachedQueryResult(
+            rows,
+            columnNames,
+            columnTypes,
+            now,
+            now.plus(ttl),
+            Set.copyOf(invalidateOn)
+        );
+    }
+}
+```
+
+**Deliverable:** Updated ExecuteQueryAction with cache integration
+
+---
+
+**Task 2.2: Add Cache Manager to Server**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/OjpServer.java`
+
+Initialize global cache on server startup:
+
+```java
+public class OjpServer {
+    private final QueryResultCache queryCache;
+    
+    public OjpServer(ServerConfiguration config) {
+        // Initialize cache with configured limits
+        int maxCacheSize = config.getInt("ojp.cache.maxSize", 10000);
+        Duration maxAge = Duration.ofHours(config.getInt("ojp.cache.maxAgeHours", 24));
+        
+        this.queryCache = new QueryResultCache(maxCacheSize, maxAge);
+        
+        logger.info("Query cache initialized: maxSize={}, maxAge={}", 
+            maxCacheSize, maxAge);
+    }
+    
+    public QueryResultCache getQueryCache() {
+        return queryCache;
+    }
+}
+```
+
+**Deliverable:** Global cache initialization
+
+---
+
+#### 14.3.2 Integration Testing
+
+**Task 2.3: Create Integration Tests**
+
+Location: `ojp-server/src/test/java/org/openjproxy/cache/QueryCacheIntegrationTest.java`
+
+```java
+@Test
+public void testCacheHitOnRepeatedQuery() {
+    // Given: Cache configuration with rule for products table
+    CacheConfiguration config = createConfigWithProductsRule();
+    
+    // When: Execute same query twice
+    ExecuteQueryResponse response1 = executeQuery("SELECT * FROM products WHERE id = 1", config);
+    ExecuteQueryResponse response2 = executeQuery("SELECT * FROM products WHERE id = 1", config);
+    
+    // Then: Second query should be faster (cache hit)
+    assertThat(response1.getRows()).isEqualTo(response2.getRows());
+    assertThat(cacheStats.getHits()).isEqualTo(1);
+}
+
+@Test
+public void testCacheMissOnDifferentParameters() {
+    // Given: Cache configuration
+    CacheConfiguration config = createConfigWithProductsRule();
+    
+    // When: Execute queries with different parameters
+    executeQuery("SELECT * FROM products WHERE id = 1", config);
+    executeQuery("SELECT * FROM products WHERE id = 2", config);
+    
+    // Then: Both are cache misses (different parameters)
+    assertThat(cacheStats.getMisses()).isEqualTo(2);
+}
+
+@Test
+public void testCacheExpiration() throws InterruptedException {
+    // Given: Cache configuration with short TTL (2 seconds)
+    CacheConfiguration config = createConfigWithShortTtl(Duration.ofSeconds(2));
+    
+    // When: Execute query, wait for expiration, execute again
+    executeQuery("SELECT * FROM products WHERE id = 1", config);
+    Thread.sleep(3000);  // Wait for expiration
+    executeQuery("SELECT * FROM products WHERE id = 1", config);
+    
+    // Then: Second query is cache miss (expired)
+    assertThat(cacheStats.getHits()).isEqualTo(0);
+    assertThat(cacheStats.getMisses()).isEqualTo(2);
+}
+
+@Test
+public void testNoCachingWhenDisabled() {
+    // Given: Cache configuration disabled
+    CacheConfiguration config = new CacheConfiguration(false, false, List.of());
+    
+    // When: Execute same query twice
+    executeQuery("SELECT * FROM products WHERE id = 1", config);
+    executeQuery("SELECT * FROM products WHERE id = 1", config);
+    
+    // Then: Both are executed (no caching)
+    verify(dbConnection, times(2)).prepareStatement(any());
+}
+```
+
+**Deliverable:** Integration test suite covering cache behavior
+
+---
+
+**Task 2.4: Performance Benchmarks**
+
+Create JMH benchmarks to measure cache performance:
+
+```java
+@Benchmark
+public void benchmarkCacheHit(Blackhole blackhole) {
+    // Measure cache hit performance
+    ExecuteQueryResponse response = executeQueryWithCache();
+    blackhole.consume(response);
+}
+
+@Benchmark
+public void benchmarkCacheMiss(Blackhole blackhole) {
+    // Measure cache miss + database query performance
+    cache.invalidateAll();
+    ExecuteQueryResponse response = executeQueryWithCache();
+    blackhole.consume(response);
+}
+
+@Benchmark
+public void benchmarkNoCaching(Blackhole blackhole) {
+    // Baseline: no caching
+    ExecuteQueryResponse response = executeQueryWithoutCache();
+    blackhole.consume(response);
+}
+```
+
+**Deliverable:** Performance benchmarks showing cache effectiveness
+
+---
+
+**Estimated Time for Phase 2:** 2 weeks  
+**Deliverables:**
+- ✅ Cache lookup in ExecuteQueryAction
+- ✅ Cache miss handling and storage
+- ✅ Global cache manager
+- ✅ Integration tests
+- ✅ Performance benchmarks
+- ✅ Documentation
+
+**Success Criteria:**
+- Cache hit rate >60% for repeated queries
+- Cache hit latency <5ms
+- Cache miss overhead <10% vs no caching
+
+---
+
+### 14.4 Phase 3: Write-Through Invalidation (Weeks 5-6)
+
+#### 14.4.1 Table Dependency Analysis
+
+**Task 3.1: Create Table Extractor**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/SqlTableExtractor.java`
+
+```java
+package org.openjproxy.cache;
+
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.delete.Delete;
+import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.util.TablesNamesFinder;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Extracts table names from SQL statements using JSqlParser.
+ */
+public class SqlTableExtractor {
+    
+    /**
+     * Extract tables affected by a DML statement (INSERT, UPDATE, DELETE).
+     */
+    public Set<String> extractAffectedTables(String sql) {
+        try {
+            Statement statement = CCJSqlParserUtil.parse(sql);
+            Set<String> tables = new HashSet<>();
+            
+            if (statement instanceof Insert) {
+                Insert insert = (Insert) statement;
+                tables.add(insert.getTable().getName());
+            } else if (statement instanceof Update) {
+                Update update = (Update) statement;
+                tables.add(update.getTable().getName());
+            } else if (statement instanceof Delete) {
+                Delete delete = (Delete) statement;
+                tables.add(delete.getTable().getName());
+            }
+            
+            // Normalize to uppercase
+            return tables.stream()
+                .map(String::toUpperCase)
+                .collect(Collectors.toSet());
+            
+        } catch (Exception e) {
+            logger.warn("Failed to parse SQL for table extraction: {}", sql, e);
+            return Set.of();
+        }
+    }
+    
+    /**
+     * Extract tables referenced by a SELECT statement.
+     */
+    public Set<String> extractReferencedTables(String sql) {
+        try {
+            Statement statement = CCJSqlParserUtil.parse(sql);
+            TablesNamesFinder tablesNamesFinder = new TablesNamesFinder();
+            List<String> tableList = tablesNamesFinder.getTableList(statement);
+            
+            // Normalize to uppercase
+            return tableList.stream()
+                .map(String::toUpperCase)
+                .collect(Collectors.toSet());
+            
+        } catch (Exception e) {
+            logger.warn("Failed to parse SQL for table extraction: {}", sql, e);
+            return Set.of();
+        }
+    }
+}
+```
+
+**Deliverable:** Table extraction utility with tests
+
+---
+
+**Task 3.2: Integrate Invalidation into ExecuteUpdateAction**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/action/ExecuteUpdateAction.java`
+
+```java
+public class ExecuteUpdateAction implements Action<ExecuteUpdateRequest, ExecuteUpdateResponse> {
+    
+    private final QueryResultCache cache;
+    private final SqlTableExtractor tableExtractor;
+    
+    @Override
+    public ExecuteUpdateResponse execute(ExecuteUpdateRequest request, ServerSession session) {
+        String sql = request.getSql();
+        
+        // Execute the update
+        ExecuteUpdateResponse response = executeUpdateOnDatabase(request, session);
+        
+        // Extract affected tables
+        Set<String> affectedTables = tableExtractor.extractAffectedTables(sql);
+        
+        // Invalidate cache entries that depend on these tables
+        for (String table : affectedTables) {
+            cache.invalidateByTable(session.getDatasourceName(), table);
+            logger.debug("Cache invalidated: datasource={}, table={}", 
+                session.getDatasourceName(), table);
+        }
+        
+        return response;
+    }
+}
+```
+
+**Deliverable:** Automatic cache invalidation on writes
+
+---
+
+**Task 3.3: Add Automatic Table Detection**
+
+Enhance cache rule configuration to support automatic table detection:
+
+```properties
+# Manual table specification
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+
+# Automatic table detection
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users .*
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=AUTO  # Parse SQL to extract tables
+```
+
+Update `CacheConfiguration.CacheRule` to support AUTO:
+
+```java
+public class CacheRule {
+    private final boolean autoDetectTables;
+    
+    public CacheRule(String pattern, Duration ttl, List<String> invalidateOn) {
+        this.patternString = pattern;
+        this.pattern = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE);
+        this.ttl = ttl;
+        
+        // Check if AUTO mode
+        if (invalidateOn.size() == 1 && "AUTO".equals(invalidateOn.get(0))) {
+            this.autoDetectTables = true;
+            this.invalidateOn = List.of();
+        } else {
+            this.autoDetectTables = false;
+            this.invalidateOn = List.copyOf(invalidateOn);
+        }
+    }
+    
+    public boolean isAutoDetectTables() {
+        return autoDetectTables;
+    }
+}
+```
+
+Update caching logic to auto-detect tables:
+
+```java
+// In ExecuteQueryAction
+if (rule.isAutoDetectTables()) {
+    // Auto-detect tables from SQL
+    Set<String> tables = tableExtractor.extractReferencedTables(sql);
+    resultToCache = new CachedQueryResult(..., tables);
+} else {
+    // Use explicit table list
+    resultToCache = new CachedQueryResult(..., Set.copyOf(rule.getInvalidateOn()));
+}
+```
+
+**Deliverable:** Automatic table detection with fallback to manual specification
+
+---
+
+#### 14.3.2 Testing Invalidation
+
+**Task 3.4: Create Invalidation Tests**
+
+```java
+@Test
+public void testCacheInvalidationOnInsert() {
+    // Given: Cached query result for products table
+    executeQuery("SELECT * FROM products WHERE category = 'electronics'", config);
+    assertThat(cacheStats.getHits()).isEqualTo(0);
+    
+    executeQuery("SELECT * FROM products WHERE category = 'electronics'", config);
+    assertThat(cacheStats.getHits()).isEqualTo(1);  // Cache hit
+    
+    // When: Insert new product
+    executeUpdate("INSERT INTO products (id, category) VALUES (100, 'electronics')");
+    
+    // Then: Cache should be invalidated
+    executeQuery("SELECT * FROM products WHERE category = 'electronics'", config);
+    assertThat(cacheStats.getHits()).isEqualTo(1);  // Still 1 (cache miss after invalidation)
+}
+
+@Test
+public void testCacheInvalidationOnUpdate() {
+    // Test UPDATE invalidates cache
+}
+
+@Test
+public void testCacheInvalidationOnDelete() {
+    // Test DELETE invalidates cache
+}
+
+@Test
+public void testNoInvalidationOnDifferentTable() {
+    // Given: Cached query for products table
+    executeQuery("SELECT * FROM products", config);
+    executeQuery("SELECT * FROM products", config);
+    assertThat(cacheStats.getHits()).isEqualTo(1);
+    
+    // When: Update different table (users)
+    executeUpdate("UPDATE users SET name = 'test' WHERE id = 1");
+    
+    // Then: Products cache should NOT be invalidated
+    executeQuery("SELECT * FROM products", config);
+    assertThat(cacheStats.getHits()).isEqualTo(2);  // Still cache hit
+}
+
+@Test
+public void testDatasourceIsolation() {
+    // Given: Two datasources with same table name
+    executeQuery("SELECT * FROM products", configForDatasource1);
+    executeQuery("SELECT * FROM products", configForDatasource2);
+    
+    // When: Update table in datasource1
+    executeUpdate("UPDATE products SET price = 100", datasource1);
+    
+    // Then: Only datasource1 cache should be invalidated
+    executeQuery("SELECT * FROM products", configForDatasource1);  // Cache miss
+    executeQuery("SELECT * FROM products", configForDatasource2);  // Cache hit
+}
+```
+
+**Deliverable:** Comprehensive invalidation test suite
+
+---
+
+**Estimated Time for Phase 3:** 2 weeks  
+**Deliverables:**
+- ✅ SQL table extraction utility
+- ✅ Cache invalidation on DML operations
+- ✅ Automatic table detection (AUTO mode)
+- ✅ Datasource isolation in invalidation
+- ✅ Comprehensive invalidation tests
+
+**Success Criteria:**
+- 100% correct invalidation (no stale data)
+- Datasource isolation working properly
+- Invalidation overhead <5ms per DML operation
+
+---
+
+### 14.5 Phase 4: Monitoring and Observability (Week 7)
+
+#### 14.5.1 Metrics Integration
+
+**Task 4.1: Add Cache Metrics**
+
+Location: `ojp-server/src/main/java/org/openjproxy/cache/CacheMetrics.java`
+
+```java
+package org.openjproxy.cache;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Micrometer metrics for query result cache.
+ */
+public class CacheMetrics {
+    private final MeterRegistry registry;
+    
+    public CacheMetrics(MeterRegistry registry) {
+        this.registry = registry;
+    }
+    
+    public void recordCacheHit(String datasourceName) {
+        registry.counter("ojp.cache.hits", 
+            Tags.of("datasource", datasourceName)).increment();
+    }
+    
+    public void recordCacheMiss(String datasourceName) {
+        registry.counter("ojp.cache.misses", 
+            Tags.of("datasource", datasourceName)).increment();
+    }
+    
+    public void recordCacheEviction(String datasourceName) {
+        registry.counter("ojp.cache.evictions", 
+            Tags.of("datasource", datasourceName)).increment();
+    }
+    
+    public void recordCacheInvalidation(String datasourceName, String tableName, int entriesInvalidated) {
+        registry.counter("ojp.cache.invalidations", 
+            Tags.of("datasource", datasourceName, "table", tableName))
+            .increment(entriesInvalidated);
+    }
+    
+    public void recordCacheSize(String datasourceName, long size) {
+        registry.gauge("ojp.cache.size", 
+            Tags.of("datasource", datasourceName), size);
+    }
+    
+    public void recordCacheSizeBytes(String datasourceName, long bytes) {
+        registry.gauge("ojp.cache.size.bytes", 
+            Tags.of("datasource", datasourceName), bytes);
+    }
+}
+```
+
+Integrate into QueryResultCache:
+
+```java
+public class QueryResultCache {
+    private final CacheMetrics metrics;
+    
+    public CachedQueryResult get(QueryCacheKey key) {
+        CachedQueryResult result = cache.getIfPresent(key);
+        
+        if (result != null && result.isValid()) {
+            metrics.recordCacheHit(key.getDatasourceName());
+            return result;
+        }
+        
+        metrics.recordCacheMiss(key.getDatasourceName());
+        return null;
+    }
+    
+    public void invalidateByTable(String datasourceName, String tableName) {
+        // ... invalidation logic
+        metrics.recordCacheInvalidation(datasourceName, tableName, invalidated);
+    }
+}
+```
+
+**Deliverable:** Comprehensive cache metrics
+
+---
+
+**Task 4.2: Add Cache Statistics Endpoint**
+
+Location: `ojp-server/src/main/java/org/openjproxy/grpc/server/action/GetCacheStatsAction.java`
+
+```java
+/**
+ * gRPC action to retrieve cache statistics.
+ * Useful for monitoring and debugging.
+ */
+public class GetCacheStatsAction implements Action<GetCacheStatsRequest, GetCacheStatsResponse> {
+    
+    private final QueryResultCache cache;
+    
+    @Override
+    public GetCacheStatsResponse execute(GetCacheStatsRequest request, ServerSession session) {
+        QueryResultCache.CacheStats stats = cache.getStats();
+        
+        return GetCacheStatsResponse.newBuilder()
+            .setHits(stats.hits)
+            .setMisses(stats.misses)
+            .setEvictions(stats.evictions)
+            .setSize(stats.size)
+            .setHitRate(stats.hitRate)
+            .build();
+    }
+}
+```
+
+Add to proto:
+
+```protobuf
+message GetCacheStatsRequest {
+    string session_id = 1;
+}
+
+message GetCacheStatsResponse {
+    int64 hits = 1;
+    int64 misses = 2;
+    int64 evictions = 3;
+    int64 size = 4;
+    double hit_rate = 5;
+}
+```
+
+**Deliverable:** Cache statistics API
+
+---
+
+**Task 4.3: Add Logging**
+
+Add structured logging throughout cache operations:
+
+```java
+// Cache hits
+logger.debug("Cache HIT: datasource={}, sql={}, age={}ms", 
+    datasource, sql, ageMillis);
+
+// Cache misses
+logger.debug("Cache MISS: datasource={}, sql={}, reason={}", 
+    datasource, sql, reason);
+
+// Cache invalidations
+logger.info("Cache invalidation: datasource={}, table={}, entries={}, duration={}ms", 
+    datasource, table, entriesInvalidated, durationMillis);
+
+// Cache evictions
+logger.debug("Cache eviction: datasource={}, sql={}, reason={}", 
+    datasource, sql, evictionReason);
+```
+
+**Deliverable:** Comprehensive logging for debugging
+
+---
+
+**Estimated Time for Phase 4:** 1 week  
+**Deliverables:**
+- ✅ Micrometer metrics integration
+- ✅ Cache statistics API
+- ✅ Structured logging
+- ✅ Monitoring dashboard examples
+
+**Success Criteria:**
+- Metrics exported to Prometheus/Grafana
+- Real-time visibility into cache performance
+- Debugging capabilities for cache issues
+
+---
+
+### 14.6 Phase 5: Production Hardening (Weeks 8-9)
+
+#### 14.6.1 Configuration Validation
+
+**Task 5.1: Add Configuration Validation**
+
+Location: `ojp-jdbc-driver/src/main/java/org/openjproxy/jdbc/CacheConfigurationValidator.java`
+
+```java
+public class CacheConfigurationValidator {
+    
+    public static void validate(CacheConfiguration config) throws IllegalArgumentException {
+        if (!config.isEnabled()) {
+            return;  // Nothing to validate if disabled
+        }
+        
+        for (CacheConfiguration.CacheRule rule : config.getRules()) {
+            validateRule(rule);
+        }
+    }
+    
+    private static void validateRule(CacheConfiguration.CacheRule rule) {
+        // Validate pattern is valid regex
+        try {
+            Pattern.compile(rule.getPatternString());
+        } catch (PatternSyntaxException e) {
+            throw new IllegalArgumentException(
+                "Invalid cache rule pattern: " + rule.getPatternString(), e);
+        }
+        
+        // Validate TTL is reasonable
+        long ttlSeconds = rule.getTtl().getSeconds();
+        if (ttlSeconds < 1) {
+            throw new IllegalArgumentException(
+                "Cache TTL must be at least 1 second: " + ttlSeconds);
+        }
+        if (ttlSeconds > 86400) {  // 24 hours
+            logger.warn("Cache TTL very long (>24h): {}s", ttlSeconds);
+        }
+        
+        // Validate table names
+        for (String table : rule.getInvalidateOn()) {
+            if (!isValidTableName(table) && !"AUTO".equals(table)) {
+                throw new IllegalArgumentException(
+                    "Invalid table name: " + table);
+            }
+        }
+    }
+    
+    private static boolean isValidTableName(String name) {
+        // Simple validation: alphanumeric, underscore, hyphen
+        return name.matches("[a-zA-Z0-9_-]+");
+    }
+}
+```
+
+Integrate validation into driver:
+
+```java
+// In OjpConnection.connect()
+CacheConfiguration cacheConfig = CacheConfigurationParser.parse(info, datasourceName);
+
+// Validate before sending to server
+try {
+    CacheConfigurationValidator.validate(cacheConfig);
+} catch (IllegalArgumentException e) {
+    throw new SQLException("Invalid cache configuration: " + e.getMessage(), e);
+}
+
+// Send to server
+// ...
+```
+
+**Deliverable:** Configuration validation with clear error messages
+
+---
+
+**Task 5.2: Add Connection Property Documentation**
+
+Location: `ojp-jdbc-driver/README.md`
+
+Add documentation for cache properties:
+
+```markdown
+### Query Result Caching
+
+OJP supports local query result caching for SELECT statements to improve performance.
+
+#### Configuration
+
+Cache configuration is defined in `ojp.properties` under your datasource:
+
+```properties
+# Enable caching for datasource
+postgres_prod.ojp.cache.enabled=true
+
+# Optional: Enable distributed caching (default: false)
+# Not implemented yet - will be available in future release
+postgres_prod.ojp.cache.distribute=false
+
+# Define cache rules
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE category = .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE id = .*
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=users,user_profiles
+```
+
+#### Pattern Syntax
+
+Patterns use Java regex syntax:
+- `.` matches any character
+- `.*` matches any sequence of characters
+- `\d+` matches one or more digits
+- Case-insensitive matching
+
+#### TTL Format
+
+Time-to-live values support:
+- `s` - seconds (e.g., `300s`)
+- `m` - minutes (e.g., `10m`)
+- `h` - hours (e.g., `2h`)
+- `d` - days (e.g., `1d`)
+
+#### Table Invalidation
+
+Specify tables that should trigger cache invalidation:
+- Explicit list: `invalidateOn=products,categories`
+- Auto-detect: `invalidateOn=AUTO` (parses SQL to find tables)
+
+#### Works with ORMs
+
+Cache configuration works seamlessly with:
+- Hibernate
+- Spring Data JPA
+- MyBatis
+- jOOQ
+- Any framework that uses JDBC
+
+Pattern matching automatically handles ORM-generated SQL.
+```
+
+**Deliverable:** User-facing documentation
+
+---
+
+**Task 5.3: Add Error Handling**
+
+Ensure graceful degradation when cache fails:
+
+```java
+public CachedQueryResult get(QueryCacheKey key) {
+    try {
+        CachedQueryResult result = cache.getIfPresent(key);
+        // ... normal logic
+        return result;
+    } catch (Exception e) {
+        logger.error("Cache lookup failed, falling back to database: {}", 
+            key, e);
+        metrics.recordCacheError(key.getDatasourceName());
+        return null;  // Fall back to database query
+    }
+}
+
+public void put(QueryCacheKey key, CachedQueryResult result) {
+    try {
+        cache.put(key, result);
+        // ... normal logic
+    } catch (Exception e) {
+        logger.error("Cache store failed, continuing without caching: {}", 
+            key, e);
+        metrics.recordCacheError(key.getDatasourceName());
+        // Don't throw - caching is optional
+    }
+}
+```
+
+**Deliverable:** Robust error handling with fallback
+
+---
+
+**Task 5.4: Add Security Considerations**
+
+Implement cache isolation and security:
+
+```java
+/**
+ * Ensures cache isolation between sessions with different permissions.
+ */
+public class SecureCacheKey extends QueryCacheKey {
+    private final String userId;  // Or session security context
+    
+    public SecureCacheKey(String datasource, String sql, List<Object> params, String userId) {
+        super(datasource, sql, params);
+        this.userId = userId;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (!super.equals(o)) return false;
+        SecureCacheKey that = (SecureCacheKey) o;
+        return userId.equals(that.userId);
+    }
+    
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), userId);
+    }
+}
+```
+
+Configuration option:
+
+```properties
+# Enable user-isolation in cache (default: false for performance)
+postgres_prod.ojp.cache.userIsolation=true
+```
+
+**Deliverable:** Security-aware caching with isolation options
+
+---
+
+**Estimated Time for Phase 5:** 2 weeks  
+**Deliverables:**
+- ✅ Configuration validation
+- ✅ Error handling and fallback
+- ✅ User documentation
+- ✅ Security considerations
+- ✅ Production-ready code
+
+**Success Criteria:**
+- Graceful degradation on cache failures
+- Clear error messages for misconfigurations
+- Security review passed
+- Documentation complete
+
+---
+
+### 14.7 Phase 6: Testing and Deployment (Weeks 10-11)
+
+#### 14.7.1 End-to-End Testing
+
+**Task 6.1: Create E2E Test Suite**
+
+```java
+/**
+ * End-to-end tests using real OJP server and JDBC driver.
+ */
+@SpringBootTest
+public class CacheE2ETest {
+    
+    @Test
+    public void testCachingWithHibernate() {
+        // Test: Hibernate-generated queries are cached
+        // Given: Entity with @Cacheable annotation
+        // When: Query entity twice
+        // Then: Second query uses cache
+    }
+    
+    @Test
+    public void testCachingWithSpringDataJPA() {
+        // Test: Spring Data JPA queries are cached
+        // Given: Repository with cache configuration
+        // When: findById() twice
+        // Then: Second call uses cache
+    }
+    
+    @Test
+    public void testCachingWithMyBatis() {
+        // Test: MyBatis queries are cached
+    }
+    
+    @Test
+    public void testMultipleDatasources() {
+        // Test: Multiple datasources with different cache configs
+        // Given: Two datasources (postgres_prod, mysql_analytics)
+        // When: Query both
+        // Then: Each uses its own cache configuration
+    }
+    
+    @Test
+    public void testCacheUnderLoad() {
+        // Test: Cache performs well under concurrent load
+        // Given: 100 concurrent threads
+        // When: Each executes 1000 queries
+        // Then: Cache maintains >80% hit rate
+    }
+}
+```
+
+**Deliverable:** Comprehensive E2E test suite
+
+---
+
+**Task 6.2: Performance Testing**
+
+Create performance tests:
+
+```java
+@Test
+public void testCachePerformanceImprovement() {
+    // Baseline: without cache
+    disableCache();
+    long baselineDuration = measureQueryPerformance(1000);
+    
+    // With cache
+    enableCache();
+    long cachedDuration = measureQueryPerformance(1000);
+    
+    // Verify: At least 5x improvement
+    assertThat(cachedDuration).isLessThan(baselineDuration / 5);
+}
+
+@Test
+public void testCacheMemoryUsage() {
+    // Measure memory usage with cache
+    enableCache();
+    executeQueries(10000);
+    long memoryUsed = measureMemory();
+    
+    // Verify: Memory usage is bounded
+    assertThat(memoryUsed).isLessThan(100_000_000);  // 100MB
+}
+```
+
+**Deliverable:** Performance test suite
+
+---
+
+#### 14.7.2 Documentation
+
+**Task 6.3: Create User Guide**
+
+Location: `documents/QUERY_RESULT_CACHING.md`
+
+```markdown
+# Query Result Caching in OJP
+
+## Overview
+
+OJP supports local query result caching to improve performance for frequently executed SELECT queries.
+
+## Quick Start
+
+### 1. Enable Caching
+
+Add to your `ojp.properties`:
+
+```properties
+# Enable cache for your datasource
+postgres_prod.ojp.cache.enabled=true
+
+# Define cache rules
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+```
+
+### 2. Restart Your Application
+
+Cache configuration is loaded during application startup.
+
+### 3. Verify Caching
+
+Check logs for cache activity:
+```
+INFO  Cache HIT: datasource=postgres_prod, sql=SELECT * FROM products WHERE id = 1
+INFO  Cache MISS: datasource=postgres_prod, sql=SELECT * FROM products WHERE id = 2
+```
+
+Monitor metrics:
+```
+ojp.cache.hits{datasource="postgres_prod"} = 1523
+ojp.cache.misses{datasource="postgres_prod"} = 234
+ojp.cache.hit_rate{datasource="postgres_prod"} = 0.867
+```
+
+## Configuration Reference
+
+[Detailed configuration options...]
+
+## Best Practices
+
+[Recommendations for cache rules, TTL selection, etc...]
+
+## Troubleshooting
+
+[Common issues and solutions...]
+```
+
+**Deliverable:** Complete user guide
+
+---
+
+**Task 6.4: Create Operations Guide**
+
+Location: `documents/CACHE_OPERATIONS.md`
+
+```markdown
+# Operating Query Result Cache in Production
+
+## Monitoring
+
+### Key Metrics to Watch
+
+- `ojp.cache.hit_rate` - Should be >60% for effective caching
+- `ojp.cache.size` - Should stay below max configured size
+- `ojp.cache.evictions` - High eviction rate indicates cache too small
+- `ojp.cache.invalidations` - High rate indicates frequent writes
+
+### Alerts
+
+Recommended alerts:
+- Cache hit rate drops below 40%
+- Cache size exceeds 80% of maximum
+- Eviction rate exceeds 10/second
+
+## Tuning
+
+### Adjusting Cache Size
+
+If you see high eviction rates, increase cache size:
+
+```properties
+# In ojp-server.yml (applies to all datasources on server)
+ojp.cache.maxSize=20000  # Default: 10000
+```
+
+### Adjusting TTL
+
+Balance between freshness and cache hit rate:
+- Short TTL (60s): Fresh data, lower hit rate
+- Medium TTL (600s): Good balance for most cases
+- Long TTL (3600s): Maximum performance, use for rarely-changing data
+
+### Pattern Optimization
+
+Make patterns as specific as possible:
+- ✅ Good: `SELECT .* FROM products WHERE category = .*`
+- ❌ Too broad: `SELECT .*` (caches everything)
+
+## Troubleshooting
+
+[Common issues and solutions...]
+```
+
+**Deliverable:** Operations guide for production
+
+---
+
+**Estimated Time for Phase 6:** 2 weeks  
+**Deliverables:**
+- ✅ E2E test suite with ORMs
+- ✅ Performance testing
+- ✅ User guide
+- ✅ Operations guide
+- ✅ Production readiness review
+
+**Success Criteria:**
+- All E2E tests passing
+- Performance targets met
+- Documentation complete
+- Production deployment checklist ready
+
+---
+
+### 14.8 Phase 7: Production Deployment (Week 12)
+
+#### 14.8.1 Gradual Rollout
+
+**Task 7.1: Pilot Deployment**
+
+Deploy to a single non-critical application:
+
+```
+Week 12, Day 1-2: Pilot
+1. Select pilot application (low-risk, high-benefit)
+2. Add cache configuration to ojp.properties
+3. Deploy pilot application with caching enabled
+4. Monitor for 48 hours
+5. Verify:
+   - No errors or exceptions
+   - Cache hit rate >60%
+   - Query latency improved
+   - No stale data issues
+```
+
+**Deliverable:** Pilot deployment with monitoring
+
+---
+
+**Task 7.2: Production Rollout**
+
+Gradual rollout to production:
+
+```
+Week 12, Day 3-5: Production Rollout
+1. Day 3: Deploy to 10% of applications
+2. Day 4: Deploy to 50% of applications
+3. Day 5: Deploy to 100% of applications
+
+At each stage:
+- Monitor cache metrics
+- Check for errors
+- Verify performance improvement
+- Roll back if issues detected
+```
+
+**Deliverable:** Production deployment across all applications
+
+---
+
+**Task 7.3: Post-Deployment Review**
+
+After 1 week in production:
+
+```
+Review Checklist:
+□ Cache hit rate meets targets (>60%)
+□ No stale data incidents
+□ Performance improvement measurable
+□ Error rate unchanged
+□ Memory usage acceptable
+□ Team trained on cache operations
+```
+
+**Deliverable:** Post-deployment review and lessons learned
+
+---
+
+**Estimated Time for Phase 7:** 1 week  
+**Deliverables:**
+- ✅ Pilot deployment successful
+- ✅ Production rollout complete
+- ✅ Post-deployment review
+- ✅ Team training
+
+**Success Criteria:**
+- Cache running in production without issues
+- Measurable performance improvement
+- Team confident operating cache
+
+---
+
+### 14.9 Summary Timeline
+
+| Phase | Duration | Focus | Key Deliverables |
+|-------|----------|-------|------------------|
+| **Phase 1** | Weeks 1-2 | Foundation | Core data structures, config parsing, proto updates |
+| **Phase 2** | Weeks 3-4 | Integration | Cache lookup in query execution, cache storage |
+| **Phase 3** | Weeks 5-6 | Invalidation | Write-through invalidation, table detection |
+| **Phase 4** | Week 7 | Observability | Metrics, statistics API, logging |
+| **Phase 5** | Weeks 8-9 | Hardening | Validation, error handling, documentation |
+| **Phase 6** | Weeks 10-11 | Testing | E2E tests, performance tests, production prep |
+| **Phase 7** | Week 12 | Deployment | Pilot, rollout, review |
+
+**Total Timeline:** 12 weeks (3 months) to production
+
+---
+
+### 14.10 Resource Requirements
+
+#### 14.10.1 Team
+
+**Minimum Team:**
+- 1 Senior Java Developer (full-time) - Core implementation
+- 1 DevOps Engineer (part-time) - Deployment and monitoring
+- 1 QA Engineer (part-time) - Testing
+- 1 Tech Lead (oversight) - Code review and architecture decisions
+
+**Recommended Team:**
+- 2 Senior Java Developers - Parallel development (driver + server)
+- 1 DevOps Engineer (full-time) - Monitoring, deployment
+- 1 QA Engineer (full-time) - Comprehensive testing
+- 1 Tech Lead - Architecture and oversight
+
+#### 14.10.2 Skills Required
+
+- Strong Java development (collections, concurrency, patterns)
+- gRPC and Protocol Buffers
+- JDBC driver internals
+- SQL parsing (JSqlParser)
+- Regex pattern matching
+- Micrometer metrics
+- Unit and integration testing
+- ORM knowledge (Hibernate, Spring Data)
+
+#### 14.10.3 Dependencies
+
+**Required Libraries:**
+- `com.github.ben-manes.caffeine:caffeine:3.1.8` - High-performance cache
+- `com.github.jsqlparser:jsqlparser:4.7` - SQL parsing for table extraction
+- `io.micrometer:micrometer-core:1.16.3` - Metrics (already in OJP)
+- JUnit 5 - Testing (already in OJP)
+- Mockito - Mocking (already in OJP)
+
+**No new infrastructure required** - uses existing OJP components.
+
+---
+
+### 14.11 Risk Mitigation
+
+#### 14.11.1 Technical Risks
+
+| Risk | Mitigation |
+|------|------------|
+| **Cache causes stale data** | Write-through invalidation + comprehensive tests |
+| **Memory exhaustion** | Bounded cache size, monitoring alerts |
+| **Performance regression** | Benchmarks, performance tests, gradual rollout |
+| **Pattern matching errors** | Configuration validation, clear error messages |
+| **ORM compatibility issues** | E2E tests with all major ORMs |
+
+#### 14.11.2 Operational Risks
+
+| Risk | Mitigation |
+|------|------------|
+| **Production incidents** | Graceful degradation, rollback plan, pilot deployment |
+| **Configuration errors** | Validation, clear documentation, examples |
+| **Monitoring blind spots** | Comprehensive metrics, logging, statistics API |
+| **Team knowledge gaps** | Documentation, training, runbooks |
+
+---
+
+### 14.12 Success Metrics
+
+**Performance Metrics:**
+- ✅ Cache hit rate >60% for repeated queries
+- ✅ Cache hit latency <5ms
+- ✅ Overall query latency reduced by >30% for cacheable queries
+- ✅ Database load reduced by >40% for cacheable queries
+
+**Operational Metrics:**
+- ✅ Zero incidents related to stale data
+- ✅ Cache memory usage <100MB per OJP server
+- ✅ Configuration errors detected before runtime
+- ✅ Deployment completed without downtime
+
+**Business Metrics:**
+- ✅ Database costs reduced by 20-40%
+- ✅ Application response time improved by >30%
+- ✅ User satisfaction improved
+- ✅ ROI positive within 3 months
+
+---
+
+### 14.13 Future Enhancements (Post Phase 7)
+
+After successful local caching deployment, consider these enhancements:
+
+#### 14.13.1 Distributed Cache Coordination (Phase 8)
+
+**When to implement:**
+- Multiple OJP servers deployed
+- Shared query patterns across servers
+- Database load still high despite local caching
+
+**Approach:** JDBC Driver as Active Relay
+- Leverage data already in driver memory
+- Distribute cache to other OJP servers
+- Smart distribution policy (small results, long TTL)
+
+**Timeline:** 4-6 weeks after Phase 7
+
+#### 14.13.2 Advanced Features (Phase 9+)
+
+Optional enhancements for specific use cases:
+- Semantic query analysis with Calcite (query equivalence)
+- Cache warming/preloading (predictive caching)
+- Query result compression (reduce memory usage)
+- Per-user cache isolation (security)
+- Cache statistics dashboard (UI)
+
+**Timeline:** As needed based on requirements
+
+---
+
+### 14.14 Decision Points
+
+#### 14.14.1 When to Proceed to Next Phase
+
+Before moving to each phase, verify:
+
+**Before Phase 2:**
+- ✅ All Phase 1 tests passing
+- ✅ Code review completed
+- ✅ Performance benchmarks baseline established
+
+**Before Phase 3:**
+- ✅ Phase 2 integration tests passing
+- ✅ Cache hit/miss working correctly
+- ✅ No performance regressions
+
+**Before Phase 4:**
+- ✅ Invalidation tests all passing (100% correctness)
+- ✅ No stale data in any test scenario
+- ✅ Datasource isolation verified
+
+**Before Phase 5:**
+- ✅ Metrics integrated and working
+- ✅ Monitoring dashboard created
+- ✅ Observability sufficient for debugging
+
+**Before Phase 6:**
+- ✅ All hardening tasks complete
+- ✅ Security review passed
+- ✅ Configuration validation robust
+
+**Before Phase 7:**
+- ✅ All E2E tests passing
+- ✅ Performance targets met
+- ✅ Documentation complete
+- ✅ Team trained
+
+#### 14.14.2 When to Implement Distributed Caching
+
+Implement distributed cache (JDBC Driver Relay) if:
+- ✅ Local caching successfully deployed
+- ✅ Multiple OJP servers in production
+- ✅ Cache hit rate on each server is good but overall database load still high
+- ✅ Query patterns are shared across servers (same queries on different servers)
+- ✅ Team has capacity for additional complexity
+
+**Don't implement distributed caching if:**
+- ❌ Local caching not yet stable
+- ❌ Single OJP server deployment
+- ❌ Queries are unique per server (no benefit from distribution)
+- ❌ Database load is acceptable with local caching
+
+---
+
+### 14.15 Checklist for Implementation
+
+#### Phase 1: Foundation
+- [ ] Create QueryCacheKey class
+- [ ] Create CachedQueryResult class
+- [ ] Create CacheConfiguration classes
+- [ ] Create QueryResultCache class
+- [ ] Create CacheConfigurationParser
+- [ ] Update proto file (ConnectRequest)
+- [ ] Update ServerSession to store cache config
+- [ ] Update connection handler (OjpServiceImpl)
+- [ ] Update JDBC driver to send cache config
+- [ ] Create test fixtures
+- [ ] Write unit tests (>90% coverage)
+
+#### Phase 2: Query Execution Integration
+- [ ] Integrate cache into ExecuteQueryAction
+- [ ] Implement cache lookup logic
+- [ ] Implement cache storage logic
+- [ ] Add cache manager to OjpServer
+- [ ] Create integration tests
+- [ ] Create performance benchmarks
+
+#### Phase 3: Write-Through Invalidation
+- [ ] Create SqlTableExtractor utility
+- [ ] Integrate invalidation into ExecuteUpdateAction
+- [ ] Implement automatic table detection (AUTO mode)
+- [ ] Add datasource isolation in invalidation
+- [ ] Create invalidation test suite
+
+#### Phase 4: Monitoring and Observability
+- [ ] Add Micrometer metrics integration
+- [ ] Create cache statistics API
+- [ ] Add structured logging
+- [ ] Create monitoring dashboard examples
+
+#### Phase 5: Production Hardening
+- [ ] Add configuration validation
+- [ ] Implement error handling and fallback
+- [ ] Create user documentation
+- [ ] Add security considerations (user isolation option)
+- [ ] Production readiness review
+
+#### Phase 6: Testing and Deployment
+- [ ] Create E2E test suite (Hibernate, Spring Data, MyBatis)
+- [ ] Create performance test suite
+- [ ] Create user guide
+- [ ] Create operations guide
+- [ ] Production deployment checklist
+
+#### Phase 7: Production Deployment
+- [ ] Pilot deployment (single application)
+- [ ] Monitor pilot for 48 hours
+- [ ] Gradual production rollout (10% → 50% → 100%)
+- [ ] Post-deployment review
+- [ ] Team training
+
+---
+
+### 14.16 Example Configuration for Common Scenarios
+
+#### 14.16.1 E-Commerce Application
+
+```properties
+# ojp.properties for e-commerce app
+postgres_prod.ojp.cache.enabled=true
+
+# Product catalog (changes infrequently)
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE category = .*
+postgres_prod.ojp.cache.queries.1.ttl=600s
+postgres_prod.ojp.cache.queries.1.invalidateOn=products
+
+# Product details (changes infrequently)
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM products WHERE id = .*
+postgres_prod.ojp.cache.queries.2.ttl=600s
+postgres_prod.ojp.cache.queries.2.invalidateOn=products
+
+# User profiles (moderate changes)
+postgres_prod.ojp.cache.queries.3.pattern=SELECT .* FROM users WHERE id = .*
+postgres_prod.ojp.cache.queries.3.ttl=300s
+postgres_prod.ojp.cache.queries.3.invalidateOn=users
+
+# Shopping cart items (frequent changes)
+# DON'T CACHE - use database directly
+```
+
+#### 14.16.2 Analytics Application
+
+```properties
+# ojp.properties for analytics app
+mysql_analytics.ojp.cache.enabled=true
+
+# Report data (expensive queries, infrequent changes)
+mysql_analytics.ojp.cache.queries.1.pattern=SELECT .* FROM report_.*
+mysql_analytics.ojp.cache.queries.1.ttl=1800s
+mysql_analytics.ojp.cache.queries.1.invalidateOn=AUTO
+
+# Aggregated metrics (very expensive, changes daily)
+mysql_analytics.ojp.cache.queries.2.pattern=SELECT .* FROM daily_metrics .*
+mysql_analytics.ojp.cache.queries.2.ttl=3600s
+mysql_analytics.ojp.cache.queries.2.invalidateOn=daily_metrics
+
+# Dashboard queries (real-time not required)
+mysql_analytics.ojp.cache.queries.3.pattern=SELECT COUNT.* FROM .*
+mysql_analytics.ojp.cache.queries.3.ttl=600s
+mysql_analytics.ojp.cache.queries.3.invalidateOn=AUTO
+```
+
+#### 14.16.3 Multi-Tenant SaaS Application
+
+```properties
+# ojp.properties for multi-tenant app
+postgres_prod.ojp.cache.enabled=true
+
+# Note: Cache keys include parameters, so tenant_id in WHERE clause
+# ensures cache isolation between tenants automatically
+
+# Tenant configuration (rarely changes)
+postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM tenant_config WHERE tenant_id = .*
+postgres_prod.ojp.cache.queries.1.ttl=1800s
+postgres_prod.ojp.cache.queries.1.invalidateOn=tenant_config
+
+# Tenant users (moderate changes)
+postgres_prod.ojp.cache.queries.2.pattern=SELECT .* FROM users WHERE tenant_id = .* AND .*
+postgres_prod.ojp.cache.queries.2.ttl=300s
+postgres_prod.ojp.cache.queries.2.invalidateOn=users
+
+# Optional: Enable user-level isolation for security
+postgres_prod.ojp.cache.userIsolation=true
+```
+
+---
+
+### 14.17 Cost-Benefit Analysis
+
+#### 14.17.1 Development Cost
+
+**Total effort:** 12 weeks (3 months)
+- 1 Senior Java Developer × 12 weeks = 480 hours
+- 1 QA Engineer × 6 weeks = 240 hours  
+- 1 DevOps Engineer × 4 weeks = 160 hours
+- 1 Tech Lead × 3 weeks (oversight) = 120 hours
+
+**Total:** ~1000 hours (~6 person-months)
+
+#### 14.17.2 Benefits
+
+**Performance Benefits:**
+- Query latency reduced by 30-80% for cacheable queries
+- Database load reduced by 40-70%
+- Application response time improved
+- Better user experience
+
+**Cost Benefits:**
+- Database costs reduced (fewer queries = lower compute)
+- Potential to defer database scaling
+- Reduced database licensing costs (for commercial DBs)
+- Lower cloud infrastructure costs
+
+**Example ROI:**
+```
+Scenario: E-commerce application with 1M queries/day
+- 60% cache hit rate
+- Average query time reduced from 50ms to 5ms
+- Database load reduced by 60%
+
+Savings:
+- Database instance costs: $500/month → $200/month ($300/month saved)
+- Response time improvement: 45ms average (better UX)
+- Database scaling deferred: $2000 one-time cost avoided
+
+ROI: Positive within 3-6 months
+```
+
+---
+
+### 14.18 Conclusion
+
+This phased implementation plan provides a **clear, actionable roadmap** for implementing local query result caching in OJP. 
+
+**Key Points:**
+1. **Start simple**: Local caching only (no distributed coordination yet)
+2. **Follow existing patterns**: Client-side configuration in `ojp.properties`
+3. **Iterative approach**: Each phase builds on the previous
+4. **Production-ready**: Comprehensive testing, monitoring, documentation
+5. **Low risk**: Gradual rollout with rollback capability
+
+**Next Steps:**
+1. Review and approve this implementation plan
+2. Assemble team and allocate resources
+3. Begin Phase 1 implementation
+4. **After successful local caching**: Consider distributed cache coordination (JDBC Driver Relay)
+
+**Distributed caching (JDBC Driver Relay) is intentionally excluded** from this plan and can be implemented as Phase 8+ after local caching is proven successful in production.
+
+---
+
 ### 13.5 Implementation Priority
 
 **Phase 1: Local Caching (Immediate Value)**
