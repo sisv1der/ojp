@@ -12,22 +12,20 @@ import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.*;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
-import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
 import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
 
 import java.sql.PreparedStatement;
-import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
+import static org.openjproxy.grpc.server.action.transaction.CommandExecutionHelper.executeWithResilience;
 
 /**
  * Action to execute SQL update statements (INSERT, UPDATE, DELETE).
@@ -78,7 +76,8 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                     OpResult result = executeUpdateInternal(context, request);
                     responseObserver.onNext(result);
                     responseObserver.onCompleted();
-                });
+                },
+                SqlErrorType.SQL_EXCEPTION, UPDATE);
     }
 
     /**
@@ -264,135 +263,5 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                 log.error("Failure closing connection: {}", e.getMessage(), e);
             }
         }
-    }
-
-    /**
-     * Helper method to centralize session validation, activity updates, cluster
-     * health processing, circuit breaker checks, and slow query segregation for
-     * statement execution. This resolves SonarQube duplication issues.
-     *
-     * @param context          the action context
-     * @param request          the statement request
-     * @param responseObserver the response observer for error reporting
-     * @param executionLogic   the logic to execute (e.g., update or query)
-     */
-    private void executeWithResilience(ActionContext context, StatementRequest request,
-                                       StreamObserver<OpResult> responseObserver,
-                                       StatementExecution executionLogic) {
-
-        // Ensure session isn't null
-        if (StringUtils.isBlank(request.getSession().getConnHash())) {
-            sendSQLExceptionMetadata(new SQLException("Invalid request: Session or ConnHash is missing"),
-                    responseObserver);
-            log.error("Invalid {} request: Session or ConnHash is missing", UPDATE);
-            return;
-        }
-
-        // Update session activity
-        updateSessionActivity(context, request.getSession());
-
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
-        // Process cluster health from the request
-        ProcessClusterHealthAction.getInstance().execute(context, request.getSession());
-
-        String connHash = request.getSession().getConnHash();
-        CircuitBreaker circuitBreaker = context.getCircuitBreakerRegistry().get(connHash);
-
-        // Get the appropriate slow query segregation manager for this datasource
-        SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(context, connHash);
-        long sqlStartMs = System.currentTimeMillis();
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Execute with slow query segregation, passing actual SQL for metric labelling
-            manager.executeWithSegregation(stmtHash, request.getSql(), () -> {
-                executionLogic.execute();
-                return null;
-            });
-
-            circuitBreaker.onSuccess(stmtHash);
-
-        } catch (SQLDataException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL data failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-
-            sendSQLExceptionMetadata(e, responseObserver, SqlErrorType.SQL_DATA_EXCEPTION);
-
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        } finally {
-            // Record SQL execution time for all connections (XA and non-XA) regardless of
-            // manager state. This is the single authoritative place for SQL metrics.
-            String sql = request.getSql();
-            if (!sql.isEmpty()) {
-                long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
-                context.getSqlStatementMetrics().recordSqlExecution(
-                        sql, executionTimeMs, manager.isSlowOperation(stmtHash));
-            }
-        }
-    }
-
-    /**
-     * Updates the last activity time for the session to prevent premature cleanup.
-     * This should be called at the beginning of any method that operates on a
-     * session.
-     *
-     * @param context     the action context with session manager
-     * @param sessionInfo the session information
-     */
-    private void updateSessionActivity(ActionContext context, SessionInfo sessionInfo) {
-        if (sessionInfo != null && !sessionInfo.getSessionUUID().isEmpty()) {
-            context.getSessionManager().updateSessionActivity(sessionInfo);
-        }
-    }
-
-    /**
-     * Gets the slow query segregation manager for a specific connection hash.
-     * If no manager exists, creates a disabled one as a fallback.
-     *
-     * @param context  the action context with segregation managers
-     * @param connHash the connection hash to look up
-     * @return the slow query segregation manager for the connection
-     */
-    private SlowQuerySegregationManager getSlowQuerySegregationManagerForConnection(ActionContext context,
-                                                                                    String connHash) {
-        var slowQuerySegregationManagers = context.getSlowQuerySegregationManagers();
-
-        SlowQuerySegregationManager manager = slowQuerySegregationManagers.get(connHash);
-        if (manager == null) {
-            log.warn("No SlowQuerySegregationManager found for connection hash {}, creating disabled fallback",
-                    connHash);
-            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false);
-            slowQuerySegregationManagers.put(connHash, manager);
-        }
-        return manager;
-    }
-
-    /**
-     * Functional interface for statement execution logic, used by
-     * {@link #executeWithResilience} to wrap the actual update/query execution.
-     */
-    @SuppressWarnings("java:S112")
-    @FunctionalInterface
-    private interface StatementExecution {
-        /**
-         * Executes the statement logic.
-         */
-        void execute() throws Exception;
     }
 }
