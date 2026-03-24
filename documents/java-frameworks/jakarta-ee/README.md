@@ -1,10 +1,14 @@
-# Jakarta EE (GlassFish 7)
+# Jakarta EE
 
-OJP integrates with Jakarta EE applications running on GlassFish 7 (Jakarta EE 10) without any
-framework-specific adapter. The standard `ojp-jdbc-driver` artifact is all you need; GlassFish
-loads it as any other JDBC driver.
+OJP integrates with Jakarta EE applications running on any compliant application server—GlassFish,
+Payara, WildFly, Open Liberty, TomEE, and others. No framework-specific adapter is required;
+the standard `ojp-jdbc-driver` artifact is all you need.
 
-> **Requirements:** GlassFish 7, Jakarta EE 10, Java 21+.
+The examples in this guide use **GlassFish 7** (the reference implementation of Jakarta EE 10),
+but the same principle applies to any Jakarta EE server—only the server-specific datasource
+configuration differs.
+
+> **Requirements:** Jakarta EE 10 compatible server, Java 21+ (Java 17+ for Jakarta EE 10 in general).
 > A complete working example is available at
 > [ojp-framework-integration / glassfish/shopservice](https://github.com/Open-J-Proxy/ojp-framework-integration/tree/main/glassfish/shopservice).
 
@@ -12,15 +16,17 @@ loads it as any other JDBC driver.
 
 ## How it works
 
-Unlike embedded-server frameworks (Spring Boot, Quarkus, Micronaut), GlassFish applications:
+Jakarta EE applications are commonly deployed to an **application server** (GlassFish, Payara,
+WildFly, Open Liberty, TomEE, etc.). Traditionally these applications are packaged as **WAR files**
+deployed to an external server. Note that modern versions of **Eclipse GlassFish** (7+) also
+support an **embedded / fat-JAR deployment model**, so a WAR file is no longer strictly required.
+The examples in this guide use the traditional WAR + external GlassFish server approach, which
+is the most common production setup, but the OJP integration principle is identical for embedded
+deployments.
 
-* Are packaged as **WAR files** deployed to the server.
-* Have **no `main()` method**; the entry point is a `@ApplicationPath`-annotated `Application`
-  subclass.
-* Configure datasources at the **server level** via `WEB-INF/glassfish-resources.xml` (or the
-  GlassFish admin console / `asadmin` CLI), not in an `application.properties` file.
-* Use **EclipseLink** as the default JPA provider (the Jakarta EE RI).
-* Use **CDI + JTA** for dependency injection and transaction management.
+Unlike embedded-server frameworks, datasources in a Jakarta EE application server are typically
+declared at the **server level** and accessed by applications through **JNDI**. Jakarta EE uses
+**CDI + JTA** for dependency injection and transaction management.
 
 The OJP integration principle remains the same: disable client-side connection pooling so that
 OJP can manage all pooling centrally on the proxy server.
@@ -132,54 +138,13 @@ in `glassfish-resources.xml`.
 
 ## 4. Use CDI and JAX-RS as usual
 
-No OJP-specific code is needed in your application. Use standard Jakarta EE APIs:
+No OJP-specific code is needed in your application. Use standard Jakarta EE APIs with CDI
+repositories, JAX-RS resources, and JPA entities as you normally would. OJP is completely
+transparent at the business logic layer.
 
-```java
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.transaction.Transactional;
-
-@ApplicationScoped
-public class UserRepository {
-
-    @PersistenceContext(unitName = "myapp")
-    private EntityManager em;
-
-    @Transactional
-    public User create(User user) {
-        em.persist(user);
-        return user;
-    }
-
-    public User findById(Long id) {
-        return em.find(User.class, id);
-    }
-}
-```
-
-```java
-import jakarta.inject.Inject;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.*;
-
-@Path("/users")
-@RequestScoped
-public class UserResource {
-
-    @Inject
-    private UserRepository repository;
-
-    @GET
-    @Path("/{id}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response getUser(@PathParam("id") Long id) {
-        User user = repository.findById(id);
-        if (user == null) return Response.status(Response.Status.NOT_FOUND).build();
-        return Response.ok(user).build();
-    }
-}
-```
+For a complete working example with full CRUD resources, CDI repositories, and JPA entities, see
+the [ojp-framework-integration / glassfish/shopservice](https://github.com/Open-J-Proxy/ojp-framework-integration/tree/main/glassfish/shopservice)
+demo application.
 
 ---
 
@@ -357,22 +322,6 @@ proxy classes without `WELD-001524` errors. Add these to your `maven-surefire-pl
     </configuration>
 </plugin>
 ```
-
----
-
-## Key differences from other frameworks
-
-| Aspect | Spring Boot | Quarkus | Micronaut | **GlassFish / Jakarta EE** |
-|---|---|---|---|---|
-| Packaging | Fat JAR | Fast JAR / native | Fat JAR | **WAR → deployed to GlassFish** |
-| Entry point | `SpringApplication.run()` | CDI start | Micronaut start | **`@ApplicationPath` subclass** |
-| DI | Spring `@Autowired` | Quarkus CDI | Micronaut `@Inject` | **CDI 4 `@Inject` (standard)** |
-| REST | `@RestController` | JAX-RS / RESTEasy | `@Controller` | **JAX-RS / Jersey (standard)** |
-| JPA provider | Hibernate | Hibernate + Panache | Hibernate | **EclipseLink (standard RI)** |
-| Transactions | Spring `@Transactional` | CDI `@Transactional` | CDI `@Transactional` | **CDI / JTA `@Transactional`** |
-| Datasource config | `application.properties` | `application.properties` | `application.properties` | **`glassfish-resources.xml` (JNDI)** |
-| Local pool disabled by | `SimpleDriverDataSource` | `unpooled=true` | Custom `DataSource` factory | **`steady-pool-size=0`, `max-connection-usage-count=1`** |
-| Test framework | Spring Boot Test | `@QuarkusTest` | `@MicronautTest` | **Arquillian + GlassFish Embedded** |
 
 ---
 
