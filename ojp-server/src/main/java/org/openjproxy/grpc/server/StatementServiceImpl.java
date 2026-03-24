@@ -341,15 +341,192 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         }
 
         List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
+        
+        // Phase 7: Wrap response observer for cache storage (if caching enabled)
+        StreamObserver<OpResult> finalObserver = responseObserver;
+        org.openjproxy.grpc.server.cache.CacheRule matchedCacheRule = null;
+        org.openjproxy.grpc.server.cache.QueryCacheKey finalCacheKey = null;
+        String finalDatasourceName = null;
+        
+        if (cacheConfig != null && cacheConfig.isEnabled()) {
+            matchedCacheRule = cacheConfig.findMatchingRule(sql);
+            if (matchedCacheRule != null && matchedCacheRule.isEnabled()) {
+                // Prepare for caching after query execution
+                List<Parameter> cacheParams = params != null ? params : List.of();
+                List<Object> cacheParamValues = cacheParams.stream()
+                        .map(Parameter::getValue)
+                        .toList();
+                finalDatasourceName = dto.getSession().getConnHash();
+                finalCacheKey = new org.openjproxy.grpc.server.cache.QueryCacheKey(
+                        finalDatasourceName, sql, cacheParamValues);
+                
+                // Wrap observer to capture results for caching
+                finalObserver = new CachingStreamObserver(
+                        responseObserver,
+                        finalCacheKey,
+                        matchedCacheRule,
+                        finalDatasourceName);
+            }
+        }
+        
         if (CollectionUtils.isNotEmpty(params)) {
             PreparedStatement ps = StatementFactory.createPreparedStatement(sessionManager, dto, sql, params, request);
             String resultSetUUID = this.sessionManager.registerResultSet(dto.getSession(), ps.executeQuery());
-            handleResultSet(actionContext, dto.getSession(), resultSetUUID, responseObserver);
+            handleResultSet(actionContext, dto.getSession(), resultSetUUID, finalObserver);
         } else {
             Statement stmt = StatementFactory.createStatement(sessionManager, dto.getConnection(), request);
             String resultSetUUID = this.sessionManager.registerResultSet(dto.getSession(),
                     stmt.executeQuery(sql));
-            handleResultSet(actionContext, dto.getSession(), resultSetUUID, responseObserver);
+            handleResultSet(actionContext, dto.getSession(), resultSetUUID, finalObserver);
+        }
+    }
+    
+    /**
+     * StreamObserver wrapper that intercepts query results for caching.
+     * <p>
+     * Forwards all calls to the wrapped observer immediately (no delay for client),
+     * and stores the first OpResult in cache after successful query completion.
+     * </p>
+     */
+    private static class CachingStreamObserver implements StreamObserver<OpResult> {
+        private final StreamObserver<OpResult> delegate;
+        private final org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey;
+        private final org.openjproxy.grpc.server.cache.CacheRule cacheRule;
+        private final String datasourceName;
+        private OpResult capturedResult = null;
+        private static final long MAX_CACHE_SIZE_BYTES = 200 * 1024; // 200KB
+        
+        public CachingStreamObserver(
+                StreamObserver<OpResult> delegate,
+                org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey,
+                org.openjproxy.grpc.server.cache.CacheRule cacheRule,
+                String datasourceName) {
+            this.delegate = delegate;
+            this.cacheKey = cacheKey;
+            this.cacheRule = cacheRule;
+            this.datasourceName = datasourceName;
+        }
+        
+        @Override
+        public void onNext(OpResult value) {
+            // Forward immediately to client (no delay)
+            delegate.onNext(value);
+            
+            // Capture first result for caching (if not already captured)
+            if (capturedResult == null && value.hasQueryResult()) {
+                capturedResult = value;
+            }
+        }
+        
+        @Override
+        public void onError(Throwable t) {
+            // Query failed - don't cache, forward error
+            delegate.onError(t);
+        }
+        
+        @Override
+        public void onCompleted() {
+            // Forward completion to client first
+            delegate.onCompleted();
+            
+            // Then attempt to cache the result (if captured)
+            if (capturedResult != null) {
+                try {
+                    storeToCacheIfEligible();
+                } catch (Exception e) {
+                    // Log but don't fail - caching is best-effort
+                    log.warn("Failed to store result in cache: datasource={}, error={}", 
+                            datasourceName, e.getMessage());
+                }
+            }
+        }
+        
+        private void storeToCacheIfEligible() {
+            com.openjproxy.grpc.QueryResult queryResult = capturedResult.getQueryResult();
+            
+            // Check if result is empty
+            if (queryResult.getRowsCount() == 0) {
+                log.debug("Empty result set, not caching: datasource={}", datasourceName);
+                return;
+            }
+            
+            // Extract column names
+            List<String> columnNames = new ArrayList<>();
+            for (com.openjproxy.grpc.ColumnMetadata col : queryResult.getColumnsList()) {
+                columnNames.add(col.getName());
+            }
+            
+            // Extract rows
+            List<List<Object>> rows = new ArrayList<>();
+            for (com.openjproxy.grpc.Row row : queryResult.getRowsList()) {
+                List<Object> rowValues = new ArrayList<>();
+                for (com.openjproxy.grpc.Value val : row.getValuesList()) {
+                    rowValues.add(convertProtoValueToObject(val));
+                }
+                rows.add(rowValues);
+            }
+            
+            // Estimate size
+            long estimatedSize = estimateResultSize(rows, columnNames);
+            if (estimatedSize > MAX_CACHE_SIZE_BYTES) {
+                log.debug("Result too large to cache: size={}KB, max={}KB, datasource={}", 
+                        estimatedSize / 1024, MAX_CACHE_SIZE_BYTES / 1024, datasourceName);
+                return;
+            }
+            
+            // Build CachedQueryResult
+            java.time.Instant now = java.time.Instant.now();
+            java.time.Duration ttl = cacheRule.getTtl();
+            java.util.Set<String> affectedTables = new java.util.HashSet<>(cacheRule.getInvalidateOn());
+            
+            // Column types - extract from metadata or use generic
+            List<String> columnTypes = new ArrayList<>();
+            for (com.openjproxy.grpc.ColumnMetadata col : queryResult.getColumnsList()) {
+                columnTypes.add(col.getType() != null ? col.getType() : "VARCHAR");
+            }
+            
+            org.openjproxy.grpc.server.cache.CachedQueryResult cachedResult = 
+                    new org.openjproxy.grpc.server.cache.CachedQueryResult(
+                            rows, columnNames, columnTypes, now, now.plus(ttl), affectedTables);
+            
+            // Store in cache
+            org.openjproxy.grpc.server.cache.QueryResultCacheRegistry registry = 
+                    org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance();
+            org.openjproxy.grpc.server.cache.QueryResultCache cache = 
+                    registry.getOrCreate(datasourceName);
+            
+            cache.put(cacheKey, cachedResult);
+            
+            log.debug("Stored in cache: datasource={}, rows={}, size={}KB", 
+                    datasourceName, rows.size(), estimatedSize / 1024);
+        }
+        
+        private Object convertProtoValueToObject(com.openjproxy.grpc.Value val) {
+            if (val.hasStringVal()) return val.getStringVal();
+            if (val.hasIntVal()) return val.getIntVal();
+            if (val.hasLongVal()) return val.getLongVal();
+            if (val.hasDoubleVal()) return val.getDoubleVal();
+            if (val.hasBoolVal()) return val.getBoolVal();
+            if (val.hasBytesVal()) return val.getBytesVal().toByteArray();
+            return null;
+        }
+        
+        private long estimateResultSize(List<List<Object>> rows, List<String> columnNames) {
+            long size = columnNames.size() * 50L; // Column names overhead
+            for (List<Object> row : rows) {
+                for (Object val : row) {
+                    if (val == null) {
+                        size += 8;
+                    } else if (val instanceof String str) {
+                        size += str.length() * 2L;
+                    } else if (val instanceof byte[] bytes) {
+                        size += bytes.length;
+                    } else {
+                        size += 16; // Primitive or small object
+                    }
+                }
+            }
+            return size;
         }
     }
 
