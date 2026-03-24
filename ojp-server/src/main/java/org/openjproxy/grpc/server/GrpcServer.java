@@ -61,11 +61,16 @@ public class GrpcServer {
         }
 
         // Build server with configuration
-        SessionManagerImpl sessionManager = new SessionManagerImpl();
+        // Create shared cache configuration map for session-level caching
+        java.util.Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap = 
+            new java.util.concurrent.ConcurrentHashMap<>();
+        
+        SessionManagerImpl sessionManager = new SessionManagerImpl(cacheConfigurationMap);
         final StatementServiceImpl statementService = new StatementServiceImpl(
                 sessionManager,
                 new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold()),
-                config
+                config,
+                cacheConfigurationMap
         );
         
         NettyServerBuilder serverBuilder = NettyServerBuilder

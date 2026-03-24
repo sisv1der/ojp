@@ -101,8 +101,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // Per-datasource slow query segregation managers
     private final Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers = new ConcurrentHashMap<>();
     
-    // Per-datasource cache configurations
-    private final Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap = new ConcurrentHashMap<>();
+    // Per-datasource cache configurations (shared with SessionManager)
+    private final Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap;
 
     // SQL Enhancer Engine for query optimization
     private final org.openjproxy.grpc.server.sql.SqlEnhancerEngine sqlEnhancerEngine;
@@ -126,9 +126,12 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
     public StatementServiceImpl(SessionManager sessionManager, CircuitBreaker circuitBreaker,
-            ServerConfiguration serverConfiguration) {
+            ServerConfiguration serverConfiguration,
+            Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap) {
         this.sessionManager = sessionManager;
         this.circuitBreaker = circuitBreaker;
+        this.cacheConfigurationMap = cacheConfigurationMap != null ? cacheConfigurationMap : new ConcurrentHashMap<>();
+        
         // Server configuration for creating segregation managers
         this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
                 serverConfiguration.isSqlEnhancerEnabled());
@@ -142,7 +145,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 unpooledConnectionDetailsMap,
                 dbNameMap,
                 slowQuerySegregationManagers,
-                cacheConfigurationMap,
+                this.cacheConfigurationMap,
                 xaPoolProvider,
                 xaCoordinator,
                 clusterHealthTracker,

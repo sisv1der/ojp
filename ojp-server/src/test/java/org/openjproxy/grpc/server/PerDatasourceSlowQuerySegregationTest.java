@@ -31,7 +31,7 @@ class PerDatasourceSlowQuerySegregationTest {
         SessionManager sessionManager = mock(SessionManager.class);
         CircuitBreaker circuitBreaker = mock(CircuitBreaker.class);
 
-        statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration);
+        statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration, new java.util.concurrent.ConcurrentHashMap<>());
     }
 
     @Test
