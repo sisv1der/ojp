@@ -13,6 +13,9 @@ import org.openjproxy.grpc.server.*;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
+import org.openjproxy.grpc.server.cache.QueryResultCache;
+import org.openjproxy.grpc.server.cache.QueryResultCacheRegistry;
+import org.openjproxy.grpc.server.cache.SqlTableExtractor;
 import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
@@ -25,6 +28,7 @@ import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
@@ -137,7 +141,12 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                 updated = stmt.executeUpdate(request.getSql());
             }
 
-            return buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
+            OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
+            
+            // Phase 9: Invalidate cache after successful update
+            invalidateCacheIfEnabled(dto.getSession(), request.getSql());
+            
+            return result;
         } finally {
             closeStatementAndConnectionIfNoSession(dto, stmt);
         }
@@ -381,6 +390,53 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             slowQuerySegregationManagers.put(connHash, manager);
         }
         return manager;
+    }
+
+    /**
+     * Invalidates the cache after a successful database update.
+     * Extracts modified tables from the SQL and invalidates all cache entries
+     * that depend on those tables for the given datasource.
+     * <p>
+     * This method never throws exceptions - cache invalidation failures are logged
+     * but do not affect the update operation.
+     *
+     * @param session the session containing cache configuration (may be null)
+     * @param sql     the SQL statement that was executed
+     */
+    private void invalidateCacheIfEnabled(Session session, String sql) {
+        if (session == null || session.getCacheConfiguration() == null) {
+            return;  // Caching not enabled for this session
+        }
+        
+        try {
+            // Extract tables modified by this SQL statement
+            Set<String> modifiedTables = SqlTableExtractor.extractModifiedTables(sql);
+            
+            if (modifiedTables.isEmpty()) {
+                log.debug("No tables extracted from SQL, skipping cache invalidation: sql={}", 
+                    sql.substring(0, Math.min(50, sql.length())));
+                return;
+            }
+            
+            // Get datasource name (use connection hash as datasource identifier)
+            String datasourceName = session.getConnectionHash();
+            
+            // Get cache for this datasource
+            QueryResultCache cache = QueryResultCacheRegistry.getInstance().get(datasourceName);
+            
+            if (cache != null) {
+                log.debug("Invalidating cache: datasource={}, tables={}, sql={}", 
+                    datasourceName, modifiedTables, sql.substring(0, Math.min(50, sql.length())));
+                
+                // Invalidate cache entries for these tables
+                cache.invalidate(datasourceName, modifiedTables);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to invalidate cache after update: sql={}, error={}", 
+                sql.substring(0, Math.min(50, sql.length())), e.getMessage());
+            // Don't fail the update if cache invalidation fails - this is best-effort
+        }
     }
 
     /**
