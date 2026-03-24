@@ -245,8 +245,54 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         
         ConnectionSessionDTO dto = sessionConnection(actionContext, request.getSession(), true);
 
-        // Phase 2: SQL Enhancement with timing
+        // Phase 6: Cache Lookup (before query execution)
         String sql = request.getSql();
+        org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
+                dto.getSession().getCacheConfiguration();
+        
+        if (cacheConfig != null && cacheConfig.isEnabled()) {
+            // Check if this query matches any cache rules
+            org.openjproxy.grpc.server.cache.CacheRule matchedRule = cacheConfig.findMatchingRule(sql);
+            
+            if (matchedRule != null && matchedRule.isEnabled()) {
+                // Extract parameters for cache key
+                List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
+                List<Object> cacheParams = params != null ? 
+                        params.stream().map(Parameter::getValue).toList() : List.of();
+                
+                // Build cache key (datasource from connection hash)
+                String datasourceName = dto.getSession().getConnHash();
+                org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey = 
+                        new org.openjproxy.grpc.server.cache.QueryCacheKey(
+                                datasourceName, sql, cacheParams);
+                
+                // Try to get from cache
+                org.openjproxy.grpc.server.cache.QueryResultCacheRegistry cacheRegistry = 
+                        org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance();
+                org.openjproxy.grpc.server.cache.QueryResultCache cache = 
+                        cacheRegistry.getOrCreate(datasourceName);
+                
+                org.openjproxy.grpc.server.cache.CachedQueryResult cachedResult = cache.get(cacheKey);
+                
+                if (cachedResult != null && !cachedResult.isExpired()) {
+                    // CACHE HIT - Return cached result
+                    log.debug("Cache HIT: datasource={}, sql={}", datasourceName, 
+                            sql.substring(0, Math.min(sql.length(), 50)));
+                    
+                    OpResult result = org.openjproxy.grpc.server.cache.CachedResultHandler
+                            .convertToOpResult(cachedResult);
+                    responseObserver.onNext(result);
+                    responseObserver.onCompleted();
+                    return;  // Skip database execution
+                } else {
+                    // CACHE MISS - Continue to database execution
+                    log.debug("Cache MISS: datasource={}, sql={}", datasourceName,
+                            sql.substring(0, Math.min(sql.length(), 50)));
+                }
+            }
+        }
+
+        // Phase 2: SQL Enhancement with timing
         long enhancementStartTime = System.currentTimeMillis();
 
         if (sqlEnhancerEngine.isEnabled()) {
