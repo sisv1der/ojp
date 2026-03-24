@@ -213,6 +213,37 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
                 return;
             }
         }
+        
+        // Convert and store cache configuration
+        if (connectionDetails.hasCacheConfig()) {
+            try {
+                // Extract datasource name from URL
+                String datasourceName = extractDatasourceName(connectionDetails.getUrl());
+                if (datasourceName == null) {
+                    datasourceName = "default";
+                }
+                
+                org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
+                    org.openjproxy.grpc.server.cache.CacheConfigurationConverter.fromProto(
+                        connectionDetails.getCacheConfig(), 
+                        datasourceName);
+                
+                context.getCacheConfigurationMap().put(connHash, cacheConfig);
+                
+                if (cacheConfig.isEnabled()) {
+                    log.info("Cache configuration stored for connHash '{}': {} rules, distribute={}", 
+                        connHash, cacheConfig.getRules().size(), cacheConfig.isDistribute());
+                } else {
+                    log.debug("Cache configuration disabled for connHash '{}'", connHash);
+                }
+            } catch (Exception e) {
+                log.error("Failed to convert cache configuration for connHash '{}': {}", 
+                    connHash, e.getMessage());
+                // Continue without cache - caching will be disabled for this connection
+            }
+        } else {
+            log.debug("No cache configuration provided for connHash '{}'", connHash);
+        }
 
         context.getSessionManager().registerClientUUID(connHash, connectionDetails.getClientUUID());
 
@@ -229,5 +260,36 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
         context.getDbNameMap().put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
 
         responseObserver.onCompleted();
+    }
+    
+    /**
+     * Extract datasource name from OJP URL.
+     * Format: jdbc:ojp[host:port(datasourceName)]_actualJdbcUrl
+     *
+     * @param url OJP JDBC URL
+     * @return datasource name or null if not found
+     */
+    private String extractDatasourceName(String url) {
+        if (url == null || !url.startsWith("jdbc:ojp")) {
+            return null;
+        }
+        
+        // Look for pattern: [host:port(datasourceName)]
+        int startBracket = url.indexOf('[');
+        int endBracket = url.indexOf(']');
+        
+        if (startBracket < 0 || endBracket < 0 || endBracket <= startBracket) {
+            return null;
+        }
+        
+        String hostPortSection = url.substring(startBracket + 1, endBracket);
+        int startParen = hostPortSection.indexOf('(');
+        int endParen = hostPortSection.indexOf(')');
+        
+        if (startParen < 0 || endParen < 0 || endParen <= startParen) {
+            return null;
+        }
+        
+        return hostPortSection.substring(startParen + 1, endParen);
     }
 }

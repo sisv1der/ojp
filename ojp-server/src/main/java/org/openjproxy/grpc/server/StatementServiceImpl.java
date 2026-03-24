@@ -100,6 +100,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     // Per-datasource slow query segregation managers
     private final Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers = new ConcurrentHashMap<>();
+    
+    // Per-datasource cache configurations
+    private final Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap = new ConcurrentHashMap<>();
 
     // SQL Enhancer Engine for query optimization
     private final org.openjproxy.grpc.server.sql.SqlEnhancerEngine sqlEnhancerEngine;
@@ -139,6 +142,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 unpooledConnectionDetailsMap,
                 dbNameMap,
                 slowQuerySegregationManagers,
+                cacheConfigurationMap,
                 xaPoolProvider,
                 xaCoordinator,
                 clusterHealthTracker,

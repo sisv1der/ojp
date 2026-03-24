@@ -105,6 +105,20 @@ public class Driver implements java.sql.Driver {
             log.debug("Loaded ojp.properties with {} properties for dataSource: {}", ojpProperties.size(), dataSourceName);
         }
         
+        // Build and add cache configuration
+        try {
+            com.openjproxy.grpc.CacheConfiguration cacheConfig = 
+                CacheConfigurationBuilder.buildCacheConfiguration(dataSourceName);
+            connBuilder.setCacheConfig(cacheConfig);
+            if (cacheConfig.getEnabled()) {
+                log.info("Cache configuration added for datasource '{}': {} rules, distribute={}", 
+                    dataSourceName, cacheConfig.getRulesCount(), cacheConfig.getDistribute());
+            }
+        } catch (Exception e) {
+            log.error("Failed to build cache configuration for datasource '{}': {}", dataSourceName, e.getMessage());
+            // Continue without cache configuration - caching will be disabled
+        }
+        
         log.info("Calling connect() on statement service with URL: {}", connectionUrl);
         SessionInfo sessionInfo;
         try {

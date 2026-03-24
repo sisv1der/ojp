@@ -75,6 +75,14 @@ public class ActionContext {
      */
     private final Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers;
     
+    /**
+     * Map of connection hash to CacheConfiguration.
+     * Stores cache configuration for each datasource connection.
+     * Key: connection hash
+     * Value: cache configuration for query result caching
+     */
+    private final Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap;
+    
     // ========== XA Pool Provider ==========
     
     /**
@@ -126,6 +134,7 @@ public class ActionContext {
             Map<String, UnpooledConnectionDetails> unpooledConnectionDetailsMap,
             Map<String, DbName> dbNameMap,
             Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers,
+            Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap,
             XAConnectionPoolProvider xaPoolProvider,
             MultinodeXaCoordinator xaCoordinator,
             ClusterHealthTracker clusterHealthTracker,
@@ -139,6 +148,7 @@ public class ActionContext {
         this.unpooledConnectionDetailsMap = unpooledConnectionDetailsMap;
         this.dbNameMap = dbNameMap;
         this.slowQuerySegregationManagers = slowQuerySegregationManagers;
+        this.cacheConfigurationMap = cacheConfigurationMap;
         this.xaPoolProvider = xaPoolProvider;
         this.xaCoordinator = xaCoordinator;
         this.clusterHealthTracker = clusterHealthTracker;
@@ -171,6 +181,10 @@ public class ActionContext {
     
     public Map<String, SlowQuerySegregationManager> getSlowQuerySegregationManagers() {
         return slowQuerySegregationManagers;
+    }
+    
+    public Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> getCacheConfigurationMap() {
+        return cacheConfigurationMap;
     }
     
     public XAConnectionPoolProvider getXaPoolProvider() {

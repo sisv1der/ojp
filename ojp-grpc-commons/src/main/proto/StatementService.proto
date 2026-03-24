@@ -16,6 +16,22 @@ message ConnectionDetails {
     bool isXA = 7;  // Flag to indicate XA connection
     repeated string serverEndpoints = 8;  // List of server endpoints in the cluster for coordination
     string clusterHealth = 9;  // Cluster health status (e.g., "localhost:10591(UP);localhost:10592(DOWN)")
+    CacheConfiguration cacheConfig = 10;  // Cache configuration for query result caching
+}
+
+// Cache configuration for query result caching
+message CacheConfiguration {
+    bool enabled = 1;  // Whether caching is enabled for this datasource
+    bool distribute = 2;  // Whether to distribute cache across OJP servers (false for local-only)
+    repeated CacheRule rules = 3;  // Ordered list of cache rules
+}
+
+// Single cache rule for query result caching
+message CacheRule {
+    string sqlPattern = 1;  // Regex pattern to match SQL queries
+    int64 ttlSeconds = 2;  // Time-to-live in seconds
+    repeated string invalidateOn = 3;  // Table names that trigger invalidation
+    bool enabled = 4;  // Whether this rule is enabled
 }
 
 // Enum representing parameter types for JDBC
