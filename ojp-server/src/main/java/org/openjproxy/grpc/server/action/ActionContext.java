@@ -9,6 +9,7 @@ import org.openjproxy.grpc.server.ServerConfiguration;
 import org.openjproxy.grpc.server.SlowQuerySegregationManager;
 import org.openjproxy.grpc.server.UnpooledConnectionDetails;
 import org.openjproxy.grpc.server.metrics.SqlStatementMetrics;
+import org.openjproxy.grpc.server.sql.SqlEnhancerEngine;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
@@ -19,7 +20,6 @@ import java.util.Map;
 /**
  * ActionContext holds all shared state and dependencies needed by Action classes.
  * This context is created once in StatementServiceImpl and passed to all actions.
- * 
  * Thread Safety: This class is thread-safe. All maps are ConcurrentHashMap.
  * Actions should not modify the context itself, only the data within the maps.
  */
@@ -133,6 +133,11 @@ public class ActionContext {
      */
     private final SqlStatementMetrics sqlStatementMetrics;
 
+    /**
+     *  SQL enhancer engine for parsing and enhancing SQL statements.
+     */
+    private final SqlEnhancerEngine sqlEnhancerEngine;
+
     // ========== Constructors ==========
     
     public ActionContext(
@@ -149,7 +154,7 @@ public class ActionContext {
             SessionManager sessionManager,
             CircuitBreakerRegistry circuitBreakerRegistry,
             ServerConfiguration serverConfiguration,
-            SqlStatementMetrics sqlStatementMetrics) {
+            SqlStatementMetrics sqlStatementMetrics, SqlEnhancerEngine sqlEnhancerEngine) {
         
         this.datasourceMap = datasourceMap;
         this.xaDataSourceMap = xaDataSourceMap;
@@ -165,6 +170,7 @@ public class ActionContext {
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.serverConfiguration = serverConfiguration;
         this.sqlStatementMetrics = sqlStatementMetrics;
+        this.sqlEnhancerEngine = sqlEnhancerEngine;
     }
     
     // ========== Getters ==========
@@ -228,5 +234,9 @@ public class ActionContext {
 
     public SqlStatementMetrics getSqlStatementMetrics() {
         return sqlStatementMetrics;
+    }
+
+    public SqlEnhancerEngine getSqlEnhancerEngine() {
+        return sqlEnhancerEngine;
     }
 }

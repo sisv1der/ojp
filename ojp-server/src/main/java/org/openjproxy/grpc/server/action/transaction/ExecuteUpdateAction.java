@@ -12,26 +12,20 @@ import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.*;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
-import org.openjproxy.grpc.server.action.util.ProcessClusterHealthAction;
-import org.openjproxy.grpc.server.cache.QueryResultCache;
-import org.openjproxy.grpc.server.cache.QueryResultCacheRegistry;
-import org.openjproxy.grpc.server.cache.SqlTableExtractor;
 import org.openjproxy.grpc.server.sql.SqlSessionAffinityDetector;
 import org.openjproxy.grpc.server.statement.ParameterHandler;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
 
 import java.sql.PreparedStatement;
-import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 import static org.openjproxy.grpc.server.action.streaming.SessionConnectionHelper.sessionConnection;
+import static org.openjproxy.grpc.server.action.transaction.CommandExecutionHelper.executeWithResilience;
 
 /**
  * Action to execute SQL update statements (INSERT, UPDATE, DELETE).
@@ -82,7 +76,8 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                     OpResult result = executeUpdateInternal(context, request);
                     responseObserver.onNext(result);
                     responseObserver.onCompleted();
-                });
+                },
+                SqlErrorType.SQL_EXCEPTION, UPDATE);
     }
 
     /**
@@ -143,7 +138,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
 
             OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
             
-            // Phase 9: Invalidate cache after successful update
+            // Phase 9: Cache Invalidation (after successful update)
             invalidateCacheIfEnabled(dto.getSession(), request.getSql());
             
             return result;
@@ -274,181 +269,47 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             }
         }
     }
-
+    
     /**
-     * Helper method to centralize session validation, activity updates, cluster
-     * health processing, circuit breaker checks, and slow query segregation for
-     * statement execution. This resolves SonarQube duplication issues.
-     *
-     * @param context          the action context
-     * @param request          the statement request
-     * @param responseObserver the response observer for error reporting
-     * @param executionLogic   the logic to execute (e.g., update or query)
-     */
-    private void executeWithResilience(ActionContext context, StatementRequest request,
-                                       StreamObserver<OpResult> responseObserver,
-                                       StatementExecution executionLogic) {
-
-        // Ensure session isn't null
-        if (StringUtils.isBlank(request.getSession().getConnHash())) {
-            sendSQLExceptionMetadata(new SQLException("Invalid request: Session or ConnHash is missing"),
-                    responseObserver);
-            log.error("Invalid {} request: Session or ConnHash is missing", UPDATE);
-            return;
-        }
-
-        // Update session activity
-        updateSessionActivity(context, request.getSession());
-
-        String stmtHash = SqlStatementXXHash.hashSqlQuery(request.getSql());
-        // Process cluster health from the request
-        ProcessClusterHealthAction.getInstance().execute(context, request.getSession());
-
-        String connHash = request.getSession().getConnHash();
-        CircuitBreaker circuitBreaker = context.getCircuitBreakerRegistry().get(connHash);
-
-        // Get the appropriate slow query segregation manager for this datasource
-        SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(context, connHash);
-        long sqlStartMs = System.currentTimeMillis();
-        try {
-            circuitBreaker.preCheck(stmtHash);
-
-            // Execute with slow query segregation, passing actual SQL for metric labelling
-            manager.executeWithSegregation(stmtHash, request.getSql(), () -> {
-                executionLogic.execute();
-                return null;
-            });
-
-            circuitBreaker.onSuccess(stmtHash);
-
-        } catch (SQLDataException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL data failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-
-            sendSQLExceptionMetadata(e, responseObserver, SqlErrorType.SQL_DATA_EXCEPTION);
-
-        } catch (SQLException e) {
-            circuitBreaker.onFailure(stmtHash, e);
-            log.error("SQL failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-        } catch (Exception e) {
-            log.error("Unexpected failure during {} execution: {}",
-                    UPDATE, e.getMessage(), e);
-            if (e.getCause() instanceof SQLException sqlException) {
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            } else {
-                SQLException sqlException = new SQLException("Unexpected error: " + e.getMessage(), e);
-                circuitBreaker.onFailure(stmtHash, sqlException);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-            }
-        } finally {
-            // Record SQL execution time for all connections (XA and non-XA) regardless of
-            // manager state. This is the single authoritative place for SQL metrics.
-            String sql = request.getSql();
-            if (!sql.isEmpty()) {
-                long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
-                context.getSqlStatementMetrics().recordSqlExecution(
-                        sql, executionTimeMs, manager.isSlowOperation(stmtHash));
-            }
-        }
-    }
-
-    /**
-     * Updates the last activity time for the session to prevent premature cleanup.
-     * This should be called at the beginning of any method that operates on a
-     * session.
-     *
-     * @param context     the action context with session manager
-     * @param sessionInfo the session information
-     */
-    private void updateSessionActivity(ActionContext context, SessionInfo sessionInfo) {
-        if (sessionInfo != null && !sessionInfo.getSessionUUID().isEmpty()) {
-            context.getSessionManager().updateSessionActivity(sessionInfo);
-        }
-    }
-
-    /**
-     * Gets the slow query segregation manager for a specific connection hash.
-     * If no manager exists, creates a disabled one as a fallback.
-     *
-     * @param context  the action context with segregation managers
-     * @param connHash the connection hash to look up
-     * @return the slow query segregation manager for the connection
-     */
-    private SlowQuerySegregationManager getSlowQuerySegregationManagerForConnection(ActionContext context,
-                                                                                    String connHash) {
-        var slowQuerySegregationManagers = context.getSlowQuerySegregationManagers();
-
-        SlowQuerySegregationManager manager = slowQuerySegregationManagers.get(connHash);
-        if (manager == null) {
-            log.warn("No SlowQuerySegregationManager found for connection hash {}, creating disabled fallback",
-                    connHash);
-            manager = new SlowQuerySegregationManager(1, 0, 0, 0, 0, 0, false);
-            slowQuerySegregationManagers.put(connHash, manager);
-        }
-        return manager;
-    }
-
-    /**
-     * Invalidates the cache after a successful database update.
-     * Extracts modified tables from the SQL and invalidates all cache entries
-     * that depend on those tables for the given datasource.
+     * Invalidates cache entries for tables modified by the SQL statement.
      * <p>
-     * This method never throws exceptions - cache invalidation failures are logged
-     * but do not affect the update operation.
+     * Phase 9: Write Invalidation - Extracts modified tables from SQL and invalidates
+     * cached query results that depend on those tables.
+     * </p>
      *
-     * @param session the session containing cache configuration (may be null)
-     * @param sql     the SQL statement that was executed
+     * @param session the session containing cache configuration
+     * @param sql     the SQL statement that modified data
      */
-    private void invalidateCacheIfEnabled(Session session, String sql) {
+    private void invalidateCacheIfEnabled(SessionInfo session, String sql) {
         if (session == null || session.getCacheConfiguration() == null) {
-            return;  // Caching not enabled for this session
+            return;  // Caching not enabled
         }
         
         try {
-            // Extract tables modified by this SQL statement
-            Set<String> modifiedTables = SqlTableExtractor.extractModifiedTables(sql);
+            // Extract modified tables from SQL
+            java.util.Set<String> modifiedTables = 
+                    org.openjproxy.grpc.server.cache.SqlTableExtractor.extractModifiedTables(sql);
             
             if (modifiedTables.isEmpty()) {
-                log.debug("No tables extracted from SQL, skipping cache invalidation: sql={}", 
-                    sql.substring(0, Math.min(50, sql.length())));
+                log.debug("No tables extracted from SQL, skipping cache invalidation");
                 return;
             }
             
-            // Get datasource name (use connection hash as datasource identifier)
-            String datasourceName = session.getConnectionHash();
-            
-            // Get cache for this datasource
-            QueryResultCache cache = QueryResultCacheRegistry.getInstance().get(datasourceName);
+            // Get datasource and cache
+            String datasourceName = session.getConnHash();
+            org.openjproxy.grpc.server.cache.QueryResultCache cache = 
+                    org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance()
+                    .get(datasourceName);
             
             if (cache != null) {
-                log.debug("Invalidating cache: datasource={}, tables={}, sql={}", 
-                    datasourceName, modifiedTables, sql.substring(0, Math.min(50, sql.length())));
-                
-                // Invalidate cache entries for these tables
+                log.debug("Invalidating cache: datasource={}, tables={}", 
+                        datasourceName, modifiedTables);
                 cache.invalidate(datasourceName, modifiedTables);
             }
             
         } catch (Exception e) {
-            log.warn("Failed to invalidate cache after update: sql={}, error={}", 
-                sql.substring(0, Math.min(50, sql.length())), e.getMessage());
-            // Don't fail the update if cache invalidation fails - this is best-effort
+            // Log but don't fail the update - caching is best-effort
+            log.warn("Failed to invalidate cache: error={}", e.getMessage());
         }
-    }
-
-    /**
-     * Functional interface for statement execution logic, used by
-     * {@link #executeWithResilience} to wrap the actual update/query execution.
-     */
-    @SuppressWarnings("java:S112")
-    @FunctionalInterface
-    private interface StatementExecution {
-        /**
-         * Executes the statement logic.
-         */
-        void execute() throws Exception;
     }
 }
