@@ -228,6 +228,26 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
                         connectionDetails.getPropertiesList(), 
                         datasourceName);
                 
+                // Validate cache configuration
+                if (cacheConfig.isEnabled()) {
+                    org.openjproxy.grpc.server.cache.CacheConfigurationValidator.ValidationResult validation = 
+                        org.openjproxy.grpc.server.cache.CacheConfigurationValidator.validate(cacheConfig);
+                    
+                    // Log warnings
+                    for (String warning : validation.getWarnings()) {
+                        log.warn("Cache configuration warning for connHash '{}': {}", connHash, warning);
+                    }
+                    
+                    // Check for errors
+                    if (!validation.isValid()) {
+                        String errorMsg = "Invalid cache configuration: " + String.join("; ", validation.getErrors());
+                        log.error("Cache configuration rejected for connHash '{}': {}", connHash, errorMsg);
+                        // Disable caching but allow connection
+                        cacheConfig = new org.openjproxy.grpc.server.cache.CacheConfiguration(
+                            datasourceName, false, java.util.List.of());
+                    }
+                }
+                
                 context.getCacheConfigurationMap().put(connHash, cacheConfig);
                 
                 if (cacheConfig.isEnabled()) {
