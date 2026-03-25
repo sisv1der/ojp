@@ -10,7 +10,6 @@ import java.util.Objects;
 public final class CacheConfiguration {
     private final String datasourceName;
     private final boolean enabled;
-    private final boolean distribute;  // For future use (always false for local-only caching)
     private final List<CacheRule> rules;  // Ordered by priority (first match wins)
 
     /**
@@ -18,13 +17,11 @@ public final class CacheConfiguration {
      *
      * @param datasourceName the datasource name
      * @param enabled whether caching is enabled for this datasource
-     * @param distribute whether to distribute cache to other servers (always false for Phase 1)
      * @param rules ordered list of cache rules (first match wins)
      */
-    public CacheConfiguration(String datasourceName, boolean enabled, boolean distribute, List<CacheRule> rules) {
+    public CacheConfiguration(String datasourceName, boolean enabled, List<CacheRule> rules) {
         this.datasourceName = Objects.requireNonNull(datasourceName, "datasourceName must not be null");
         this.enabled = enabled;
-        this.distribute = distribute;
         this.rules = rules == null ? List.of() : List.copyOf(rules);
     }
 
@@ -35,7 +32,7 @@ public final class CacheConfiguration {
      * @return disabled configuration
      */
     public static CacheConfiguration disabled(String datasourceName) {
-        return new CacheConfiguration(datasourceName, false, false, List.of());
+        return new CacheConfiguration(datasourceName, false, List.of());
     }
 
     /**
@@ -67,15 +64,6 @@ public final class CacheConfiguration {
         return enabled;
     }
 
-    /**
-     * Checks if cache distribution is enabled (always false for Phase 1).
-     *
-     * @return true if distribution is enabled
-     */
-    public boolean isDistribute() {
-        return distribute;
-    }
-
     public String getDatasourceName() {
         return datasourceName;
     }
@@ -103,7 +91,6 @@ public final class CacheConfiguration {
         return "CacheConfiguration{" +
             "datasource='" + datasourceName + '\'' +
             ", enabled=" + enabled +
-            ", distribute=" + distribute +
             ", ruleCount=" + rules.size() +
             '}';
     }

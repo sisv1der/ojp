@@ -1,91 +1,66 @@
 package org.openjproxy.jdbc;
 
-import com.openjproxy.grpc.CacheConfiguration;
-import com.openjproxy.grpc.CacheRule;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * Builds CacheConfiguration proto message from System properties.
+ * Adds cache configuration properties to connection properties map.
  * 
- * <p>Expected properties format:
+ * <p>Properties format (added to existing properties):
  * <pre>
- * datasourceName.ojp.cache.enabled=true
- * datasourceName.ojp.cache.distribute=false
- * datasourceName.ojp.cache.queries.1.pattern=SELECT .* FROM products.*
- * datasourceName.ojp.cache.queries.1.ttl=600s
- * datasourceName.ojp.cache.queries.1.invalidateOn=products,product_prices
- * datasourceName.ojp.cache.queries.2.pattern=SELECT .* FROM users.*
- * datasourceName.ojp.cache.queries.2.ttl=300s
- * datasourceName.ojp.cache.queries.2.invalidateOn=users
+ * ojp.cache.enabled=true
+ * ojp.cache.queries.1.pattern=SELECT .* FROM products.*
+ * ojp.cache.queries.1.ttl=600s
+ * ojp.cache.queries.1.invalidateOn=products,product_prices
+ * ojp.cache.queries.2.pattern=SELECT .* FROM users.*
+ * ojp.cache.queries.2.ttl=300s
+ * ojp.cache.queries.2.invalidateOn=users
  * </pre>
+ * 
+ * <p>These properties are sent via ConnectionDetails.properties field and parsed on the server side.
  */
 @Slf4j
 public class CacheConfigurationBuilder {
     
     /**
-     * Build CacheConfiguration proto message from System properties for a given datasource.
+     * Add cache configuration properties to the properties map.
+     * Reads cache configuration from System properties and adds them to the connection properties.
      *
+     * @param propertiesMap The properties map to add cache configuration to
      * @param datasourceName The datasource name to build configuration for
-     * @return CacheConfiguration proto message
      */
-    public static CacheConfiguration buildCacheConfiguration(String datasourceName) {
+    public static void addCachePropertiesToMap(Map<String, Object> propertiesMap, String datasourceName) {
         String prefix = datasourceName + ".ojp.cache.";
         
         // Check if caching is enabled
-        boolean enabled = Boolean.parseBoolean(
-            System.getProperty(prefix + "enabled", "false")
-        );
-        
-        if (!enabled) {
+        String enabledValue = System.getProperty(prefix + "enabled");
+        if (enabledValue == null || !Boolean.parseBoolean(enabledValue)) {
             log.debug("Caching disabled for datasource: {}", datasourceName);
-            return CacheConfiguration.newBuilder()
-                .setEnabled(false)
-                .setDistribute(false)
-                .build();
+            return;
         }
         
-        // Check if distribution is enabled (default: false for local-only)
-        boolean distribute = Boolean.parseBoolean(
-            System.getProperty(prefix + "distribute", "false")
-        );
+        // Add enabled flag
+        propertiesMap.put("ojp.cache.enabled", "true");
+        log.info("Caching enabled for datasource: {}", datasourceName);
         
-        log.info("Building cache configuration for datasource '{}': enabled={}, distribute={}", 
-            datasourceName, enabled, distribute);
-        
-        CacheConfiguration.Builder builder = CacheConfiguration.newBuilder()
-            .setEnabled(true)
-            .setDistribute(distribute);
-        
-        // Parse query rules
+        // Parse and add query rules
         Set<Integer> indices = findQueryIndices(prefix);
         log.debug("Found {} cache query rule indices for datasource '{}'", indices.size(), datasourceName);
         
         for (int index : indices) {
             try {
-                CacheRule rule = parseQueryRule(prefix, index);
-                if (rule != null) {
-                    builder.addRules(rule);
-                    log.debug("Added cache rule {}: pattern={}, ttl={}s, invalidateOn={}", 
-                        index, rule.getSqlPattern(), rule.getTtlSeconds(), rule.getInvalidateOnList());
-                }
+                addQueryRuleProperties(propertiesMap, prefix, index);
+                log.debug("Added cache rule {} to properties", index);
             } catch (Exception e) {
-                log.warn("Failed to parse cache rule {} for datasource '{}': {}", 
+                log.warn("Failed to add cache rule {} for datasource '{}': {}", 
                     index, datasourceName, e.getMessage());
             }
         }
         
-        CacheConfiguration config = builder.build();
-        log.info("Built cache configuration for datasource '{}' with {} rules", 
-            datasourceName, config.getRulesCount());
-        
-        return config;
+        log.info("Added cache configuration properties for datasource '{}' with {} rules", 
+            datasourceName, indices.size());
     }
     
     /**
@@ -121,20 +96,21 @@ public class CacheConfigurationBuilder {
     }
     
     /**
-     * Parse a single cache rule from System properties.
+     * Add a single cache rule's properties to the map.
      *
-     * @param prefix The property prefix (e.g., "postgres_prod.ojp.cache.")
+     * @param propertiesMap The properties map to add to
+     * @param prefix The datasource property prefix (e.g., "postgres_prod.ojp.cache.")
      * @param index The query rule index
-     * @return CacheRule proto message or null if pattern is missing
      */
-    private static CacheRule parseQueryRule(String prefix, int index) {
+    private static void addQueryRuleProperties(Map<String, Object> propertiesMap, String prefix, int index) {
         String queryPrefix = prefix + "queries." + index + ".";
+        String targetPrefix = "ojp.cache.queries." + index + ".";
         
         // Pattern is required
         String pattern = System.getProperty(queryPrefix + "pattern");
         if (pattern == null || pattern.trim().isEmpty()) {
             log.warn("Missing pattern for cache rule {}, skipping", index);
-            return null;
+            return;
         }
         
         // Validate regex pattern
@@ -146,6 +122,8 @@ public class CacheConfigurationBuilder {
                 "Invalid regex pattern for cache rule " + index + ": " + e.getMessage(), e);
         }
         
+        propertiesMap.put(targetPrefix + "pattern", pattern);
+        
         // Parse TTL (default: 300s = 5 minutes)
         String ttlStr = System.getProperty(queryPrefix + "ttl", "300s");
         long ttlSeconds = parseDurationToSeconds(ttlStr);
@@ -156,21 +134,17 @@ public class CacheConfigurationBuilder {
                 "Invalid TTL for cache rule " + index + ": " + ttlStr + " (must be positive)");
         }
         
+        propertiesMap.put(targetPrefix + "ttl", String.valueOf(ttlSeconds));
+        
         // Parse invalidateOn table list (comma-separated, optional)
         String invalidateOnStr = System.getProperty(queryPrefix + "invalidateOn", "");
-        List<String> invalidateOn = parseTableList(invalidateOnStr);
+        if (invalidateOnStr != null && !invalidateOnStr.trim().isEmpty()) {
+            propertiesMap.put(targetPrefix + "invalidateOn", invalidateOnStr);
+        }
         
         // Check if rule is enabled (default: true)
-        boolean enabled = Boolean.parseBoolean(
-            System.getProperty(queryPrefix + "enabled", "true")
-        );
-        
-        return CacheRule.newBuilder()
-            .setSqlPattern(pattern)
-            .setTtlSeconds(ttlSeconds)
-            .addAllInvalidateOn(invalidateOn)
-            .setEnabled(enabled)
-            .build();
+        String enabledStr = System.getProperty(queryPrefix + "enabled", "true");
+        propertiesMap.put(targetPrefix + "enabled", enabledStr);
     }
     
     /**
@@ -206,25 +180,15 @@ public class CacheConfigurationBuilder {
                     return Long.parseLong(duration);
             }
         } catch (NumberFormatException e) {
-            log.error("Invalid duration format: {}", duration);
             throw new IllegalArgumentException("Invalid duration format: " + duration, e);
         }
     }
     
     /**
-     * Parse comma-separated table list.
-     *
-     * @param tableList Comma-separated table names
-     * @return List of table names
+     * Get boolean property with default value.
      */
-    private static List<String> parseTableList(String tableList) {
-        if (tableList == null || tableList.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        return Arrays.stream(tableList.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+    private static boolean getBooleanProperty(String key, boolean defaultValue) {
+        String value = System.getProperty(key);
+        return value != null ? Boolean.parseBoolean(value) : defaultValue;
     }
 }

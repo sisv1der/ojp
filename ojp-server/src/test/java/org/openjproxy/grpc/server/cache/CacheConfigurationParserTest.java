@@ -67,7 +67,6 @@ class CacheConfigurationParserTest {
         CacheConfiguration config = CacheConfigurationParser.parse("testds");
         
         assertTrue(config.isEnabled());
-        assertFalse(config.isDistribute());  // Default is false
         assertEquals(1, config.getRules().size());
         
         CacheRule rule = config.getRules().get(0);
@@ -120,7 +119,6 @@ class CacheConfigurationParserTest {
         CacheConfiguration config = CacheConfigurationParser.parse("testds");
         
         assertTrue(config.isEnabled());
-        assertTrue(config.isDistribute());
     }
     
     @Test

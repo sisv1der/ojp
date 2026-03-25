@@ -214,8 +214,8 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
             }
         }
         
-        // Convert and store cache configuration
-        if (connectionDetails.hasCacheConfig()) {
+        // Parse and store cache configuration from properties
+        if (connectionDetails.getPropertiesCount() > 0) {
             try {
                 // Extract datasource name from URL
                 String datasourceName = extractDatasourceName(connectionDetails.getUrl());
@@ -224,25 +224,25 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
                 }
                 
                 org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
-                    org.openjproxy.grpc.server.cache.CacheConfigurationConverter.fromProto(
-                        connectionDetails.getCacheConfig(), 
+                    org.openjproxy.grpc.server.cache.CacheConfigurationConverter.fromProperties(
+                        connectionDetails.getPropertiesList(), 
                         datasourceName);
                 
                 context.getCacheConfigurationMap().put(connHash, cacheConfig);
                 
                 if (cacheConfig.isEnabled()) {
-                    log.info("Cache configuration stored for connHash '{}': {} rules, distribute={}", 
-                        connHash, cacheConfig.getRules().size(), cacheConfig.isDistribute());
+                    log.info("Cache configuration stored for connHash '{}': {} rules", 
+                        connHash, cacheConfig.getRules().size());
                 } else {
                     log.debug("Cache configuration disabled for connHash '{}'", connHash);
                 }
             } catch (Exception e) {
-                log.error("Failed to convert cache configuration for connHash '{}': {}", 
+                log.error("Failed to parse cache configuration for connHash '{}': {}", 
                     connHash, e.getMessage());
                 // Continue without cache - caching will be disabled for this connection
             }
         } else {
-            log.debug("No cache configuration provided for connHash '{}'", connHash);
+            log.debug("No properties provided for connHash '{}'", connHash);
         }
 
         context.getSessionManager().registerClientUUID(connHash, connectionDetails.getClientUUID());

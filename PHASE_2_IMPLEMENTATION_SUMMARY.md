@@ -28,7 +28,6 @@
 **Property Format:**
 ```properties
 postgres_prod.ojp.cache.enabled=true
-postgres_prod.ojp.cache.distribute=false
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=600s
 postgres_prod.ojp.cache.queries.1.invalidateOn=products,product_prices
@@ -137,7 +136,7 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 
 All tests verify:
 - ✅ Correct parsing of all property formats
-- ✅ Proper defaults (enabled=false, distribute=false, ttl=300s)
+- ✅ Proper defaults (enabled=false, ttl=300s)
 - ✅ Clear error messages with property names
 - ✅ Thread safety under concurrent access
 - ✅ Singleton behavior
@@ -245,7 +244,7 @@ All tests verify:
 
 - ✅ Parser handles all property formats correctly
 - ✅ Error messages are clear and actionable with property names
-- ✅ Defaults are sensible (enabled=false, distribute=false, ttl=300s)
+- ✅ Defaults are sensible (enabled=false, ttl=300s)
 - ✅ Unit tests with >95% coverage (46 tests total)
 - ✅ Registry provides singleton access
 - ✅ Configurations are cached for performance

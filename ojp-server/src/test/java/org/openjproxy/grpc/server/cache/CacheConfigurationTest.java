@@ -27,7 +27,6 @@ class CacheConfigurationTest {
         
         assertEquals("postgres_prod", config.getDatasourceName());
         assertTrue(config.isEnabled());
-        assertFalse(config.isDistribute());
         assertEquals(1, config.getRules().size());
     }
 
@@ -51,7 +50,6 @@ class CacheConfigurationTest {
         
         assertEquals("postgres_prod", config.getDatasourceName());
         assertFalse(config.isEnabled());
-        assertFalse(config.isDistribute());
         assertEquals(0, config.getRules().size());
     }
 
@@ -276,7 +274,6 @@ class CacheConfigurationTest {
         String str = config.toString();
         assertTrue(str.contains("postgres_prod"));
         assertTrue(str.contains("enabled=true"));
-        assertTrue(str.contains("distribute=false"));
         assertTrue(str.contains("ruleCount=1"));
     }
 
@@ -302,7 +299,6 @@ class CacheConfigurationTest {
             List.of()
         );
         
-        assertTrue(config.isDistribute());
     }
 
     @Test

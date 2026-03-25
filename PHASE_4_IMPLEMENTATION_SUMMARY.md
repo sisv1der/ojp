@@ -39,7 +39,6 @@ Single Copilot session (completed)
 **Property Format:**
 ```properties
 postgres_prod.ojp.cache.enabled=true
-postgres_prod.ojp.cache.distribute=false
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
 postgres_prod.ojp.cache.queries.1.ttl=600s
 postgres_prod.ojp.cache.queries.1.invalidateOn=products,product_prices

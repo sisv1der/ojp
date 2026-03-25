@@ -78,7 +78,7 @@ public class GrpcServer {
                 sessionManager,
                 new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold()),
                 circuitBreakerRegistry,
-                config
+                config,
                 cacheConfigurationMap
         );
 

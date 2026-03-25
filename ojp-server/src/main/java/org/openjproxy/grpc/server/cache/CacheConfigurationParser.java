@@ -11,7 +11,6 @@ import java.util.regex.PatternSyntaxException;
  * <p>Expected property format:
  * <pre>
  * datasourceName.ojp.cache.enabled=true
- * datasourceName.ojp.cache.distribute=false
  * datasourceName.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
  * datasourceName.ojp.cache.queries.1.ttl=600s
  * datasourceName.ojp.cache.queries.1.invalidateOn=products,product_prices
@@ -46,13 +45,10 @@ public final class CacheConfigurationParser {
             return CacheConfiguration.disabled(datasourceName);
         }
         
-        // Parse distribute flag
-        boolean distribute = getBooleanProperty(prefix + "distribute", false);
-        
         // Parse query rules
         List<CacheRule> rules = parseQueryRules(datasourceName, prefix);
         
-        return new CacheConfiguration(datasourceName, enabled, distribute, rules);
+        return new CacheConfiguration(datasourceName, enabled, rules);
     }
     
     /**

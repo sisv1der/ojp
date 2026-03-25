@@ -101,22 +101,17 @@ public class Driver implements java.sql.Driver {
             for (String key : ojpProperties.stringPropertyNames()) {
                 propertiesMap.put(key, ojpProperties.getProperty(key));
             }
-            connBuilder.addAllProperties(ProtoConverter.propertiesToProto(propertiesMap));
-            log.debug("Loaded ojp.properties with {} properties for dataSource: {}", ojpProperties.size(), dataSourceName);
-        }
-        
-        // Build and add cache configuration
-        try {
-            com.openjproxy.grpc.CacheConfiguration cacheConfig = 
-                CacheConfigurationBuilder.buildCacheConfiguration(dataSourceName);
-            connBuilder.setCacheConfig(cacheConfig);
-            if (cacheConfig.getEnabled()) {
-                log.info("Cache configuration added for datasource '{}': {} rules, distribute={}", 
-                    dataSourceName, cacheConfig.getRulesCount(), cacheConfig.getDistribute());
+            
+            // Add cache configuration properties to the map
+            try {
+                CacheConfigurationBuilder.addCachePropertiesToMap(propertiesMap, dataSourceName);
+            } catch (Exception e) {
+                log.error("Failed to add cache configuration for datasource '{}': {}", dataSourceName, e.getMessage());
+                // Continue without cache configuration - caching will be disabled
             }
-        } catch (Exception e) {
-            log.error("Failed to build cache configuration for datasource '{}': {}", dataSourceName, e.getMessage());
-            // Continue without cache configuration - caching will be disabled
+            
+            connBuilder.addAllProperties(ProtoConverter.propertiesToProto(propertiesMap));
+            log.debug("Loaded ojp.properties with {} properties for dataSource: {}", propertiesMap.size(), dataSourceName);
         }
         
         log.info("Calling connect() on statement service with URL: {}", connectionUrl);

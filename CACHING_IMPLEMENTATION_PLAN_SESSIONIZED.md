@@ -230,7 +230,6 @@ public class CacheConfigurationParser {
      * 
      * Expected format:
      * postgres_prod.ojp.cache.enabled=true
-     * postgres_prod.ojp.cache.distribute=false
      * postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
      * postgres_prod.ojp.cache.queries.1.ttl=600s
      * postgres_prod.ojp.cache.queries.1.invalidateOn=products
@@ -360,7 +359,7 @@ public class CacheConfigurationRegistry {
 Create comprehensive parsing tests:
 - `CacheConfigurationParserTest.java` - Test all property formats
 - Test error handling (invalid patterns, malformed TTLs)
-- Test defaults (enabled=false, distribute=false, ttl=300s)
+- Test defaults (enabled=false, ttl=300s)
 - Test multiple queries per datasource
 - Test table list parsing (comma-separated)
 
@@ -2158,7 +2157,6 @@ Add cache configuration to your `ojp.properties` file:
 postgres_prod.ojp.cache.enabled=true
 
 # Local-only caching (no distribution)
-postgres_prod.ojp.cache.distribute=false
 
 # Cache rule 1: Product queries
 postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
@@ -2748,7 +2746,6 @@ public void testConcurrentLoad() throws Exception {
 ```properties
 # Pilot app: analytics-api
 analytics_db.ojp.cache.enabled=true
-analytics_db.ojp.cache.distribute=false  # Local only for now
 
 # Conservative cache rules
 analytics_db.ojp.cache.queries.1.pattern=SELECT .* FROM reports WHERE .*
