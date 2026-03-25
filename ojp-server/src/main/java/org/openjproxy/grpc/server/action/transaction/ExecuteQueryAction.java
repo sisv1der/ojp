@@ -321,13 +321,14 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
                     datasourceName, rows.size(), estimatedSize / 1024);
         }
         
-        private Object convertProtoValueToObject(com.openjproxy.grpc.Value val) {
-            if (val.hasStringVal()) return val.getStringVal();
-            if (val.hasIntVal()) return val.getIntVal();
-            if (val.hasLongVal()) return val.getLongVal();
-            if (val.hasDoubleVal()) return val.getDoubleVal();
-            if (val.hasBoolVal()) return val.getBoolVal();
-            if (val.hasBytesVal()) return val.getBytesVal().toByteArray();
+        private Object convertProtoValueToObject(com.openjproxy.grpc.ParameterValue val) {
+            if (val.hasStringValue()) return val.getStringValue();
+            if (val.hasIntValue()) return val.getIntValue();
+            if (val.hasLongValue()) return val.getLongValue();
+            if (val.hasDoubleValue()) return val.getDoubleValue();
+            if (val.hasBoolValue()) return val.getBoolValue();
+            if (val.hasBytesValue()) return val.getBytesValue().toByteArray();
+            if (val.hasIsNull()) return null;
             return null;
         }
         
