@@ -7,6 +7,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.openjproxy.grpc.ProtoConverter;
+import org.openjproxy.grpc.server.action.ActionContext;
+import org.openjproxy.grpc.server.action.transaction.CommandExecutionHelper;
 import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
 
 import java.lang.reflect.Field;
@@ -21,16 +23,15 @@ import static org.mockito.Mockito.mock;
  * Test to verify that each datasource gets its own SlowQuerySegregationManager
  * with pool sizes based on actual HikariCP configuration.
  */
-public class PerDatasourceSlowQuerySegregationTest {
+class PerDatasourceSlowQuerySegregationTest {
 
     private StatementServiceImpl statementService;
-    private ServerConfiguration serverConfiguration;
 
     @BeforeEach
     void setUp() {
         // Explicitly enable slow query segregation for per-datasource tests
         System.setProperty("ojp.server.slowQuerySegregation.enabled", "true");
-        serverConfiguration = new ServerConfiguration();
+        ServerConfiguration serverConfiguration = new ServerConfiguration();
         SessionManager sessionManager = mock(SessionManager.class);
         // Create a real Registry using the configuration
         CircuitBreakerRegistry circuitBreakerRegistry = new CircuitBreakerRegistry(
@@ -94,13 +95,11 @@ public class PerDatasourceSlowQuerySegregationTest {
         // Connect with second datasource  
         statementService.connect(connectionDetails2, responseObserver2);
 
-        // Use reflection to access the private slowQuerySegregationManagers map
-        Field managersField = StatementServiceImpl.class.getDeclaredField("slowQuerySegregationManagers");
-        managersField.setAccessible(true);
-        
-        @SuppressWarnings("unchecked")
-        Map<String, SlowQuerySegregationManager> managers = 
-                (Map<String, SlowQuerySegregationManager>) managersField.get(statementService);
+        Field actionContextField = StatementServiceImpl.class.getDeclaredField("actionContext");
+        actionContextField.setAccessible(true);
+        ActionContext actionContext = (ActionContext) actionContextField.get(statementService);
+
+        Map<String, SlowQuerySegregationManager> managers = actionContext.getSlowQuerySegregationManagers();
 
         // Verify that we have two separate managers
         assertEquals(2, managers.size(), "Should have created separate managers for each datasource");
@@ -167,13 +166,17 @@ public class PerDatasourceSlowQuerySegregationTest {
 
         // Use reflection to call the private method to get manager
         String connHash = ConnectionHashGenerator.hashConnectionDetails(connectionDetails);
-        
-        java.lang.reflect.Method getManagerMethod = StatementServiceImpl.class
-                .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", String.class);
+
+        Field actionContextField = StatementServiceImpl.class.getDeclaredField("actionContext");
+        actionContextField.setAccessible(true);
+        ActionContext actionContext = (ActionContext) actionContextField.get(statementService);
+
+        java.lang.reflect.Method getManagerMethod = CommandExecutionHelper.class
+                .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", ActionContext.class, String.class);
         getManagerMethod.setAccessible(true);
-        
-        SlowQuerySegregationManager manager = 
-                (SlowQuerySegregationManager) getManagerMethod.invoke(statementService, connHash);
+
+        SlowQuerySegregationManager manager =
+                (SlowQuerySegregationManager) getManagerMethod.invoke(null, actionContext, connHash);
 
         assertNotNull(manager, "Should return existing manager for connection hash");
         assertTrue(manager.isEnabled(), "Manager should be enabled");
@@ -183,13 +186,17 @@ public class PerDatasourceSlowQuerySegregationTest {
 
     @Test
     void testFallbackManagerForNonExistentConnection() throws Exception {
-        // Use reflection to call the private method with non-existent connection hash
-        java.lang.reflect.Method getManagerMethod = StatementServiceImpl.class
-                .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", String.class);
+        Field actionContextField = StatementServiceImpl.class.getDeclaredField("actionContext");
+        actionContextField.setAccessible(true);
+        ActionContext actionContext = (ActionContext) actionContextField.get(statementService);
+
+        // Use reflection to call the private static method with non-existent connection hash
+        java.lang.reflect.Method getManagerMethod = CommandExecutionHelper.class
+                .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", ActionContext.class, String.class);
         getManagerMethod.setAccessible(true);
         
-        SlowQuerySegregationManager manager = 
-                (SlowQuerySegregationManager) getManagerMethod.invoke(statementService, "non-existent-hash");
+        SlowQuerySegregationManager manager =
+                (SlowQuerySegregationManager) getManagerMethod.invoke(null, actionContext, "non-existent-hash");
 
         assertNotNull(manager, "Should return fallback manager for non-existent connection hash");
         assertFalse(manager.isEnabled(), "Fallback manager should be disabled");

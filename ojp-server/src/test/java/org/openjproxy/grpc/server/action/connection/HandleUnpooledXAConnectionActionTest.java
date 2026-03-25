@@ -52,6 +52,7 @@ class HandleUnpooledXAConnectionActionTest {
                 sessionManager,
                 circuitBreakerRegistry,
                 serverConfiguration,
+                null,
                 null);
 
         ConnectionDetails connectionDetails = ConnectionDetails.newBuilder()
