@@ -27,6 +27,18 @@ import java.util.List;
 public class OjpServerTelemetry {
 	private static final Logger logger = LoggerFactory.getLogger(OjpServerTelemetry.class);
 	private static final int DEFAULT_PROMETHEUS_PORT = 9159;
+	
+	// Store the OpenTelemetry instance for cache metrics initialization
+	private OpenTelemetry openTelemetry;
+
+	/**
+	 * Get the OpenTelemetry instance (for cache metrics initialization).
+	 *
+	 * @return The OpenTelemetry instance, or null if not initialized
+	 */
+	public OpenTelemetry getOpenTelemetry() {
+		return openTelemetry;
+	}
 
 	/**
 	 * Creates GrpcTelemetry with default configuration.
@@ -80,6 +92,9 @@ public class OjpServerTelemetry {
 								.registerMetricReader(prometheusServer)
 								.build())
 				.build();
+		
+		// Store the OpenTelemetry instance for cache metrics
+		this.openTelemetry = openTelemetry;
 
 		// Register OpenTelemetry instance for pool metrics if enabled
 		if (poolMetricsEnabled) {
@@ -141,6 +156,9 @@ public class OjpServerTelemetry {
 		}
 
 		OpenTelemetry openTelemetry = sdkBuilder.build();
+		
+		// Store the OpenTelemetry instance for cache metrics
+		this.openTelemetry = openTelemetry;
 		
 		// Register OpenTelemetry instance for pool metrics if enabled
 		if (poolMetricsEnabled) {

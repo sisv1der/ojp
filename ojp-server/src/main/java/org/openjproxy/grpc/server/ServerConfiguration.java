@@ -67,6 +67,7 @@ public class ServerConfiguration {
     // Telemetry metrics configuration keys
     private static final String TELEMETRY_GRPC_METRICS_ENABLED_KEY = "ojp.telemetry.grpc.metrics.enabled";
     private static final String TELEMETRY_POOL_METRICS_ENABLED_KEY = "ojp.telemetry.pool.metrics.enabled";
+    private static final String TELEMETRY_CACHE_METRICS_ENABLED_KEY = "ojp.telemetry.cache.metrics.enabled";
 
     // TLS configuration keys
     private static final String TLS_ENABLED_KEY = "ojp.server.tls.enabled";
@@ -134,6 +135,7 @@ public class ServerConfiguration {
     // Telemetry metrics default values
     public static final boolean DEFAULT_TELEMETRY_GRPC_METRICS_ENABLED = true; // Enabled by default when OpenTelemetry is enabled
     public static final boolean DEFAULT_TELEMETRY_POOL_METRICS_ENABLED = true; // Enabled by default when OpenTelemetry is enabled
+    public static final boolean DEFAULT_TELEMETRY_CACHE_METRICS_ENABLED = true; // Enabled by default when OpenTelemetry is enabled
 
     // TLS default values
     public static final boolean DEFAULT_TLS_ENABLED = false; // Disabled by default for backwards compatibility
@@ -199,6 +201,7 @@ public class ServerConfiguration {
     // Telemetry metrics configuration
     private final boolean telemetryGrpcMetricsEnabled;
     private final boolean telemetryPoolMetricsEnabled;
+    private final boolean telemetryCacheMetricsEnabled;
 
     // TLS configuration
     private final boolean tlsEnabled;
@@ -273,6 +276,7 @@ public class ServerConfiguration {
         // Telemetry metrics configuration
         this.telemetryGrpcMetricsEnabled = getBooleanProperty(TELEMETRY_GRPC_METRICS_ENABLED_KEY, DEFAULT_TELEMETRY_GRPC_METRICS_ENABLED);
         this.telemetryPoolMetricsEnabled = getBooleanProperty(TELEMETRY_POOL_METRICS_ENABLED_KEY, DEFAULT_TELEMETRY_POOL_METRICS_ENABLED);
+        this.telemetryCacheMetricsEnabled = getBooleanProperty(TELEMETRY_CACHE_METRICS_ENABLED_KEY, DEFAULT_TELEMETRY_CACHE_METRICS_ENABLED);
 
         logConfigurationSummary();
     }
@@ -640,6 +644,10 @@ public class ServerConfiguration {
 
     public boolean isTelemetryPoolMetricsEnabled() {
         return telemetryPoolMetricsEnabled;
+    }
+    
+    public boolean isTelemetryCacheMetricsEnabled() {
+        return telemetryCacheMetricsEnabled;
     }
     
 }

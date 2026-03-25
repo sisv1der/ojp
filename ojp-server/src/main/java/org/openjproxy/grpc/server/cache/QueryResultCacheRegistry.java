@@ -17,6 +17,7 @@ public class QueryResultCacheRegistry {
     private static final long DEFAULT_MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
     
     private final ConcurrentMap<String, QueryResultCache> caches = new ConcurrentHashMap<>();
+    private QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
     
     private QueryResultCacheRegistry() {
         // Private constructor for singleton
@@ -32,6 +33,18 @@ public class QueryResultCacheRegistry {
     }
     
     /**
+     * Set the metrics collector for all caches.
+     * Must be called before any caches are created.
+     *
+     * @param metrics The metrics collector
+     */
+    public void setMetrics(QueryCacheMetrics metrics) {
+        if (metrics != null) {
+            this.metrics = metrics;
+        }
+    }
+    
+    /**
      * Get or create a cache for the specified datasource with default settings.
      *
      * @param datasourceName The datasource name
@@ -39,7 +52,7 @@ public class QueryResultCacheRegistry {
      */
     public QueryResultCache getOrCreate(String datasourceName) {
         return caches.computeIfAbsent(datasourceName, 
-            k -> new QueryResultCache(DEFAULT_MAX_ENTRIES, DEFAULT_MAX_AGE, DEFAULT_MAX_SIZE_BYTES));
+            k -> new QueryResultCache(datasourceName, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_AGE, DEFAULT_MAX_SIZE_BYTES, metrics));
     }
     
     /**
@@ -53,7 +66,7 @@ public class QueryResultCacheRegistry {
      */
     public QueryResultCache getOrCreate(String datasourceName, int maxEntries, Duration maxAge, long maxSizeBytes) {
         return caches.computeIfAbsent(datasourceName, 
-            k -> new QueryResultCache(maxEntries, maxAge, maxSizeBytes));
+            k -> new QueryResultCache(datasourceName, maxEntries, maxAge, maxSizeBytes, metrics));
     }
     
     /**

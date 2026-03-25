@@ -64,6 +64,15 @@ public class GrpcServer {
 
             OjpHealthManager.setServiceStatus(OjpHealthManager.Services.OPENTELEMETRY_SERVICE,
                     HealthCheckResponse.ServingStatus.SERVING);
+            
+            // Initialize cache metrics with OpenTelemetry
+            io.opentelemetry.api.OpenTelemetry openTelemetry = ojpServerTelemetry.getOpenTelemetry();
+            if (openTelemetry != null && config.isTelemetryCacheMetricsEnabled()) {
+                org.openjproxy.grpc.server.cache.QueryCacheMetrics cacheMetrics = 
+                    new org.openjproxy.grpc.server.cache.OpenTelemetryQueryCacheMetrics(openTelemetry);
+                org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance().setMetrics(cacheMetrics);
+                logger.info("Cache metrics initialized with OpenTelemetry");
+            }
         } else {
             grpcTelemetry = ojpServerTelemetry.createNoOpGrpcTelemetry();
         }

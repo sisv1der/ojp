@@ -15,19 +15,25 @@ import java.util.concurrent.atomic.AtomicLong;
 public class QueryResultCache {
     private final Cache<QueryCacheKey, CachedQueryResult> cache;
     private final CacheStatistics statistics;
+    private final QueryCacheMetrics metrics;
+    private final String datasourceName;
     private final long maxSizeBytes;
     private final AtomicLong currentSizeBytes = new AtomicLong(0);
     
     /**
      * Create a new query result cache.
      *
+     * @param datasourceName The datasource name for this cache
      * @param maxEntries Maximum number of entries in the cache
      * @param maxAge Maximum age for cached entries before expiration
      * @param maxSizeBytes Maximum total size in bytes for all cached entries
+     * @param metrics The metrics collector (use NoOpQueryCacheMetrics if metrics disabled)
      */
-    public QueryResultCache(int maxEntries, Duration maxAge, long maxSizeBytes) {
+    public QueryResultCache(String datasourceName, int maxEntries, Duration maxAge, long maxSizeBytes, QueryCacheMetrics metrics) {
+        this.datasourceName = datasourceName;
         this.maxSizeBytes = maxSizeBytes;
         this.statistics = new CacheStatistics();
+        this.metrics = metrics != null ? metrics : NoOpQueryCacheMetrics.getInstance();
         
         this.cache = Caffeine.newBuilder()
             .maximumSize(maxEntries)
@@ -35,6 +41,19 @@ public class QueryResultCache {
             .removalListener(this::onRemoval)
             .recordStats()
             .build();
+    }
+    
+    /**
+     * Create a new query result cache without metrics.
+     *
+     * @param maxEntries Maximum number of entries in the cache
+     * @param maxAge Maximum age for cached entries before expiration
+     * @param maxSizeBytes Maximum total size in bytes for all cached entries
+     * @deprecated Use constructor with datasourceName and metrics for production use
+     */
+    @Deprecated
+    public QueryResultCache(int maxEntries, Duration maxAge, long maxSizeBytes) {
+        this("unknown", maxEntries, maxAge, maxSizeBytes, NoOpQueryCacheMetrics.getInstance());
     }
     
     /**
@@ -48,6 +67,8 @@ public class QueryResultCache {
         
         if (result == null) {
             statistics.recordMiss();
+            metrics.recordCacheMiss(datasourceName, key.getNormalizedSql());
+            updateCacheSizeMetrics();
             return null;
         }
         
@@ -55,10 +76,14 @@ public class QueryResultCache {
         if (result.isExpired()) {
             cache.invalidate(key);
             statistics.recordMiss();
+            metrics.recordCacheMiss(datasourceName, key.getNormalizedSql());
+            updateCacheSizeMetrics();
             return null;
         }
         
         statistics.recordHit();
+        metrics.recordCacheHit(datasourceName, key.getNormalizedSql());
+        updateCacheSizeMetrics();
         return result;
     }
     
@@ -79,12 +104,15 @@ public class QueryResultCache {
             // If still too large, don't cache this result
             if (currentSizeBytes.get() + resultSize > maxSizeBytes) {
                 statistics.recordRejection();
+                metrics.recordCacheRejection(datasourceName, resultSize);
+                updateCacheSizeMetrics();
                 return;
             }
         }
         
         cache.put(key, result);
         currentSizeBytes.addAndGet(resultSize);
+        updateCacheSizeMetrics();
     }
     
     /**
@@ -112,12 +140,15 @@ public class QueryResultCache {
             for (String table : tables) {
                 if (value.getAffectedTables().contains(table.toLowerCase())) {
                     statistics.recordInvalidation();
+                    metrics.recordCacheInvalidation(this.datasourceName, table);
                     return true;
                 }
             }
             
             return false;
         });
+        
+        updateCacheSizeMetrics();
     }
     
     /**
@@ -149,7 +180,18 @@ public class QueryResultCache {
         
         if (cause == RemovalCause.SIZE || cause == RemovalCause.EXPIRED) {
             statistics.recordEviction();
+            String reason = cause == RemovalCause.SIZE ? "size" : "ttl";
+            metrics.recordCacheEviction(datasourceName, reason);
         }
+        
+        updateCacheSizeMetrics();
+    }
+    
+    /**
+     * Update cache size metrics.
+     */
+    private void updateCacheSizeMetrics() {
+        metrics.updateCacheSize(datasourceName, getEntryCount(), getCurrentSizeBytes());
     }
     
     /**
