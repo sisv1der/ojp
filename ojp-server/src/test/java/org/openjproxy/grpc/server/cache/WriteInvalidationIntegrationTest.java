@@ -24,9 +24,11 @@ class WriteInvalidationIntegrationTest {
     void setUp() {
         // Create cache with reasonable limits
         cache = new QueryResultCache(
+            "test_datasource",              // datasourceName
             1000,                          // max entries
             Duration.ofSeconds(30),        // TTL
-            10 * 1024 * 1024              // 10MB max size
+            10 * 1024 * 1024,              // 10MB max size
+            NoOpQueryCacheMetrics.getInstance()  // metrics
         );
         
         datasourceName = "test_datasource";
@@ -250,8 +252,7 @@ class WriteInvalidationIntegrationTest {
             null,  // column types not needed for tests
             now,
             now.plus(Duration.ofSeconds(30)),
-            new ArrayList<>(affectedTables),
-            rows.size() * columns.size() * 50  // Rough size estimate
+            affectedTables
         );
     }
 }

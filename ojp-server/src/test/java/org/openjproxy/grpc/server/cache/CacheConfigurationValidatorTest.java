@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,7 +19,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(
-                new CacheRule("SELECT .* FROM products.*", Duration.ofMinutes(10), List.of("products"), true)
+                new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofMinutes(10), List.of("products"), true)
             )
         );
         
@@ -45,7 +46,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             null,
             true,
-            List.of(new CacheRule("SELECT .*", Duration.ofMinutes(10), List.of(), true))
+            List.of(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofMinutes(10), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -72,7 +73,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule("[invalid(regex", Duration.ofMinutes(10), List.of(), true))
+            List.of(new CacheRule(Pattern.compile("[invalid(regex"), Duration.ofMinutes(10), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -87,7 +88,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule("SELECT .*", Duration.ofSeconds(-1), List.of(), true))
+            List.of(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(-1), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -102,7 +103,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule("SELECT .*", Duration.ZERO, List.of(), true))
+            List.of(new CacheRule(Pattern.compile("SELECT .*"), Duration.ZERO, List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -117,7 +118,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule("SELECT .*", Duration.ofSeconds(5), List.of(), true))
+            List.of(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(5), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -132,7 +133,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule("SELECT .*", Duration.ofHours(48), List.of(), true))
+            List.of(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofHours(48), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -148,7 +149,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(new CacheRule(
-                "SELECT .*", 
+                Pattern.compile("SELECT .*"), 
                 Duration.ofMinutes(10), 
                 List.of("products; DROP TABLE users--"), 
                 true))
@@ -168,7 +169,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(new CacheRule(
-                "SELECT .*", 
+                Pattern.compile("SELECT .*"), 
                 Duration.ofMinutes(10), 
                 List.of("table'name"), 
                 true))
@@ -187,7 +188,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(new CacheRule(
-                "SELECT .*", 
+                Pattern.compile("SELECT .*"), 
                 Duration.ofMinutes(10), 
                 List.of("my table"), 
                 true))
@@ -205,7 +206,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule(".*", Duration.ofMinutes(10), List.of(), true))
+            List.of(new CacheRule(Pattern.compile(".*"), Duration.ofMinutes(10), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -221,7 +222,7 @@ class CacheConfigurationValidatorTest {
         CacheConfiguration config = new CacheConfiguration(
             "testds",
             true,
-            List.of(new CacheRule(longPattern, Duration.ofMinutes(10), List.of(), true))
+            List.of(new CacheRule(Pattern.compile(longPattern), Duration.ofMinutes(10), List.of(), true))
         );
         
         CacheConfigurationValidator.ValidationResult result = 
@@ -237,9 +238,9 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(
-                new CacheRule("[invalid", Duration.ofMinutes(10), List.of(), true),
-                new CacheRule("SELECT .*", Duration.ofSeconds(-1), List.of(), true),
-                new CacheRule("SELECT .*", Duration.ofMinutes(10), List.of("bad;table"), true)
+                new CacheRule(Pattern.compile("[invalid"), Duration.ofMinutes(10), List.of(), true),
+                new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(-1), List.of(), true),
+                new CacheRule(Pattern.compile("SELECT .*"), Duration.ofMinutes(10), List.of("bad;table"), true)
             )
         );
         
@@ -256,7 +257,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(
-                new CacheRule("[invalid", Duration.ofSeconds(5), List.of(), true)
+                new CacheRule(Pattern.compile("[invalid"), Duration.ofSeconds(5), List.of(), true)
             )
         );
         
@@ -276,7 +277,7 @@ class CacheConfigurationValidatorTest {
             "testds",
             true,
             List.of(new CacheRule(
-                "SELECT .*", 
+                Pattern.compile("SELECT .*"), 
                 Duration.ofMinutes(10), 
                 List.of("schema.table_name"), 
                 true))

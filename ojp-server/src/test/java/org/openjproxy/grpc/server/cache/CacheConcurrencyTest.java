@@ -102,7 +102,10 @@ public class CacheConcurrencyTest {
                         CachedQueryResult result = new CachedQueryResult(
                             new ArrayList<>(),
                             new ArrayList<>(),
-                            System.currentTimeMillis()
+                            new ArrayList<>(),
+                            Instant.now(),
+                            Instant.now().plus(Duration.ofMinutes(10)),
+                            Set.of()
                         );
                         cache.put(key, result);
                         successCount.incrementAndGet();

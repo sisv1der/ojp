@@ -150,7 +150,10 @@ public class CachePerformanceBenchmarkTest {
             cache.put(key, new CachedQueryResult(
                 new ArrayList<>(),
                 new ArrayList<>(),
-                System.currentTimeMillis()
+                new ArrayList<>(),
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(10)),
+                Set.of()
             ));
         }
 
@@ -313,7 +316,10 @@ public class CachePerformanceBenchmarkTest {
             cache.put(key, new CachedQueryResult(
                 new ArrayList<>(),
                 new ArrayList<>(),
-                System.currentTimeMillis()
+                new ArrayList<>(),
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(10)),
+                Set.of()
             ));
         }
 

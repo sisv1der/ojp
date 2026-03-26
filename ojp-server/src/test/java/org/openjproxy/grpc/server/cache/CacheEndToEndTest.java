@@ -71,7 +71,7 @@ public class CacheEndToEndTest {
             List.of(rule)
         );
         
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         // Simulate first query (cache MISS)
         String sql = "SELECT * FROM products WHERE category = ?";
@@ -136,7 +136,7 @@ public class CacheEndToEndTest {
             List.of(rule)
         );
         
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         // Cache a query result
         String sql = "SELECT * FROM products WHERE category = ?";
@@ -191,8 +191,8 @@ public class CacheEndToEndTest {
         CacheConfiguration config1 = new CacheConfiguration(ds1, true, List.of(rule));
         CacheConfiguration config2 = new CacheConfiguration(ds2, true, List.of(rule));
         
-        QueryResultCache cache1 = registry.getOrCreate(config1);
-        QueryResultCache cache2 = registry.getOrCreate(config2);
+        QueryResultCache cache1 = registry.getOrCreate(ds1);
+        QueryResultCache cache2 = registry.getOrCreate(ds2);
         
         // Store in cache1
         String sql = "SELECT * FROM users";
@@ -245,7 +245,7 @@ public class CacheEndToEndTest {
             List.of(rule)
         );
         
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         // Complex query with JOIN
         String sql = "SELECT o.id, o.customer_id, oi.product_id, oi.quantity " +
@@ -309,7 +309,7 @@ public class CacheEndToEndTest {
             new CacheRule(Pattern.compile("SELECT .* FROM users.*"), Duration.ofMinutes(5), List.of("users"), true)
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, rules);
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         // Simulate workload
         int totalRequests = 1000;
@@ -422,7 +422,7 @@ public class CacheEndToEndTest {
             true
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, List.of(rule));
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         int threadCount = 20;
         int opsPerThread = 100;
@@ -502,7 +502,7 @@ public class CacheEndToEndTest {
             true
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, List.of(rule));
-        QueryResultCache cache = registry.getOrCreate(config);
+        QueryResultCache cache = registry.getOrCreate(datasourceName);
         
         String sql = "SELECT * FROM large_table";
         QueryCacheKey key = new QueryCacheKey(datasourceName, sql, List.of());

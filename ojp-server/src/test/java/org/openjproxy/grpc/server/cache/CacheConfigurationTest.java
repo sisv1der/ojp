@@ -18,11 +18,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "postgres_prod",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("postgres_prod", true, List.of(rule)
         );
         
         assertEquals("postgres_prod", config.getDatasourceName());
@@ -33,13 +29,13 @@ class CacheConfigurationTest {
     @Test
     void testConstructorWithNullDatasource() {
         assertThrows(NullPointerException.class, () ->
-            new CacheConfiguration(null, true, false, List.of())
+            new CacheConfiguration(null, true, List.of())
         );
     }
 
     @Test
     void testConstructorWithNullRules() {
-        CacheConfiguration config = new CacheConfiguration("ds", true, false, null);
+        CacheConfiguration config = new CacheConfiguration("ds", true, null);
         
         assertEquals(List.of(), config.getRules());
     }
@@ -68,11 +64,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule1, rule2)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule1, rule2)
         );
         
         CacheRule found = config.findMatchingRule("SELECT * FROM users");
@@ -91,11 +83,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule)
         );
         
         CacheRule found = config.findMatchingRule("SELECT * FROM orders");
@@ -114,7 +102,6 @@ class CacheConfigurationTest {
         CacheConfiguration config = new CacheConfiguration(
             "ds",
             false,  // Cache disabled
-            false,
             List.of(rule)
         );
         
@@ -138,11 +125,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule1, rule2)  // rule1 first
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule1, rule2)  // rule1 first
         );
         
         CacheRule found = config.findMatchingRule("SELECT * FROM users");
@@ -158,11 +141,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule)
         );
         
         assertTrue(config.shouldInvalidateOn("users"));
@@ -178,11 +157,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule)
         );
         
         assertFalse(config.shouldInvalidateOn("orders"));
@@ -200,7 +175,6 @@ class CacheConfigurationTest {
         CacheConfiguration config = new CacheConfiguration(
             "ds",
             false,  // Cache disabled
-            false,
             List.of(rule)
         );
         
@@ -222,11 +196,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule1, rule2)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule1, rule2)
         );
         
         assertTrue(config.shouldInvalidateOn("users"));
@@ -243,11 +213,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of(rule)
         );
         
         assertThrows(UnsupportedOperationException.class, () ->
@@ -264,11 +230,7 @@ class CacheConfigurationTest {
             true
         );
         
-        CacheConfiguration config = new CacheConfiguration(
-            "postgres_prod",
-            true,
-            false,
-            List.of(rule)
+        CacheConfiguration config = new CacheConfiguration("postgres_prod", true, List.of(rule)
         );
         
         String str = config.toString();
@@ -279,11 +241,7 @@ class CacheConfigurationTest {
 
     @Test
     void testEmptyRulesConfiguration() {
-        CacheConfiguration config = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of()
+        CacheConfiguration config = new CacheConfiguration("ds", true, List.of()
         );
         
         assertNull(config.findMatchingRule("SELECT * FROM users"));
@@ -317,22 +275,14 @@ class CacheConfigurationTest {
         );
         
         // Specific rule first
-        CacheConfiguration config1 = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(specificRule, generalRule)
+        CacheConfiguration config1 = new CacheConfiguration("ds", true, List.of(specificRule, generalRule)
         );
         
         CacheRule found1 = config1.findMatchingRule("SELECT * FROM users WHERE id = 1");
         assertEquals(specificRule, found1);
         
         // General rule first
-        CacheConfiguration config2 = new CacheConfiguration(
-            "ds",
-            true,
-            false,
-            List.of(generalRule, specificRule)
+        CacheConfiguration config2 = new CacheConfiguration("ds", true, List.of(generalRule, specificRule)
         );
         
         CacheRule found2 = config2.findMatchingRule("SELECT * FROM users WHERE id = 1");
