@@ -58,10 +58,10 @@ public class CacheConfigurationValidator {
         String rulePrefix = "Rule " + ruleNumber + ": ";
         
         // Validate pattern
-        if (rule.getPattern() == null || rule.getPattern().trim().isEmpty()) {
-            errors.add(rulePrefix + "Pattern cannot be null or empty");
+        if (rule.getSqlPattern() == null) {
+            errors.add(rulePrefix + "Pattern cannot be null");
         } else {
-            validatePattern(rule.getPattern(), rulePrefix, errors, warnings);
+            validatePattern(rule.getSqlPattern().pattern(), rulePrefix, errors, warnings);
         }
         
         // Validate TTL

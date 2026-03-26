@@ -8,6 +8,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.ConnectionSessionDTO;
+import org.openjproxy.grpc.server.Session;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.statement.StatementFactory;
@@ -314,10 +315,11 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
             java.time.Duration ttl = cacheRule.getTtl();
             java.util.Set<String> affectedTables = new java.util.HashSet<>(cacheRule.getInvalidateOn());
             
-            // Column types - extract from metadata or use generic
+            // Column types - use VARCHAR as generic type for all columns
+            // OpQueryResultProto only has labels (column names), not type info
             List<String> columnTypes = new ArrayList<>();
-            for (com.openjproxy.grpc.ColumnMetadata col : queryResult.getColumnsList()) {
-                columnTypes.add(col.getType() != null ? col.getType() : "VARCHAR");
+            for (int i = 0; i < columnNames.size(); i++) {
+                columnTypes.add("VARCHAR");  // Generic type
             }
             
             org.openjproxy.grpc.server.cache.CachedQueryResult cachedResult = 

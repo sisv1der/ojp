@@ -139,7 +139,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
             
             // Phase 9: Cache Invalidation (after successful update)
-            invalidateCacheIfEnabled(dto.getSession(), request.getSql());
+            invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
             
             return result;
         } finally {
@@ -296,7 +296,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             }
             
             // Get datasource and cache
-            String datasourceName = session.getConnHash();
+            String datasourceName = sessionInfo.getConnHash();
             org.openjproxy.grpc.server.cache.QueryResultCache cache = 
                     org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance()
                     .get(datasourceName);
