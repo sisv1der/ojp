@@ -118,8 +118,15 @@ public class QueryResultCache {
             }
         }
         
+        // cache.put() will trigger the removal listener for any replaced entry
         cache.put(key, result);
+        
+        // Add the new entry size (removal listener already handled old entry if replaced)
         currentSizeBytes.addAndGet(resultSize);
+        
+        // Ensure any pending removals are processed synchronously
+        cache.cleanUp();
+        
         updateCacheSizeMetrics();
     }
     
