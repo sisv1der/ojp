@@ -94,7 +94,7 @@ public class QueryResultCache {
      * @param result The query result to cache
      */
     public void put(QueryCacheKey key, CachedQueryResult result) {
-        long resultSize = result.estimateSize();
+        long resultSize = result.getEstimatedSizeBytes();
         
         // Check size limit
         while (currentSizeBytes.get() + resultSize > maxSizeBytes && cache.estimatedSize() > 0) {
@@ -175,7 +175,7 @@ public class QueryResultCache {
      */
     private void onRemoval(QueryCacheKey key, CachedQueryResult value, RemovalCause cause) {
         if (value != null) {
-            currentSizeBytes.addAndGet(-value.estimateSize());
+            currentSizeBytes.addAndGet(-value.getEstimatedSizeBytes());
         }
         
         if (cause == RemovalCause.SIZE || cause == RemovalCause.EXPIRED) {

@@ -139,7 +139,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
             
             // Phase 9: Cache Invalidation (after successful update)
-            invalidateCacheIfEnabled(dto.getSession(), request.getSql());
+            invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
             
             return result;
         } finally {

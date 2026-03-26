@@ -41,18 +41,17 @@ public class CachedResultHandler {
             results.add(row.toArray(new Object[0]));
         }
         
-        OpQueryResult.OpQueryResultBuilder builder = OpQueryResult.builder()
+        OpQueryResult queryResult = OpQueryResult.builder()
                 .labels(new ArrayList<>(cachedResult.getColumnNames()))
                 .resultSetUUID(resultSetUUID)
-                .rows(results);
-
-        OpQueryResult queryResult = builder.build();
+                .rows(results)
+                .build();
 
         log.debug("Converted cached result to OpResult: {} rows, {} columns, resultSetUUID={}",
                 results.size(), cachedResult.getColumnNames().size(), resultSetUUID);
 
         return OpResult.newBuilder()
-                .setQueryResult(queryResult.build())
+                .setQueryResult(queryResult)
                 .build();
     }
 
