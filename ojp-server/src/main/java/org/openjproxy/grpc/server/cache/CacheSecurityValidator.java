@@ -72,7 +72,7 @@ public class CacheSecurityValidator {
             return false;
         }
         
-        long size = result.estimateSize();
+        long size = result.getEstimatedSizeBytes();
         
         if (size > maxSize) {
             log.warn("Cache result too large: size={} bytes, max={} bytes", size, maxSize);

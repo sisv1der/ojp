@@ -139,7 +139,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
             
             // Phase 9: Cache Invalidation (after successful update)
-            invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
+            invalidateCacheIfEnabled(dto.getSession(), request.getSql());
             
             return result;
         } finally {
@@ -280,7 +280,13 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
      * @param session the session containing cache configuration
      * @param sql     the SQL statement that modified data
      */
-    private void invalidateCacheIfEnabled(SessionInfo session, String sql) {
+    private void invalidateCacheIfEnabled(SessionInfo sessionInfo, String sql) {
+        if (sessionInfo == null) {
+            return;  // No session
+        }
+        
+        // Get actual Session object to access cache configuration
+        Session session = actionContext.getSessionManager().getSession(sessionInfo);
         if (session == null || session.getCacheConfiguration() == null) {
             return;  // Caching not enabled
         }

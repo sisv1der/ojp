@@ -35,18 +35,16 @@ public class CachedResultHandler {
         }
 
         // Build OpQueryResult with column names
-        OpQueryResult.OpQueryResultBuilder builder = OpQueryResult.builder()
-                .labels(new ArrayList<>(cachedResult.getColumnNames()))
-                .resultSetUUID(resultSetUUID)
-                .resultSetMode("")  // Empty for normal mode (not row-by-row)
-                .resultSetCompleted(isComplete);
-
         // Convert rows to Object arrays
         List<Object[]> results = new ArrayList<>();
         for (List<Object> row : cachedResult.getRows()) {
             results.add(row.toArray(new Object[0]));
         }
-        builder.results(results);
+        
+        OpQueryResult.OpQueryResultBuilder builder = OpQueryResult.builder()
+                .labels(new ArrayList<>(cachedResult.getColumnNames()))
+                .resultSetUUID(resultSetUUID)
+                .rows(results);
 
         OpQueryResult queryResult = builder.build();
 
