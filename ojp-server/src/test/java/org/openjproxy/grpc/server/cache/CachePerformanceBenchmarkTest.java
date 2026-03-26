@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Disabled;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,14 +31,14 @@ public class CachePerformanceBenchmarkTest {
             true,
             Arrays.asList(
                 new CacheRule(
-                    "SELECT .*",
+                    Pattern.compile("SELECT .*"),
                     Duration.ofMinutes(10),
                     Set.of("products"),
                     true
                 )
             )
         );
-        cache = new QueryResultCache(config, NoOpQueryCacheMetrics.getInstance());
+        cache = new QueryResultCache(datasourceName, config, NoOpQueryCacheMetrics.getInstance());
     }
 
     @Test
@@ -46,7 +48,10 @@ public class CachePerformanceBenchmarkTest {
         CachedQueryResult result = new CachedQueryResult(
             Arrays.asList(Arrays.asList("value1", "value2")),
             Arrays.asList("col1", "col2"),
-            System.currentTimeMillis()
+            Arrays.asList("VARCHAR", "VARCHAR"),
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of()
         );
         cache.put(key, result);
 
@@ -106,7 +111,10 @@ public class CachePerformanceBenchmarkTest {
         CachedQueryResult result = new CachedQueryResult(
             Arrays.asList(Arrays.asList("value1", "value2")),
             Arrays.asList("col1", "col2"),
-            System.currentTimeMillis()
+            Arrays.asList("VARCHAR", "VARCHAR"),
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of()
         );
 
         long start = System.nanoTime();
@@ -161,7 +169,10 @@ public class CachePerformanceBenchmarkTest {
                     cache.put(key, new CachedQueryResult(
                         new ArrayList<>(),
                         new ArrayList<>(),
-                        System.currentTimeMillis()
+                        new ArrayList<>(),
+                        Instant.now(),
+                        Instant.now().plus(Duration.ofMinutes(10)),
+                        Set.of()
                     ));
                 }
             }
@@ -187,7 +198,10 @@ public class CachePerformanceBenchmarkTest {
         CachedQueryResult result = new CachedQueryResult(
             Arrays.asList(Arrays.asList("value1")),
             Arrays.asList("col1"),
-            System.currentTimeMillis()
+            Arrays.asList("VARCHAR"),
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of()
         );
 
         // Pre-populate
@@ -247,7 +261,10 @@ public class CachePerformanceBenchmarkTest {
                 CachedQueryResult result = new CachedQueryResult(
                     Arrays.asList(Arrays.asList("value1", "value2", "value3")),
                     Arrays.asList("col1", "col2", "col3"),
-                    System.currentTimeMillis()
+                    Arrays.asList("VARCHAR", "VARCHAR", "VARCHAR"),
+                    Instant.now(),
+                    Instant.now().plus(Duration.ofMinutes(10)),
+                    Set.of()
                 );
                 cache.put(key, result);
             }
@@ -384,9 +401,12 @@ public class CachePerformanceBenchmarkTest {
                     Arrays.asList("value4", "value5", "value6")
                 ),
                 Arrays.asList("col1", "col2", "col3"),
-                System.currentTimeMillis()
+                Arrays.asList("VARCHAR", "VARCHAR", "VARCHAR"),
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(10)),
+                Set.of()
             );
-            long size = result.estimateSizeBytes();
+            long size = result.getEstimatedSizeBytes();
             assertTrue(size > 0, "Size should be positive");
         }
         

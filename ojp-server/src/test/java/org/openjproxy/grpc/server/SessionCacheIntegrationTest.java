@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -36,8 +37,8 @@ public class SessionCacheIntegrationTest {
     public void testSessionCreationWithCacheConfiguration() {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
-        rules.add(new CacheRule("SELECT .*", Duration.ofSeconds(600), List.of("products")));
-        CacheConfiguration cacheConfig = new CacheConfiguration(true, false, rules);
+        rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(600), List.of("products"), true));
+        CacheConfiguration cacheConfig = new CacheConfiguration("test-datasource", true, rules);
         
         String connectionHash = "test-connection-hash";
         String clientUUID = "test-client-uuid";
@@ -79,8 +80,8 @@ public class SessionCacheIntegrationTest {
     public void testXASessionCreationWithCacheConfiguration() throws Exception {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
-        rules.add(new CacheRule("SELECT .*", Duration.ofSeconds(300), List.of("users")));
-        CacheConfiguration cacheConfig = new CacheConfiguration(true, false, rules);
+        rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(300), List.of("users"), true));
+        CacheConfiguration cacheConfig = new CacheConfiguration("test-datasource", true, rules);
         
         String connectionHash = "test-xa-connection-hash";
         String clientUUID = "test-xa-client-uuid";
@@ -106,12 +107,12 @@ public class SessionCacheIntegrationTest {
     public void testMultipleSessionsWithDifferentConfigurations() {
         // Setup: Create different cache configurations
         List<CacheRule> rules1 = new ArrayList<>();
-        rules1.add(new CacheRule("SELECT .* FROM products.*", Duration.ofSeconds(600), List.of("products")));
-        CacheConfiguration cacheConfig1 = new CacheConfiguration(true, false, rules1);
+        rules1.add(new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofSeconds(600), List.of("products"), true));
+        CacheConfiguration cacheConfig1 = new CacheConfiguration("test-datasource-1", true, rules1);
         
         List<CacheRule> rules2 = new ArrayList<>();
-        rules2.add(new CacheRule("SELECT .* FROM users.*", Duration.ofSeconds(300), List.of("users")));
-        CacheConfiguration cacheConfig2 = new CacheConfiguration(true, false, rules2);
+        rules2.add(new CacheRule(Pattern.compile("SELECT .* FROM users.*"), Duration.ofSeconds(300), List.of("users"), true));
+        CacheConfiguration cacheConfig2 = new CacheConfiguration("test-datasource-2", true, rules2);
         
         String connectionHash1 = "connection-hash-1";
         String clientUUID1 = "client-uuid-1";
@@ -141,8 +142,8 @@ public class SessionCacheIntegrationTest {
     public void testConcurrentSessionCreation() throws InterruptedException {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
-        rules.add(new CacheRule("SELECT .*", Duration.ofSeconds(600), List.of("test_table")));
-        CacheConfiguration cacheConfig = new CacheConfiguration(true, false, rules);
+        rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(600), List.of("test_table"), true));
+        CacheConfiguration cacheConfig = new CacheConfiguration("test-datasource", true, rules);
         
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);

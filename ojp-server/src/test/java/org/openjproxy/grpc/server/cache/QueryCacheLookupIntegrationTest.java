@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,12 +36,12 @@ public class QueryCacheLookupIntegrationTest {
     public void testCacheLookup_Hit() {
         // Setup: Create cache configuration
         CacheRule rule = new CacheRule(
-                "SELECT .*",
+                Pattern.compile("SELECT .*"),
                 Duration.ofMinutes(5),
                 List.of("users"),
                 true
         );
-        CacheConfiguration config = new CacheConfiguration(true, List.of(rule));
+        CacheConfiguration config = new CacheConfiguration(DATASOURCE, true, List.of(rule));
 
         // Setup: Pre-populate cache
         QueryResultCache cache = cacheRegistry.getOrCreate(DATASOURCE);
@@ -54,7 +57,10 @@ public class QueryCacheLookupIntegrationTest {
         List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR");
         
         CachedQueryResult result = new CachedQueryResult(
-                rows, columnNames, columnTypes, Duration.ofMinutes(5));
+                rows, columnNames, columnTypes, 
+                Instant.now(), 
+                Instant.now().plus(Duration.ofMinutes(5)), 
+                Set.of());
         cache.put(key, result);
 
         // Act: Lookup from cache
@@ -107,7 +113,10 @@ public class QueryCacheLookupIntegrationTest {
         List<String> columnTypes = List.of("INTEGER", "VARCHAR", "DECIMAL");
         
         CachedQueryResult result = new CachedQueryResult(
-                rows, columnNames, columnTypes, Duration.ofMillis(50));  // 50ms TTL
+                rows, columnNames, columnTypes, 
+                Instant.now(), 
+                Instant.now().plus(Duration.ofMillis(50)), 
+                Set.of());
         cache.put(key, result);
 
         // Wait for expiration
@@ -134,7 +143,9 @@ public class QueryCacheLookupIntegrationTest {
                 List.of(List.of(1, "John")),
                 List.of("id", "name"),
                 List.of("INTEGER", "VARCHAR"),
-                Duration.ofMinutes(5));
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(5)),
+                Set.of());
         cache.put(key1, result1);
 
         // Add entry for id=2
@@ -143,7 +154,9 @@ public class QueryCacheLookupIntegrationTest {
                 List.of(List.of(2, "Jane")),
                 List.of("id", "name"),
                 List.of("INTEGER", "VARCHAR"),
-                Duration.ofMinutes(5));
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(5)),
+                Set.of());
         cache.put(key2, result2);
 
         // Act & Assert: Different parameters should return different results
@@ -160,12 +173,12 @@ public class QueryCacheLookupIntegrationTest {
     public void testCacheLookup_PatternMatching() {
         // Setup: Create cache rule with pattern
         CacheRule selectUsersRule = new CacheRule(
-                "SELECT .* FROM users .*",
+                Pattern.compile("SELECT .* FROM users .*"),
                 Duration.ofMinutes(10),
                 List.of("users"),
                 true
         );
-        CacheConfiguration config = new CacheConfiguration(true, List.of(selectUsersRule));
+        CacheConfiguration config = new CacheConfiguration(DATASOURCE, true, List.of(selectUsersRule));
 
         // Test various SQL statements
         assertTrue(config.findMatchingRule("SELECT * FROM users WHERE id = 1") != null,

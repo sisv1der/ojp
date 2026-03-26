@@ -4,10 +4,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,14 +29,14 @@ public class CacheConcurrencyTest {
             true,
             Arrays.asList(
                 new CacheRule(
-                    "SELECT .*",
+                    Pattern.compile("SELECT .*"),
                     Duration.ofMinutes(10),
                     Set.of("products"),
                     true
                 )
             )
         );
-        cache = new QueryResultCache(config, NoOpQueryCacheMetrics.getInstance());
+        cache = new QueryResultCache(datasourceName, config, NoOpQueryCacheMetrics.getInstance());
     }
 
     @Test
@@ -44,7 +46,10 @@ public class CacheConcurrencyTest {
         CachedQueryResult result = new CachedQueryResult(
             new ArrayList<>(),
             new ArrayList<>(),
-            System.currentTimeMillis()
+            new ArrayList<>(),
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of()
         );
         cache.put(key, result);
 
@@ -158,7 +163,10 @@ public class CacheConcurrencyTest {
                         CachedQueryResult result = new CachedQueryResult(
                             new ArrayList<>(),
                             new ArrayList<>(),
-                            System.currentTimeMillis()
+                            new ArrayList<>(),
+                            Instant.now(),
+                            Instant.now().plus(Duration.ofMinutes(10)),
+                            Set.of()
                         );
                         cache.put(key, result);
                     }
@@ -188,7 +196,10 @@ public class CacheConcurrencyTest {
             CachedQueryResult result = new CachedQueryResult(
                 new ArrayList<>(),
                 new ArrayList<>(),
-                System.currentTimeMillis()
+                new ArrayList<>(),
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(10)),
+                Set.of()
             );
             cache.put(key, result);
         }
@@ -251,7 +262,10 @@ public class CacheConcurrencyTest {
                                 CachedQueryResult result = new CachedQueryResult(
                                     new ArrayList<>(),
                                     new ArrayList<>(),
-                                    System.currentTimeMillis()
+                                    new ArrayList<>(),
+                                    Instant.now(),
+                                    Instant.now().plus(Duration.ofMinutes(10)),
+                                    Set.of()
                                 );
                                 cache.put(key, result);
                                 break;
@@ -356,7 +370,10 @@ public class CacheConcurrencyTest {
                         CachedQueryResult result = new CachedQueryResult(
                             Arrays.asList(Arrays.asList("value" + j)),
                             Arrays.asList("column1"),
-                            System.currentTimeMillis()
+                            Arrays.asList("VARCHAR"),
+                            Instant.now(),
+                            Instant.now().plus(Duration.ofMinutes(10)),
+                            Set.of()
                         );
                         cache.put(key, result);
                         
@@ -446,7 +463,10 @@ public class CacheConcurrencyTest {
                                     cache.put(key, new CachedQueryResult(
                                         new ArrayList<>(),
                                         new ArrayList<>(),
-                                        System.currentTimeMillis()
+                                        new ArrayList<>(),
+                                        Instant.now(),
+                                        Instant.now().plus(Duration.ofMinutes(10)),
+                                        Set.of()
                                     ));
                                     break;
                                 case 3: // Invalidate
