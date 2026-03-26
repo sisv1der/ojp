@@ -85,7 +85,7 @@ public class GrpcServer {
         SessionManagerImpl sessionManager = new SessionManagerImpl(cacheConfigurationMap);
         final StatementServiceImpl statementService = new StatementServiceImpl(
                 sessionManager,
-                new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold()),
+                new CircuitBreaker(config.getCircuitBreakerTimeout(), config.getCircuitBreakerThreshold(), "statement-service"),
                 circuitBreakerRegistry,
                 config,
                 cacheConfigurationMap

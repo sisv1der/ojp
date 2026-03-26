@@ -63,8 +63,10 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
 
         // Phase 6: Cache Lookup (before query execution) - with graceful degradation
         String sql = request.getSql();
+        // Get actual Session object from SessionManager
+        Session actualSession = actionContext.getSessionManager().getSession(dto.getSession());
         org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
-                dto.getSession().getCacheConfiguration();
+                actualSession != null ? actualSession.getCacheConfiguration() : null;
         
         if (cacheConfig != null && cacheConfig.isEnabled()) {
             try {
@@ -75,7 +77,9 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
                     // Extract parameters for cache key
                     List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
                     List<Object> cacheParams = params != null ? 
-                            params.stream().map(Parameter::getValue).toList() : List.of();
+                            params.stream()
+                                .flatMap(p -> p.getValues() != null ? p.getValues().stream() : java.util.stream.Stream.empty())
+                                .toList() : List.of();
                     
                     // Build cache key (datasource from connection hash)
                     String datasourceName = dto.getSession().getConnHash();
@@ -188,7 +192,7 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
                 // Prepare for caching after query execution
                 List<Parameter> cacheParams = params != null ? params : List.of();
                 List<Object> cacheParamValues = cacheParams.stream()
-                        .map(Parameter::getValue)
+                        .flatMap(p -> p.getValues() != null ? p.getValues().stream() : java.util.stream.Stream.empty())
                         .toList();
                 finalDatasourceName = dto.getSession().getConnHash();
                 finalCacheKey = new org.openjproxy.grpc.server.cache.QueryCacheKey(
@@ -276,7 +280,7 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
         }
         
         private void storeToCacheIfEligible() {
-            com.openjproxy.grpc.QueryResult queryResult = capturedResult.getQueryResult();
+            com.openjproxy.grpc.OpQueryResultProto queryResult = capturedResult.getQueryResult();
             
             // Check if result is empty
             if (queryResult.getRowsCount() == 0) {
@@ -284,17 +288,14 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
                 return;
             }
             
-            // Extract column names
-            List<String> columnNames = new ArrayList<>();
-            for (com.openjproxy.grpc.ColumnMetadata col : queryResult.getColumnsList()) {
-                columnNames.add(col.getName());
-            }
+            // Extract column names (labels)
+            List<String> columnNames = new ArrayList<>(queryResult.getLabelsList());
             
             // Extract rows
             List<List<Object>> rows = new ArrayList<>();
-            for (com.openjproxy.grpc.Row row : queryResult.getRowsList()) {
+            for (com.openjproxy.grpc.ResultRow row : queryResult.getRowsList()) {
                 List<Object> rowValues = new ArrayList<>();
-                for (com.openjproxy.grpc.Value val : row.getValuesList()) {
+                for (com.openjproxy.grpc.ParameterValue val : row.getColumnsList()) {
                     rowValues.add(convertProtoValueToObject(val));
                 }
                 rows.add(rowValues);
