@@ -280,7 +280,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
      * @param session the session containing cache configuration
      * @param sql     the SQL statement that modified data
      */
-    private void invalidateCacheIfEnabled(SessionInfo sessionInfo, String sql) {
+    private void invalidateCacheIfEnabled(ActionContext actionContext, SessionInfo sessionInfo, String sql) {
         if (sessionInfo == null) {
             return;  // No session
         }

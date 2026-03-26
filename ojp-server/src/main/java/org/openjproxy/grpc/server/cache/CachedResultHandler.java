@@ -51,7 +51,7 @@ public class CachedResultHandler {
                 results.size(), cachedResult.getColumnNames().size(), resultSetUUID);
 
         return OpResult.newBuilder()
-                .setQueryResult(queryResult)
+                .setQueryResult(org.openjproxy.grpc.ProtoConverter.toProto(queryResult))
                 .build();
     }
 
