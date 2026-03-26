@@ -161,10 +161,10 @@ public class QueryResultCache {
     
     /**
      * Invalidate all entries in the cache.
+     * The removal listeners will automatically update currentSizeBytes to 0.
      */
     public void invalidateAll() {
         cache.invalidateAll();
-        currentSizeBytes.set(0);
     }
     
     /**
