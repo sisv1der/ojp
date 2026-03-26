@@ -156,6 +156,7 @@ public class QueryResultCache {
             return false;
         });
         
+        cache.cleanUp(); // Ensure removal listeners are called synchronously
         updateCacheSizeMetrics();
     }
     
@@ -177,6 +178,7 @@ public class QueryResultCache {
         cache.asMap().entrySet().removeIf(entry -> 
             entry.getKey().getDatasourceName().equals(datasourceName)
         );
+        cache.cleanUp(); // Ensure removal listeners are called synchronously
     }
     
     /**
