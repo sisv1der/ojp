@@ -253,7 +253,6 @@ class CacheConfigurationTest {
         CacheConfiguration config = new CacheConfiguration(
             "ds",
             true,
-            true,  // distribute enabled
             List.of()
         );
         

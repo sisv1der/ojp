@@ -27,13 +27,13 @@ public class QueryCacheMetricsTest {
         
         // All methods should execute without throwing exceptions
         assertDoesNotThrow(() -> {
-            metrics.recordHit("testds", "SELECT * FROM test");
-            metrics.recordMiss("testds", "SELECT * FROM test");
-            metrics.recordEviction("testds", "size");
-            metrics.recordInvalidation("testds", "test_table");
-            metrics.recordRejection("testds", 1000000);
+            metrics.recordCacheHit("testds", "SELECT * FROM test");
+            metrics.recordCacheMiss("testds", "SELECT * FROM test");
+            metrics.recordCacheEviction("testds", "size");
+            metrics.recordCacheInvalidation("testds", "test_table");
+            metrics.recordCacheRejection("testds", 1000000);
             metrics.updateCacheSize("testds", 100, 50000);
-            metrics.recordQueryExecutionTime("testds", "SELECT * FROM test", 150, "cache");
+            metrics.recordQueryExecutionTime("testds", "cache", 150);
         });
     }
 
@@ -51,12 +51,12 @@ public class QueryCacheMetricsTest {
         
         // Should not throw with null parameters
         assertDoesNotThrow(() -> {
-            metrics.recordHit(null, null);
-            metrics.recordMiss(null, null);
-            metrics.recordEviction(null, null);
-            metrics.recordInvalidation(null, null);
+            metrics.recordCacheHit(null, null);
+            metrics.recordCacheMiss(null, null);
+            metrics.recordCacheEviction(null, null);
+            metrics.recordCacheInvalidation(null, null);
             metrics.updateCacheSize(null, 0, 0);
-            metrics.recordQueryExecutionTime(null, null, 0, null);
+            metrics.recordQueryExecutionTime(null, null, 0);
         });
     }
 
@@ -66,9 +66,9 @@ public class QueryCacheMetricsTest {
         
         // Should handle extreme values without issues
         assertDoesNotThrow(() -> {
-            metrics.recordRejection("testds", Long.MAX_VALUE);
+            metrics.recordCacheRejection("testds", Long.MAX_VALUE);
             metrics.updateCacheSize("testds", Integer.MAX_VALUE, Long.MAX_VALUE);
-            metrics.recordQueryExecutionTime("testds", "SELECT", Long.MAX_VALUE, "cache");
+            metrics.recordQueryExecutionTime("testds", "cache", Long.MAX_VALUE);
         });
     }
 
@@ -79,7 +79,7 @@ public class QueryCacheMetricsTest {
         // Should be extremely fast (no-op)
         long start = System.nanoTime();
         for (int i = 0; i < 100000; i++) {
-            metrics.recordHit("testds", "SELECT * FROM test");
+            metrics.recordCacheHit("testds", "SELECT * FROM test");
         }
         long duration = System.nanoTime() - start;
         
@@ -95,38 +95,41 @@ public class QueryCacheMetricsTest {
         // Test that the interface can be implemented
         QueryCacheMetrics testMetrics = new QueryCacheMetrics() {
             @Override
-            public void recordHit(String datasource, String sql) {}
+            public void recordCacheHit(String datasource, String sql) {}
             
             @Override
-            public void recordMiss(String datasource, String sql) {}
+            public void recordCacheMiss(String datasource, String sql) {}
             
             @Override
-            public void recordEviction(String datasource, String reason) {}
+            public void recordCacheEviction(String datasource, String reason) {}
             
             @Override
-            public void recordInvalidation(String datasource, String table) {}
+            public void recordCacheInvalidation(String datasource, String table) {}
             
             @Override
-            public void recordRejection(String datasource, long sizeBytes) {}
+            public void recordCacheRejection(String datasource, long sizeBytes) {}
             
             @Override
             public void updateCacheSize(String datasource, long entries, long sizeBytes) {}
             
             @Override
-            public void recordQueryExecutionTime(String datasource, String sql, long durationMs, String source) {}
+            public void recordQueryExecutionTime(String datasource, String source, long durationMs) {}
+            
+            @Override
+            public void close() {}
         };
         
         assertNotNull(testMetrics);
         
         // Test all methods are callable
         assertDoesNotThrow(() -> {
-            testMetrics.recordHit("ds", "sql");
-            testMetrics.recordMiss("ds", "sql");
-            testMetrics.recordEviction("ds", "reason");
-            testMetrics.recordInvalidation("ds", "table");
-            testMetrics.recordRejection("ds", 1000);
+            testMetrics.recordCacheHit("ds", "sql");
+            testMetrics.recordCacheMiss("ds", "sql");
+            testMetrics.recordCacheEviction("ds", "reason");
+            testMetrics.recordCacheInvalidation("ds", "table");
+            testMetrics.recordCacheRejection("ds", 1000);
             testMetrics.updateCacheSize("ds", 10, 10000);
-            testMetrics.recordQueryExecutionTime("ds", "sql", 100, "cache");
+            testMetrics.recordQueryExecutionTime("ds", "cache", 100);
         });
     }
 
@@ -143,9 +146,9 @@ public class QueryCacheMetricsTest {
         
         // Should handle without issues
         assertDoesNotThrow(() -> {
-            metrics.recordHit("testds", sql);
-            metrics.recordMiss("testds", sql);
-            metrics.recordQueryExecutionTime("testds", sql, 100, "cache");
+            metrics.recordCacheHit("testds", sql);
+            metrics.recordCacheMiss("testds", sql);
+            metrics.recordQueryExecutionTime("testds", "cache", 100);
         });
     }
 
@@ -157,8 +160,8 @@ public class QueryCacheMetricsTest {
         String tableWithSpecialChars = "test-table.schema_name";
         
         assertDoesNotThrow(() -> {
-            metrics.recordHit("testds", sqlWithSpecialChars);
-            metrics.recordInvalidation("testds", tableWithSpecialChars);
+            metrics.recordCacheHit("testds", sqlWithSpecialChars);
+            metrics.recordCacheInvalidation("testds", tableWithSpecialChars);
         });
     }
 
@@ -167,12 +170,12 @@ public class QueryCacheMetricsTest {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         assertDoesNotThrow(() -> {
-            metrics.recordHit("", "");
-            metrics.recordMiss("", "");
-            metrics.recordEviction("", "");
-            metrics.recordInvalidation("", "");
+            metrics.recordCacheHit("", "");
+            metrics.recordCacheMiss("", "");
+            metrics.recordCacheEviction("", "");
+            metrics.recordCacheInvalidation("", "");
             metrics.updateCacheSize("", 0, 0);
-            metrics.recordQueryExecutionTime("", "", 0, "");
+            metrics.recordQueryExecutionTime("", "", 0);
         });
     }
 
@@ -182,9 +185,9 @@ public class QueryCacheMetricsTest {
         
         // Should handle negative values gracefully
         assertDoesNotThrow(() -> {
-            metrics.recordRejection("testds", -1);
+            metrics.recordCacheRejection("testds", -1);
             metrics.updateCacheSize("testds", -1, -1);
-            metrics.recordQueryExecutionTime("testds", "SELECT", -1, "cache");
+            metrics.recordQueryExecutionTime("testds", "cache", -1);
         });
     }
 
@@ -198,8 +201,8 @@ public class QueryCacheMetricsTest {
             final int threadId = i;
             threads[i] = new Thread(() -> {
                 for (int j = 0; j < 1000; j++) {
-                    metrics.recordHit("testds" + threadId, "SELECT " + j);
-                    metrics.recordMiss("testds" + threadId, "SELECT " + j);
+                    metrics.recordCacheHit("testds" + threadId, "SELECT " + j);
+                    metrics.recordCacheMiss("testds" + threadId, "SELECT " + j);
                     metrics.updateCacheSize("testds" + threadId, j, j * 100);
                 }
             });
@@ -221,9 +224,9 @@ public class QueryCacheMetricsTest {
         
         // Methods should return void, so no chaining
         // Just verify they can be called in sequence
-        metrics.recordHit("testds", "SELECT 1");
-        metrics.recordHit("testds", "SELECT 2");
-        metrics.recordHit("testds", "SELECT 3");
+        metrics.recordCacheHit("testds", "SELECT 1");
+        metrics.recordCacheHit("testds", "SELECT 2");
+        metrics.recordCacheHit("testds", "SELECT 3");
         
         // No exceptions = success
         assertTrue(true);

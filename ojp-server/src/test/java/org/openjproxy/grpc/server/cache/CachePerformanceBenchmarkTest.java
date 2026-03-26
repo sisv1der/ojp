@@ -26,19 +26,13 @@ public class CachePerformanceBenchmarkTest {
 
     @BeforeEach
     public void setUp() {
-        CacheConfiguration config = new CacheConfiguration(
+        cache = new QueryResultCache(
             datasourceName,
-            true,
-            Arrays.asList(
-                new CacheRule(
-                    Pattern.compile("SELECT .*"),
-                    Duration.ofMinutes(10),
-                    Set.of("products"),
-                    true
-                )
-            )
+            10000,  // maxEntries
+            Duration.ofMinutes(10),  // maxAge
+            100 * 1024 * 1024,  // maxSizeBytes (100MB)
+            NoOpQueryCacheMetrics.getInstance()
         );
-        cache = new QueryResultCache(datasourceName, config, NoOpQueryCacheMetrics.getInstance());
     }
 
     @Test

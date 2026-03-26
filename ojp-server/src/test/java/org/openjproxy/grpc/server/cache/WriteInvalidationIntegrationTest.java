@@ -35,7 +35,7 @@ class WriteInvalidationIntegrationTest {
         stats = cache.getStatistics();
         
         // Register cache for this datasource
-        QueryResultCacheRegistry.getInstance().put(datasourceName, cache);
+        QueryResultCacheRegistry.getInstance().getOrCreate(datasourceName);
     }
 
     @AfterEach

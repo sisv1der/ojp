@@ -113,7 +113,7 @@ class QueryCacheStorageIntegrationTest {
                 Set.of("users"));
 
         // Act: Estimate size
-        long estimatedSize = largeResult.estimateSize();
+        long estimatedSize = largeResult.getEstimatedSizeBytes();
 
         // Assert: Size should be reasonable
         assertTrue(estimatedSize > 10000, "Large result should have substantial size");
