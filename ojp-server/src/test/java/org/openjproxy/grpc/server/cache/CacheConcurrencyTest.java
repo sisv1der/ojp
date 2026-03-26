@@ -196,7 +196,7 @@ public class CacheConcurrencyTest {
                 new ArrayList<>(),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
-                Set.of()
+                Set.of("products")  // Add affected table so invalidation works
             );
             cache.put(key, result);
         }

@@ -218,7 +218,10 @@ class CacheConfigurationParserTest {
             () -> CacheConfigurationParser.parse("testds")
         );
         
-        assertTrue(ex.getMessage().contains("no query rules defined"));
+        // The message should contain reference to no query rules being defined
+        assertTrue(ex.getMessage().contains("no query rules defined") || 
+                   ex.getMessage().contains("but no query rules defined"),
+                   "Actual message: " + ex.getMessage());
     }
     
     @Test
