@@ -218,9 +218,9 @@ class CacheConfigurationParserTest {
             () -> CacheConfigurationParser.parse("testds")
         );
         
-        // The message should contain reference to no query rules being defined
-        assertTrue(ex.getMessage().contains("no query rules defined") || 
-                   ex.getMessage().contains("but no query rules defined"),
+        // Should complain about missing required pattern property
+        assertTrue(ex.getMessage().contains("Missing required property") &&
+                   ex.getMessage().contains("pattern"),
                    "Actual message: " + ex.getMessage());
     }
     
