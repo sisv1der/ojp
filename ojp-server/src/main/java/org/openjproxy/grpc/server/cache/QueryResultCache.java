@@ -165,6 +165,7 @@ public class QueryResultCache {
      */
     public void invalidateAll() {
         cache.invalidateAll();
+        cache.cleanUp(); // Ensure removal listeners are called synchronously
     }
     
     /**
