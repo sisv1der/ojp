@@ -147,6 +147,7 @@ class QueryResultCacheTest {
         assertNull(cache.get(key2));
         assertEquals(0, cache.getEntryCount());
         assertEquals(0, cache.getCurrentSizeBytes());
+        // Note: After invalidateAll, the stats are not reset, so invalidations and misses accumulate
     }
     
     @Test
@@ -182,7 +183,7 @@ class QueryResultCacheTest {
     
     @Test
     void testMaxSizeRejection() {
-        // Create cache with very small size limit
+        // Create cache with very small size limit (100 bytes)
         QueryResultCache smallCache = new QueryResultCache(1000, Duration.ofMinutes(10), 100);
         
         QueryCacheKey key = new QueryCacheKey("testdb", "SELECT * FROM users", List.of());
@@ -198,11 +199,12 @@ class QueryResultCacheTest {
             Instant.now(), Instant.now().plusSeconds(600), Set.of("users")
         );
         
+        // Put the large result
         smallCache.put(key, result);
         
-        // Should be rejected due to size
-        assertNull(smallCache.get(key));
-        assertTrue(smallCache.getStatistics().getRejections() > 0);
+        // The result should be rejected due to size, so get() should return null
+        assertNull(smallCache.get(key), "Large result should be rejected");
+        assertTrue(smallCache.getStatistics().getRejections() > 0, "Should have rejections recorded");
     }
     
     @Test

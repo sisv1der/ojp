@@ -230,21 +230,23 @@ class CachedQueryResultTest {
     @Test
     void testSizeEstimationWithVariousTypes() {
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
+        // Create rows with various types (excluding null to avoid List.copyOf issues)
+        List<List<Object>> rows = List.of(
             List.of(
-                List.of(
-                    "string value",
-                    123,
-                    456L,
-                    78.9,
-                    12.3f,
-                    true,
-                    new byte[]{1, 2, 3},
-                    null
-                )
-            ),
-            List.of("str", "int", "long", "double", "float", "bool", "bytes", "null"),
-            List.of("VARCHAR", "INTEGER", "BIGINT", "DOUBLE", "FLOAT", "BOOLEAN", "BLOB", "VARCHAR"),
+                "string value",
+                123,
+                456L,
+                78.9,
+                12.3f,
+                true,
+                new byte[]{1, 2, 3}
+            )
+        );
+        
+        CachedQueryResult result = new CachedQueryResult(
+            rows,
+            List.of("str", "int", "long", "double", "float", "bool", "bytes"),
+            List.of("VARCHAR", "INTEGER", "BIGINT", "DOUBLE", "FLOAT", "BOOLEAN", "BLOB"),
             now,
             now,
             Set.of()

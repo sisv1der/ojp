@@ -173,10 +173,11 @@ class QueryCacheStorageIntegrationTest {
         // Wait for expiration
         Thread.sleep(150);
 
-        // Assert 2: Should be expired after TTL
+        // Assert 2: After TTL expires, the cache entry should be treated as expired
+        // The get() method checks isExpired() and removes expired entries
         CachedQueryResult lookup2 = cache.get(cacheKey);
-        assertNotNull(lookup2, "Result still in cache");
-        assertTrue(lookup2.isExpired(), "Result should be expired after TTL");
+        // After expiration, get() should return null (it invalidates expired entries)
+        assertNull(lookup2, "Result should be removed after expiration");
     }
 
     @Test
@@ -210,7 +211,8 @@ class QueryCacheStorageIntegrationTest {
 
         // Assert: All results stored without errors
         CacheStatistics stats = cache.getStatistics();
-        assertTrue(stats.getHits() + stats.getMisses() > 0, "Cache should have activity");
+        // After put operations, the cache should have entries
+        assertTrue(cache.getEntryCount() > 0, "Cache should have entries");
         assertEquals(0, stats.getRejections(), "Should have no rejections");
     }
 

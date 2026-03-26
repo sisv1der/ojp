@@ -96,6 +96,14 @@ public class QueryResultCache {
     public void put(QueryCacheKey key, CachedQueryResult result) {
         long resultSize = result.getEstimatedSizeBytes();
         
+        // Check if the single result itself exceeds the max size
+        if (resultSize > maxSizeBytes) {
+            statistics.recordRejection();
+            metrics.recordCacheRejection(datasourceName, resultSize);
+            updateCacheSizeMetrics();
+            return;
+        }
+        
         // Check size limit
         while (currentSizeBytes.get() + resultSize > maxSizeBytes && cache.estimatedSize() > 0) {
             // Trigger eviction by clearing oldest entries
