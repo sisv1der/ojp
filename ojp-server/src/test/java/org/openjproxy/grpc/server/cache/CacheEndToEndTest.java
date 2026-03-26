@@ -9,9 +9,11 @@ import org.openjproxy.grpc.server.cache.QueryResultCache;
 import org.openjproxy.grpc.server.cache.QueryResultCacheRegistry;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -36,12 +38,12 @@ public class CacheEndToEndTest {
         datasourceName = "test_ds_" + UUID.randomUUID().toString();
         
         // Clear any existing cache
-        registry.clear(datasourceName);
+        registry.clear();
     }
     
     @AfterEach
     public void tearDown() {
-        registry.clear(datasourceName);
+        registry.clear();
     }
     
     /**
@@ -58,9 +60,10 @@ public class CacheEndToEndTest {
     public void testCompleteQueryLifecycle() {
         // Configure cache
         CacheRule rule = new CacheRule(
-            "SELECT .* FROM products.*",
+            Pattern.compile("SELECT .* FROM products.*"),
             Duration.ofMinutes(10),
-            Set.of("products")
+            List.of("products"),
+            true
         );
         CacheConfiguration config = new CacheConfiguration(
             datasourceName,
@@ -84,7 +87,15 @@ public class CacheEndToEndTest {
             List.of(1, "Laptop", "electronics", 999.99),
             List.of(2, "Phone", "electronics", 599.99)
         );
-        CachedQueryResult result = new CachedQueryResult(columnNames, rows);
+        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR", "DECIMAL");
+        CachedQueryResult result = new CachedQueryResult(
+            rows,
+            columnNames,
+            columnTypes,
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of("products")
+        );
         
         cache.put(key, result);
         
@@ -114,9 +125,10 @@ public class CacheEndToEndTest {
     public void testAutomaticInvalidationOnWrite() {
         // Configure cache
         CacheRule rule = new CacheRule(
-            "SELECT .* FROM products.*",
+            Pattern.compile("SELECT .* FROM products.*"),
             Duration.ofMinutes(10),
-            Set.of("products")
+            List.of("products"),
+            true
         );
         CacheConfiguration config = new CacheConfiguration(
             datasourceName,
@@ -132,8 +144,16 @@ public class CacheEndToEndTest {
         QueryCacheKey key = new QueryCacheKey(datasourceName, sql, params);
         
         List<String> columnNames = List.of("id", "name");
+        List<String> columnTypes = List.of("INTEGER", "VARCHAR");
         List<List<Object>> rows = List.of(List.of(1, "Laptop"));
-        CachedQueryResult result = new CachedQueryResult(columnNames, rows);
+        CachedQueryResult result = new CachedQueryResult(
+            rows,
+            columnNames,
+            columnTypes,
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of("products")
+        );
         cache.put(key, result);
         
         // Verify cached
@@ -162,9 +182,10 @@ public class CacheEndToEndTest {
         String ds2 = "datasource2";
         
         CacheRule rule = new CacheRule(
-            "SELECT .*",
+            Pattern.compile("SELECT .*"),
             Duration.ofMinutes(10),
-            Set.of()
+            List.of(),
+            true
         );
         
         CacheConfiguration config1 = new CacheConfiguration(ds1, true, List.of(rule));
@@ -179,11 +200,12 @@ public class CacheEndToEndTest {
         QueryCacheKey key2 = new QueryCacheKey(ds2, sql, List.of());
         
         List<String> columns = List.of("id", "name");
+        List<String> types = List.of("INTEGER", "VARCHAR");
         List<List<Object>> rows1 = List.of(List.of(1, "Alice"));
         List<List<Object>> rows2 = List.of(List.of(2, "Bob"));
         
-        cache1.put(key1, new CachedQueryResult(columns, rows1));
-        cache2.put(key2, new CachedQueryResult(columns, rows2));
+        cache1.put(key1, new CachedQueryResult(rows1, columns, types, Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
+        cache2.put(key2, new CachedQueryResult(rows2, columns, types, Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
         
         // Verify isolation
         CachedQueryResult result1 = cache1.get(key1);
@@ -201,8 +223,7 @@ public class CacheEndToEndTest {
         assertNotNull(cache2.get(key2), "Cache2 should NOT be invalidated");
         
         // Cleanup
-        registry.clear(ds1);
-        registry.clear(ds2);
+        registry.clear();
     }
     
     /**
@@ -213,9 +234,10 @@ public class CacheEndToEndTest {
     @Test
     public void testComplexQueryPatterns() {
         CacheRule rule = new CacheRule(
-            "SELECT .* FROM orders.*JOIN.*",
+            Pattern.compile("SELECT .* FROM orders.*JOIN.*"),
             Duration.ofMinutes(5),
-            Set.of("orders", "order_items")
+            List.of("orders", "order_items"),
+            true
         );
         CacheConfiguration config = new CacheConfiguration(
             datasourceName,
@@ -234,11 +256,19 @@ public class CacheEndToEndTest {
         
         // Store complex result
         List<String> columns = List.of("id", "customer_id", "product_id", "quantity");
+        List<String> types = List.of("INTEGER", "INTEGER", "INTEGER", "INTEGER");
         List<List<Object>> rows = List.of(
             List.of(1, 12345, 101, 2),
             List.of(1, 12345, 102, 1)
         );
-        CachedQueryResult result = new CachedQueryResult(columns, rows);
+        CachedQueryResult result = new CachedQueryResult(
+            rows,
+            columns,
+            types,
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(5)),
+            Set.of("orders", "order_items")
+        );
         cache.put(key, result);
         
         // Verify cached
@@ -275,8 +305,8 @@ public class CacheEndToEndTest {
     public void testRealisticEcommerceWorkload() throws Exception {
         // Configure cache for product and user queries
         List<CacheRule> rules = List.of(
-            new CacheRule("SELECT .* FROM products.*", Duration.ofMinutes(10), Set.of("products")),
-            new CacheRule("SELECT .* FROM users.*", Duration.ofMinutes(5), Set.of("users"))
+            new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofMinutes(10), List.of("products"), true),
+            new CacheRule(Pattern.compile("SELECT .* FROM users.*"), Duration.ofMinutes(5), List.of("users"), true)
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, rules);
         QueryResultCache cache = registry.getOrCreate(config);
@@ -294,7 +324,14 @@ public class CacheEndToEndTest {
             String sql = "SELECT * FROM products WHERE id = ?";
             QueryCacheKey key = new QueryCacheKey(datasourceName, sql, List.of(i % 10));
             List<List<Object>> rows = List.of(List.of(i % 10, "Product" + i));
-            cache.put(key, new CachedQueryResult(List.of("id", "name"), rows));
+            cache.put(key, new CachedQueryResult(
+                rows,
+                List.of("id", "name"),
+                List.of("INTEGER", "VARCHAR"),
+                Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(10)),
+                Set.of("products")
+            ));
         }
         
         int cacheableQueries = 0;
@@ -311,7 +348,14 @@ public class CacheEndToEndTest {
                 if (result == null) {
                     // Cache miss, store result
                     List<List<Object>> rows = List.of(List.of(productId, "Product" + productId));
-                    cache.put(key, new CachedQueryResult(List.of("id", "name"), rows));
+                    cache.put(key, new CachedQueryResult(
+                        rows,
+                        List.of("id", "name"),
+                        List.of("INTEGER", "VARCHAR"),
+                        Instant.now(),
+                        Instant.now().plus(Duration.ofMinutes(10)),
+                        Set.of("products")
+                    ));
                 }
                 cacheableQueries++;
                 
@@ -324,7 +368,14 @@ public class CacheEndToEndTest {
                 CachedQueryResult result = cache.get(key);
                 if (result == null) {
                     List<List<Object>> rows = List.of(List.of(userId, "User" + userId));
-                    cache.put(key, new CachedQueryResult(List.of("id", "name"), rows));
+                    cache.put(key, new CachedQueryResult(
+                        rows,
+                        List.of("id", "name"),
+                        List.of("INTEGER", "VARCHAR"),
+                        Instant.now(),
+                        Instant.now().plus(Duration.ofMinutes(5)),
+                        Set.of("users")
+                    ));
                 }
                 cacheableQueries++;
                 
@@ -365,9 +416,10 @@ public class CacheEndToEndTest {
     @Test
     public void testConcurrentAccessUnderLoad() throws Exception {
         CacheRule rule = new CacheRule(
-            "SELECT .*",
+            Pattern.compile("SELECT .*"),
             Duration.ofMinutes(10),
-            Set.of("test_table")
+            List.of("test_table"),
+            true
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, List.of(rule));
         QueryResultCache cache = registry.getOrCreate(config);
@@ -393,7 +445,14 @@ public class CacheEndToEndTest {
                         if (result == null) {
                             // Store
                             List<List<Object>> rows = List.of(List.of(id, "Value" + id));
-                            cache.put(key, new CachedQueryResult(List.of("id", "value"), rows));
+                            cache.put(key, new CachedQueryResult(
+                                rows,
+                                List.of("id", "value"),
+                                List.of("INTEGER", "VARCHAR"),
+                                Instant.now(),
+                                Instant.now().plus(Duration.ofMinutes(10)),
+                                Set.of("test_table")
+                            ));
                         }
                         
                         // Occasionally invalidate
@@ -437,9 +496,10 @@ public class CacheEndToEndTest {
     @Test
     public void testLargeResultSetHandling() {
         CacheRule rule = new CacheRule(
-            "SELECT .*",
+            Pattern.compile("SELECT .*"),
             Duration.ofMinutes(10),
-            Set.of()
+            List.of(),
+            true
         );
         CacheConfiguration config = new CacheConfiguration(datasourceName, true, List.of(rule));
         QueryResultCache cache = registry.getOrCreate(config);
@@ -449,14 +509,23 @@ public class CacheEndToEndTest {
         
         // Create large result set (1000 rows, each with 10 columns)
         List<String> columns = List.of("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10");
+        List<String> types = List.of("INTEGER", "VARCHAR", "INTEGER", "VARCHAR", "INTEGER", 
+                                     "VARCHAR", "INTEGER", "VARCHAR", "INTEGER", "VARCHAR");
         List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
             rows.add(List.of(i, "value" + i, i * 2, "data" + i, i * 3, 
                             "info" + i, i * 4, "text" + i, i * 5, "content" + i));
         }
         
-        CachedQueryResult result = new CachedQueryResult(columns, rows);
-        long estimatedSize = result.estimateSize();
+        CachedQueryResult result = new CachedQueryResult(
+            rows,
+            columns,
+            types,
+            Instant.now(),
+            Instant.now().plus(Duration.ofMinutes(10)),
+            Set.of("large_table")
+        );
+        long estimatedSize = result.getEstimatedSizeBytes();
         System.out.println("Large result set size: " + estimatedSize + " bytes");
         
         // Try to cache
