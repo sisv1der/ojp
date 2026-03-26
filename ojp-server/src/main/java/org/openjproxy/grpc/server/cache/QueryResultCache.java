@@ -96,8 +96,12 @@ public class QueryResultCache {
     public void put(QueryCacheKey key, CachedQueryResult result) {
         long resultSize = result.getEstimatedSizeBytes();
         
+        System.out.println("[PUT] Starting - key=" + key.getNormalizedSql().substring(0, Math.min(30, key.getNormalizedSql().length())) + 
+                          ", resultSize=" + resultSize + ", currentSize=" + currentSizeBytes.get() + ", cacheEntries=" + cache.estimatedSize());
+        
         // Check if the single result itself exceeds the max size
         if (resultSize > maxSizeBytes) {
+            System.out.println("[PUT] REJECT - result too large: " + resultSize + " > " + maxSizeBytes);
             statistics.recordRejection();
             metrics.recordCacheRejection(datasourceName, resultSize);
             updateCacheSizeMetrics();
@@ -106,11 +110,13 @@ public class QueryResultCache {
         
         // Check size limit
         while (currentSizeBytes.get() + resultSize > maxSizeBytes && cache.estimatedSize() > 0) {
+            System.out.println("[PUT] Evicting - need room: current=" + currentSizeBytes.get() + " + result=" + resultSize + " > max=" + maxSizeBytes);
             // Trigger eviction by clearing oldest entries
             cache.cleanUp();
             
             // If still too large, don't cache this result
             if (currentSizeBytes.get() + resultSize > maxSizeBytes) {
+                System.out.println("[PUT] REJECT after eviction - still too large");
                 statistics.recordRejection();
                 metrics.recordCacheRejection(datasourceName, resultSize);
                 updateCacheSizeMetrics();
@@ -118,14 +124,22 @@ public class QueryResultCache {
             }
         }
         
+        System.out.println("[PUT] Before cache.put() - currentSize=" + currentSizeBytes.get());
+        
         // cache.put() will trigger the removal listener for any replaced entry
         cache.put(key, result);
+        
+        System.out.println("[PUT] After cache.put(), before cleanUp() - currentSize=" + currentSizeBytes.get() + ", cacheEntries=" + cache.estimatedSize());
         
         // Ensure any pending removals are processed synchronously BEFORE adding new size
         cache.cleanUp();
         
+        System.out.println("[PUT] After cleanUp(), before addAndGet() - currentSize=" + currentSizeBytes.get());
+        
         // Add the new entry size (removal listener already handled old entry if replaced)
         currentSizeBytes.addAndGet(resultSize);
+        
+        System.out.println("[PUT] Complete - final currentSize=" + currentSizeBytes.get());
         
         updateCacheSizeMetrics();
     }
@@ -172,8 +186,11 @@ public class QueryResultCache {
      * The removal listeners will automatically update currentSizeBytes to 0.
      */
     public void invalidateAll() {
+        System.out.println("[INVALIDATE_ALL] Starting - currentSize=" + currentSizeBytes.get() + ", cacheEntries=" + cache.estimatedSize());
         cache.invalidateAll();
+        System.out.println("[INVALIDATE_ALL] After invalidateAll(), before cleanUp() - currentSize=" + currentSizeBytes.get() + ", cacheEntries=" + cache.estimatedSize());
         cache.cleanUp(); // Ensure removal listeners are called synchronously
+        System.out.println("[INVALIDATE_ALL] After cleanUp() - currentSize=" + currentSizeBytes.get() + ", cacheEntries=" + cache.estimatedSize());
     }
     
     /**
@@ -192,8 +209,14 @@ public class QueryResultCache {
      * Called when an entry is removed from the cache.
      */
     private void onRemoval(QueryCacheKey key, CachedQueryResult value, RemovalCause cause) {
+        System.out.println("[ON_REMOVAL] Called - key=" + (key != null ? key.getNormalizedSql().substring(0, Math.min(30, key.getNormalizedSql().length())) : "null") + 
+                          ", valueSize=" + (value != null ? value.getEstimatedSizeBytes() : 0) + 
+                          ", cause=" + cause + ", currentSize=" + currentSizeBytes.get());
+        
         if (value != null) {
-            currentSizeBytes.addAndGet(-value.getEstimatedSizeBytes());
+            long sizeToRemove = value.getEstimatedSizeBytes();
+            long newSize = currentSizeBytes.addAndGet(-sizeToRemove);
+            System.out.println("[ON_REMOVAL] After decrement - removed=" + sizeToRemove + ", newCurrentSize=" + newSize);
         }
         
         if (cause == RemovalCause.SIZE || cause == RemovalCause.EXPIRED) {
