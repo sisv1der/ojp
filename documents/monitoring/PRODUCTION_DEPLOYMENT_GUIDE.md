@@ -299,7 +299,7 @@ grep "ojp.cache.queries" ojp.properties
 - Review query patterns - may be too specific
 - Check TTL values - may be too short
 - Verify queries match patterns
-- See CACHE_USER_GUIDE.md for pattern tuning
+- See [CACHE_USER_GUIDE.md](../guides/CACHE_USER_GUIDE.md) for pattern tuning
 
 **2. High memory usage**
 
@@ -502,7 +502,7 @@ curl -X POST http://localhost:8080/admin/cache/invalidate \
 ## Support
 
 **Documentation:**
-- User Guide: `CACHE_USER_GUIDE.md`
+- User Guide: [CACHE_USER_GUIDE.md](../guides/CACHE_USER_GUIDE.md)
 - Troubleshooting: See section above
 - API Documentation: `documents/api/cache-api.md`
 

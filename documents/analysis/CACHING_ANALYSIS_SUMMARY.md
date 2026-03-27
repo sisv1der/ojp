@@ -1,6 +1,6 @@
 # OJP Caching Implementation - Quick Reference
 
-**Full Analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](../../CACHING_IMPLEMENTATION_ANALYSIS.md)
+**Full Analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](CACHING_IMPLEMENTATION_ANALYSIS.md)
 
 ---
 
@@ -411,7 +411,7 @@ postgres_prod.ojp.cache.queries.1.pattern=...
 
 ## Next Steps
 
-1. **Review full analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](../../CACHING_IMPLEMENTATION_ANALYSIS.md)
+1. **Review full analysis:** [CACHING_IMPLEMENTATION_ANALYSIS.md](CACHING_IMPLEMENTATION_ANALYSIS.md)
 2. **Provide feedback:** Create GitHub issue with questions/suggestions
 3. **Implementation:** Follow the phased roadmap in the full document
 
