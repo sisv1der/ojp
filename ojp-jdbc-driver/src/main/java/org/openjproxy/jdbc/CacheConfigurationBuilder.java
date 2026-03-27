@@ -24,15 +24,25 @@ import java.util.regex.PatternSyntaxException;
 @Slf4j
 public class CacheConfigurationBuilder {
     
+    // Private constructor to hide the implicit public one
+    private CacheConfigurationBuilder() {
+        throw new UnsupportedOperationException("Utility class");
+    }
+    
     /**
      * Add cache configuration properties to the properties map.
      * Reads cache configuration from System properties and adds them to the connection properties.
      *
      * @param propertiesMap The properties map to add cache configuration to
-     * @param datasourceName The datasource name to build configuration for
+     * @param datasourceName The datasource name to build configuration for (may be empty for default datasource)
      */
     public static void addCachePropertiesToMap(Map<String, Object> propertiesMap, String datasourceName) {
-        String prefix = datasourceName + ".ojp.cache.";
+        // Handle empty/null datasource name (default datasource case)
+        // When datasourceName is empty, prefix becomes "ojp.cache." instead of ".ojp.cache."
+        String effectiveName = (datasourceName == null || datasourceName.trim().isEmpty()) 
+            ? "" 
+            : datasourceName.trim() + ".";
+        String prefix = effectiveName + "ojp.cache.";
         
         // Check if caching is enabled
         String enabledValue = System.getProperty(prefix + "enabled");

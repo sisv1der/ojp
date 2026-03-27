@@ -92,6 +92,11 @@ queries.3.ttl=2h      # 2 hours
 
 ### Invalidation
 
+> **⚠️ Important:** Invalidation is **optional** and should be used carefully. Constant invalidation defeats the purpose of caching. 
+> 
+> **Best for:** Reference data that changes infrequently (e.g., countries, currencies, product categories, configuration settings)  
+> **Avoid for:** Frequently changing data (e.g., real-time inventory, active user sessions, constantly updated records)
+
 Cache entries are automatically invalidated when tables are modified:
 
 ```properties
@@ -148,14 +153,14 @@ userdb.ojp.cache.queries.2.invalidateOn=user_permissions,users
 ```properties
 # Dashboard queries (can tolerate slight staleness)
 analytics.ojp.cache.enabled=true
-analytics.ojp.cache.queries.1.pattern=SELECT COUNT\(\*\) FROM orders WHERE.*
+analytics.ojp.cache.queries.1.pattern=SELECT COUNT\(\*\) FROM daily_stats WHERE.*
 analytics.ojp.cache.queries.1.ttl=300s
-analytics.ojp.cache.queries.1.invalidateOn=orders
+analytics.ojp.cache.queries.1.invalidateOn=daily_stats
 
-# Report aggregations (expensive queries)
-analytics.ojp.cache.queries.2.pattern=SELECT .* FROM daily_stats WHERE date >= \?
+# Report aggregations (expensive queries, reference data)
+analytics.ojp.cache.queries.2.pattern=SELECT .* FROM country_codes WHERE.*
 analytics.ojp.cache.queries.2.ttl=3600s
-analytics.ojp.cache.queries.2.invalidateOn=daily_stats
+analytics.ojp.cache.queries.2.invalidateOn=country_codes
 ```
 
 ## Monitoring
@@ -310,6 +315,74 @@ logging.level.org.openjproxy.grpc.server.action.transaction.ExecuteQueryAction=D
 - Could indicate SQL injection attempt
 - Cache key validation prevents caching potentially malicious queries
 
+## Working with ORMs (Hibernate, Spring Data JPA)
+
+OJP caching works seamlessly with ORMs that generate SQL dynamically. Patterns can be flexible enough to match various column selections and ordering.
+
+### Pattern Flexibility
+
+**What patterns CAN match:**
+- ✅ **Column selection** - Different columns or column order: `SELECT id, name FROM users` vs `SELECT name, id FROM users`
+- ✅ **WHERE clause variations** - Different predicates: `WHERE id = ?` vs `WHERE status = ?`  
+- ✅ **JOIN variations** - Simple to complex joins
+- ✅ **Whitespace differences** - Extra spaces, newlines, tabs
+
+**Pattern examples for ORMs:**
+
+```properties
+# Matches any Hibernate query on users table, regardless of selected columns
+orm_db.ojp.cache.queries.1.pattern=SELECT\\s+.*\\s+FROM\\s+users\\s+WHERE.*
+orm_db.ojp.cache.queries.1.ttl=300s
+orm_db.ojp.cache.queries.1.invalidateOn=users
+
+# Match Spring Data JPA repository queries  
+orm_db.ojp.cache.queries.2.pattern=SELECT\\s+.*\\s+FROM\\s+products\\s+WHERE\\s+category_id\\s*=.*
+orm_db.ojp.cache.queries.2.ttl=600s
+orm_db.ojp.cache.queries.2.invalidateOn=products
+
+# Match complex JOIN queries from JPA Criteria API
+orm_db.ojp.cache.queries.3.pattern=SELECT\\s+.*\\s+FROM\\s+orders.*JOIN.*customers.*
+orm_db.ojp.cache.queries.3.ttl=300s
+orm_db.ojp.cache.queries.3.invalidateOn=orders,customers
+```
+
+### Important Considerations
+
+1. **Cache key includes full SQL** - Even if pattern is broad, cache key is the exact SQL + parameters
+   - `SELECT id FROM users WHERE id=1` ≠ `SELECT name FROM users WHERE id=1` (different cache entries)
+   
+2. **Parameter handling** - Parameter values are part of cache key
+   - `SELECT * FROM products WHERE id=?` with `id=5` ≠ same query with `id=10`
+
+3. **Testing ORM patterns** - Enable SQL logging in your ORM to see generated SQL:
+   ```properties
+   # Hibernate SQL logging
+   spring.jpa.show-sql=true
+   spring.jpa.properties.hibernate.format_sql=true
+   ```
+
+4. **Pattern complexity** - Balance between matching ORM variations and being specific enough:
+   - ❌ Too broad: `SELECT .* FROM .*` (caches everything)
+   - ✅ Just right: `SELECT .* FROM products WHERE.*` (specific table, flexible query)
+
+### Example: Spring Data JPA Repository
+
+```java
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    List<Product> findByCategoryId(Long categoryId);  // Generates: SELECT * FROM products WHERE category_id = ?
+    Product findBySkuCode(String skuCode);             // Generates: SELECT * FROM products WHERE sku_code = ?
+}
+```
+
+**Cache configuration:**
+```properties
+# Single pattern matches both repository methods
+myapp.ojp.cache.enabled=true
+myapp.ojp.cache.queries.1.pattern=SELECT\\s+.*\\s+FROM\\s+products\\s+WHERE.*
+myapp.ojp.cache.queries.1.ttl=300s
+myapp.ojp.cache.queries.1.invalidateOn=products
+```
+
 ## Best Practices
 
 ### Pattern Design
@@ -390,8 +463,8 @@ tenant2.ojp.cache.queries.1.ttl=300s
 
 For issues, questions, or feature requests:
 - GitHub Issues: https://github.com/Open-J-Proxy/ojp/issues
-- Documentation: https://github.com/Open-J-Proxy/ojp/wiki
+- eBook Documentation: [documents/ebook/README.md](../ebook/README.md)
 
 ## Version
 
-This guide is for OJP Caching v1.0 (Phases 1-10 complete)
+This guide is for OJP v0.5.0-beta with complete query result caching implementation.
