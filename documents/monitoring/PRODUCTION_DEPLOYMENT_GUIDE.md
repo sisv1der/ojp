@@ -13,6 +13,8 @@ This guide provides step-by-step instructions for deploying query result caching
 - Operations team trained on troubleshooting
 - Rollback plan documented
 
+> **⚠️ Multi-Server Environment Note:** The current v0.5.0-beta implementation uses local caching only. Each OJP server instance maintains its own independent cache with no synchronization between servers. In multi-server deployments, write operations invalidate only the local server's cache—other servers' caches remain until TTL expires. **Use shorter TTLs (30-60 seconds) in clustered environments** to limit staleness windows. Distributed cache synchronization is under discussion for future releases.
+
 ## Deployment Strategy
 
 ### Phase-Based Rollout

@@ -238,22 +238,25 @@ Not all queries benefit from caching. Good candidates for caching:
 
 TTL selection balances data freshness against cache effectiveness:
 
-**Short TTLs (10s - 2m):**
+**Short TTLs (30s - 2m):**
+- Use for multi-server deployments (see caveat below)
 - Use for data that changes somewhat frequently
 - User-facing queries where minor staleness is acceptable
 - High-traffic queries where even brief caching helps
 
 **Medium TTLs (5m - 30m):**
-- Use for typical business data
+- Use for typical business data in single-server deployments
 - Product catalogs, category listings
 - User profile data
-- The "sweet spot" for most applications
+- The "sweet spot" for most applications with one OJP server
 
 **Long TTLs (1h - 24h):**
-- Use for truly static reference data
+- Use for truly static reference data in single-server deployments
 - Countries, currencies, timezone lists
 - Configuration data that rarely changes
 - Be cautious—longer TTLs increase staleness risk
+
+> **⚠️ Multi-Server Deployments:** If you're running multiple OJP servers behind a load balancer, **use shorter TTLs (30-60 seconds)** to limit the staleness window. In the current v0.5.0-beta implementation, cache invalidation only affects the local server where the write occurs. Other servers' caches remain stale until TTL expires. Distributed cache synchronization is under discussion for a future release.
 
 ### Invalidation Strategy
 
@@ -519,11 +522,55 @@ This will log:
 
 > **AI Image Prompt**: Create a troubleshooting flowchart. Start with a problem node (low hit rate, stale data, high memory), branch to diagnostic steps (check metrics, review logs, test patterns), and end with solution nodes (adjust TTL, add invalidation, refine patterns). Use decision diamonds, action rectangles, and solution stars. Add icons for log files, charts, and configuration files.
 
-## Future Enhancements
+## Multi-Server Deployment Considerations
 
-The current implementation provides local caching per OJP server instance. Future versions may include:
+> **⚠️ IMPORTANT LIMITATION:** The current v0.5.0-beta implementation uses **local caching only**. Each OJP server maintains its own independent cache with **no synchronization between servers**.
 
-- **Distributed caching** - Share cached results across multiple OJP instances
+### How This Affects Your Deployment
+
+In a multi-server environment (load-balanced OJP instances), cache invalidation only affects the server that processes the write operation:
+
+**Scenario:**
+- You have OJP Servers A, B, and C behind a load balancer
+- A client executes `UPDATE products SET name = 'New Name' WHERE id = 100` → routed to Server A
+- Server A invalidates its cache for the products table ✅
+- Servers B and C still have the old product name in their cache ⚠️
+- Subsequent queries routed to B or C return **stale data** until their TTL expires
+
+### Mitigation Strategies
+
+**1. Use Shorter TTLs in Clustered Environments:**
+```properties
+# Single server: longer TTL is fine
+myapp.ojp.cache.queries.1.ttl=600s  # 10 minutes
+
+# Multi-server: use shorter TTL to limit staleness
+myapp.ojp.cache.queries.1.ttl=30s   # 30 seconds
+```
+
+**2. Cache Only Truly Static Reference Data:**
+- Country codes, currency lists, product categories
+- Configuration tables that change very rarely
+- Avoid caching transactional or frequently-updated data in multi-server setups
+
+**3. Accept Eventual Consistency:**
+- For reference data, 30-60 seconds of staleness is often acceptable
+- Users already accept similar delays in CDN caching, DNS propagation, etc.
+
+### Future Enhancement: Distributed Cache Synchronization
+
+Cross-server cache synchronization is currently **under active discussion** for a future OJP release. The planned enhancement would:
+
+- Propagate invalidations across all OJP servers in real-time
+- Share cached results between servers to improve overall hit rate
+- Maintain consistency guarantees across the cluster
+
+Until this feature is available, carefully consider the staleness implications when deploying caching in multi-server environments.
+
+## Future Enhancements (Under Discussion)
+
+Beyond distributed caching, future versions may include:
+
 - **Cache warming** - Pre-populate cache on startup with known queries
 - **Dynamic TTL adjustment** - Automatically tune TTLs based on update patterns
 - **Advanced invalidation** - Dependency tracking for complex table relationships

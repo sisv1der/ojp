@@ -89,6 +89,7 @@ queries.3.ttl=2h      # 2 hours
 - **Minimum:** 10s (shorter TTLs may cause high database load)
 - **Maximum:** 24h (longer TTLs risk serving stale data)
 - **Recommended:** 5-30 minutes for most use cases
+- **⚠️ Multi-server:** Use 30-60s in clustered deployments (see [Limitations](#limitations))
 
 ### Invalidation
 
@@ -398,6 +399,7 @@ myapp.ojp.cache.queries.1.invalidateOn=products
 2. **Consider update frequency** - How often does data change?
 3. **Start conservative** - Begin with shorter TTLs, increase if safe
 4. **Monitor invalidation rate** - High invalidation = shorter effective TTL
+5. **⚠️ Multi-server deployments** - Use shorter TTLs (30-60s) in clustered environments since invalidation only affects the local server. See [Limitations](#limitations) section for details.
 
 ### Invalidation Configuration
 
@@ -414,17 +416,41 @@ myapp.ojp.cache.queries.1.invalidateOn=products
 
 ## Limitations
 
+### Multi-Server Deployments ⚠️
+
+> **⚠️ IMPORTANT:** In the current v0.5.0-beta implementation, **each OJP server maintains its own independent local cache**. This has important implications for multi-server deployments:
+
+**Current Behavior:**
+- When an UPDATE/INSERT/DELETE statement is executed on **Server A**, only **Server A's cache** is invalidated
+- **Servers B, C, D** retain their cached entries until TTL expires naturally
+- This can result in different servers serving different data temporarily
+
+**Example Scenario:**
+1. Client updates a product name via Server A → Server A invalidates its cache for that product ✅
+2. Another client queries the same product via Server B → Server B returns **stale cached data** until TTL expires ⚠️
+
+**Recommendations for Multi-Server Environments:**
+- Use **shorter TTLs** (30-60 seconds) to limit the staleness window
+- Apply caching only to **reference data** that changes very infrequently (countries, currencies, categories)
+- Consider the acceptable staleness for your use case when choosing TTL values
+- Monitor cache hit rates and adjust TTL accordingly
+
+**Future Enhancement:**
+Distributed cache synchronization across OJP server nodes is currently **under discussion** for a future release. This would enable real-time invalidation propagation across all servers in a cluster.
+
 ### Current Implementation (Local-Only)
 
 - **Per-server caching** - Each OJP server has independent cache
-- **Write invalidation** - Only local server cache is invalidated
+- **Write invalidation** - Only local server cache is invalidated  
 - **No cluster coordination** - Caches not shared between servers
+- **Local memory only** - No external cache infrastructure required
 
-### Future Enhancements
+### Future Enhancements (Under Discussion)
 
 - **Distributed caching** - Share cache across OJP servers
-- **Write-through propagation** - Invalidate caches on all servers
+- **Write-through propagation** - Invalidate caches on all servers in real-time
 - **Advanced analytics** - Per-query hit rates and performance metrics
+- **Cache warming** - Pre-populate cache on startup
 
 ## Advanced Topics
 

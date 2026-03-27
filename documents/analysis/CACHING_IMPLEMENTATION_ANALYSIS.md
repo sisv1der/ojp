@@ -12,11 +12,13 @@ This document provides the comprehensive analysis that guided the implementation
 
 **Implementation Status:**
 - ✅ Client-side configuration via `ojp.properties`
-- ✅ Local cache storage using Caffeine cache
-- ✅ Automatic cache invalidation on DML operations  
+- ✅ Local cache storage using Caffeine cache (per-server, independent)
+- ✅ Automatic cache invalidation on DML operations (local server only)
 - ✅ OpenTelemetry metrics integration
 - ✅ Security validation and size limits
-- ⏳ Distributed caching (future enhancement)
+- ⏳ Distributed caching with cross-server synchronization (under discussion for future release)
+
+> **⚠️ Multi-Server Limitation:** In multi-server deployments, each OJP instance maintains its own independent cache. Write operations invalidate only the local server's cache. Other servers' caches remain until TTL expiry. Use shorter TTLs (30-60s) in clustered environments.
 
 **Key Achievements:**
 - ✅ Zero application code changes required
