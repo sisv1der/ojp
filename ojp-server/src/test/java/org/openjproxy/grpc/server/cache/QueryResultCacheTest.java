@@ -132,6 +132,7 @@ class QueryResultCacheTest {
         assertNotNull(cache.get(key2)); // Should NOT be invalidated (different datasource)
     }
     
+    @SneakyThrows
     @Test
     void testInvalidateAll() {
         QueryCacheKey key1 = new QueryCacheKey("testdb", "SELECT 1", List.of());
@@ -143,7 +144,8 @@ class QueryResultCacheTest {
         cache.put(key2, result);
         
         cache.invalidateAll();
-        
+        Thread.sleep(500);//NOSONAR
+
         assertNull(cache.get(key1));
         assertNull(cache.get(key2));
         assertEquals(0, cache.getEntryCount());
