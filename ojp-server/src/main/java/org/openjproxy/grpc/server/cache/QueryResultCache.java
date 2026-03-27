@@ -118,13 +118,14 @@ public class QueryResultCache {
             }
         }
         
-        // cache.put() will trigger the removal listener for any replaced entry
+        // Add entry to cache
         cache.put(key, result);
         
-        // Ensure any pending removals are processed synchronously BEFORE adding new size
+        // Force any pending removal listeners to execute before we increment size
+        // This ensures if we replaced an entry, its size is decremented first
         cache.cleanUp();
         
-        // Add the new entry size (removal listener already handled old entry if replaced)
+        // Increment size for the new entry
         currentSizeBytes.addAndGet(resultSize);
         
         updateCacheSizeMetrics();
@@ -172,8 +173,12 @@ public class QueryResultCache {
      * The removal listeners will automatically update currentSizeBytes to 0.
      */
     public void invalidateAll() {
+        // Process any pending maintenance first
+        cache.cleanUp();
+        // Then invalidate all entries
         cache.invalidateAll();
-        cache.cleanUp(); // Ensure removal listeners are called synchronously
+        // Process the removal listeners for the invalidated entries
+        cache.cleanUp();
     }
     
     /**
