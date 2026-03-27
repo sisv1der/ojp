@@ -1,5 +1,6 @@
 package org.openjproxy.grpc.server.cache;
 
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -166,6 +167,7 @@ class QueryResultCacheTest {
         assertNotNull(cache.get(key2));
     }
     
+    @SneakyThrows
     @Test
     void testSizeTracking() {
         QueryCacheKey key = new QueryCacheKey("testdb", "SELECT * FROM users", List.of());
@@ -178,6 +180,7 @@ class QueryResultCacheTest {
         assertTrue(afterPutSize > initialSize);
         
         cache.invalidateAll();
+        Thread.sleep(500);//NOSONAR
         assertEquals(0, cache.getCurrentSizeBytes());
     }
     
