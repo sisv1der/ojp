@@ -19,7 +19,17 @@ _"The only open-source JDBC Type 3 driver globally, this project introduces a tr
 
 ---
 
-<img src="documents/images/ojp_logo.png" alt="OJP Banner" />
+<img src="documents/images/ojp_logo.png" alt="OJP Banner" width="200" />
+
+## Star History
+
+<a href="https://star-history.com/#Open-J-Proxy/ojp&Timeline">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Open-J-Proxy/ojp&type=Timeline&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Open-J-Proxy/ojp&type=Timeline" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Open-J-Proxy/ojp&type=Timeline" />
+  </picture>
+</a>
 
 
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/wqoejbve8z)
