@@ -22,6 +22,8 @@
         <jib.plugin.version>3.4.5</jib.plugin.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <!-- ojp-server is distributed as a Docker image, not a Maven artifact -->
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
     <dependencyManagement>
@@ -295,7 +297,7 @@
                         <image>eclipse-temurin:22-jre</image>
                     </from>
                     <to>
-                        <image>rrobetti/ojp:0.4.1-SNAPSHOT</image>
+                        <image>rrobetti/ojp:${project.version}</image>
                     </to>
                     <container>
                         <mainClass>org.openjproxy.grpc.server.GrpcServer</mainClass>

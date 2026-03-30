@@ -113,6 +113,87 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <!--
+                Release profile: activated by -Prelease during CI release workflow.
+                Enables GPG signing, source/javadoc JAR generation, and Sonatype Central publishing.
+                Required GitHub secrets: SONATYPE_USERNAME, SONATYPE_PASSWORD, GPG_PRIVATE_KEY, GPG_PASSPHRASE.
+            -->
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!-- Sources JAR - required by Maven Central -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.2.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Javadoc JAR - required by Maven Central -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <configuration>
+                            <failOnWarnings>false</failOnWarnings>
+                            <doclint>none</doclint>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- GPG artifact signing - required by Maven Central -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- loopback mode is required for non-interactive CI environments -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Sonatype Central publishing -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <!-- Server ID matching the credentials in Maven settings.xml -->
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Automatically publish after validation (no manual approval needed) -->
+                            <autoPublish>true</autoPublish>
+                            <!-- Wait for publishing to complete before the build finishes -->
+                            <waitForPublishing>true</waitForPublishing>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <build>
