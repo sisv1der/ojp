@@ -161,6 +161,7 @@ That's it — one click.
 checkout → compute versions → set release version in all poms
   → build (no tests) → deploy to Maven Central (-Prelease)
   → download JDBC drivers → build & push Docker image
+  → update docs to new release version
   → commit release tag → bump to next SNAPSHOT
   → commit next-dev version → push to main + push tag
   → create GitHub Release

@@ -13,9 +13,10 @@
 #   4. Builds all Maven modules (no tests)
 #   5. Deploys all library modules to Maven Central via Sonatype Central
 #   6. Builds and pushes the OJP Server Docker image to Docker Hub
-#   7. Creates a GitHub release tag
-#   8. Bumps all pom.xml versions to the next development version
-#   9. Commits and pushes all changes back to main
+#   7. Updates all documentation to reference the new release version
+#   8. Creates a GitHub release tag
+#   9. Bumps all pom.xml versions to the next development version
+#  10. Commits and pushes all changes back to main
 #
 # VERSION SCHEME
 # --------------
@@ -209,7 +210,29 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 9. Commit release, create tag
+      # 9. Update version references in all documentation (*.md files)
+      #    Replaces:  rrobetti/ojp:<old>   →  rrobetti/ojp:<new>
+      #               ojp-server-<old>     →  ojp-server-<new>  (filenames + URLs)
+      #               /ojp-server/<old>/   →  /ojp-server/<new>/  (Maven Central URL path)
+      #               <version><old></version>  →  <version><new></version>
+      # -----------------------------------------------------------------------
+      - name: Update documentation to ${{ steps.versions.outputs.release }}
+        run: |
+          NEW="${{ steps.versions.outputs.release }}"
+          echo "Updating documentation references to ${NEW}"
+
+          # Use sed with version-agnostic regex so any previous X.Y.Z-beta is replaced
+          find . -name "*.md" -not -path './.git/*' -print0 | xargs -0 sed -i \
+            -e "s|rrobetti/ojp:[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta|rrobetti/ojp:${NEW}|g" \
+            -e "s|ojp-server-[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta|ojp-server-${NEW}|g" \
+            -e "s|/ojp-server/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta/|/ojp-server/${NEW}/|g" \
+            -e "s|<version>[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta</version>|<version>${NEW}</version>|g"
+
+          echo "Files updated:"
+          git diff --name-only
+
+      # -----------------------------------------------------------------------
+      # 10. Commit release (pom changes + docs update) and create tag
       # -----------------------------------------------------------------------
       - name: Commit release pom changes and create tag
         if: ${{ inputs.dry_run == false }}
@@ -220,7 +243,7 @@ jobs:
               -m "Release ${{ steps.versions.outputs.release }}"
 
       # -----------------------------------------------------------------------
-      # 10. Bump to next development (SNAPSHOT) version
+      # 11. Set next development (SNAPSHOT) version
       # -----------------------------------------------------------------------
       - name: Set next development version (${{ steps.versions.outputs.next }})
         run: |
@@ -237,7 +260,7 @@ jobs:
           git commit -m "chore(release): prepare next development iteration ${{ steps.versions.outputs.next }}"
 
       # -----------------------------------------------------------------------
-      # 11. Push commits and release tag to main
+      # 12. Push commits and release tag to main
       # -----------------------------------------------------------------------
       - name: Push commits and tag
         if: ${{ inputs.dry_run == false }}
@@ -246,7 +269,7 @@ jobs:
           git push origin "v${{ steps.versions.outputs.release }}"
 
       # -----------------------------------------------------------------------
-      # 12. Create GitHub Release from the new tag
+      # 13. Create GitHub Release from the new tag
       # -----------------------------------------------------------------------
       - name: Create GitHub Release
         if: ${{ inputs.dry_run == false }}
