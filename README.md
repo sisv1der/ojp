@@ -19,8 +19,6 @@ _"The only open-source JDBC Type 3 driver globally, this project introduces a tr
 
 ---
 
-<img src="documents/images/ojp_logo.png" alt="OJP Banner" width="200" />
-
 ## Star History
 
 <a href="https://star-history.com/#Open-J-Proxy/ojp&Timeline">
