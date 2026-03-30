@@ -177,8 +177,7 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 7. Deploy library modules to Maven Central
-      #    (ojp-server is excluded via <maven.deploy.skip>true</maven.deploy.skip>)
+      # 7. Deploy all modules to Maven Central (libraries + ojp-server executable JAR)
       # -----------------------------------------------------------------------
       - name: Deploy to Maven Central
         if: ${{ inputs.dry_run == false }}

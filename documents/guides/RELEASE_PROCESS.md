@@ -46,7 +46,7 @@ OJP uses a **single-repo multi-module Maven build** containing the following pub
 | `ojp-xa-pool-commons` | Maven Central | XA pool utilities |
 | `ojp-testcontainers` | Maven Central | Test helpers |
 | `spring-boot-starter-ojp` | Maven Central | Spring Boot auto-config |
-| `ojp-server` | Docker Hub only | Server binary — not published to Maven Central |
+| `ojp-server` | Maven Central + Docker Hub | Executable (shaded) JAR to Maven Central, Docker image to Docker Hub |
 
 The release workflow lives at `.github/workflows/release.yml`.
 
@@ -409,18 +409,21 @@ that enables all three publishing requirements:
 | `waitForPublishing` | `true` | Block the build until publishing completes (required for CI success) |
 | `publishingServerId` | `central` | Must match the `<server><id>` in Maven settings |
 
-### ojp-server Excluded from Maven Central
+### ojp-server: Dual Distribution
 
-`ojp-server` is distributed as a Docker image, not as a Maven library. To prevent
-it from being deployed to Maven Central, its `pom.xml` contains:
+`ojp-server` is distributed in **two forms**:
 
-```xml
-<properties>
-  <maven.deploy.skip>true</maven.deploy.skip>
-</properties>
-```
+- **Executable (shaded) JAR → Maven Central** — produced by `maven-shade-plugin` with
+  `shadedArtifactAttached=true`. This is a self-contained, runnable JAR that includes all
+  dependencies and sets `org.openjproxy.grpc.server.GrpcServer` as the main class. Users
+  can download and run it without Docker:
+  ```bash
+  java -jar ojp-server-<version>-shaded.jar
+  ```
+- **Docker image → Docker Hub** — produced by Jib (`jib:build`). The image bundles the
+  server together with open-source JDBC drivers pre-loaded in `/opt/ojp/ojp-libs`.
 
-`central-publishing-maven-plugin` respects this standard Maven property.
+Both are published as part of the same release workflow run.
 
 ---
 
