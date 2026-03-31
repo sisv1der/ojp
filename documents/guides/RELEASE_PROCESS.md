@@ -160,14 +160,34 @@ That's it — one click.
 ```
 checkout → compute versions → set release version in all poms
   → build (no tests) → deploy to Maven Central (-Prelease)
-  → download JDBC drivers → build & push Docker image
+  → build & push Docker image
   → update docs to new release version
-  → commit release tag → bump to next SNAPSHOT
-  → commit next-dev version → push to main + push tag
-  → create GitHub Release
+  → commit release pom changes → create annotated Git tag on the release commit
+  → bump to next SNAPSHOT → commit next-dev version
+  → push to main + push tag
+  → create GitHub Release with auto-generated release notes
 ```
 
 Detailed steps in the workflow file: `.github/workflows/release.yml`.
+
+#### Git tagging strategy
+
+The tag (`v<release-version>`) is created on the commit that contains the
+release version in the poms *before* the next-development-version bump commit.
+This means the tag always points to the exact source that was built and
+published — a clean snapshot with no `-SNAPSHOT` suffix anywhere.
+
+#### Auto-generated release notes
+
+When the GitHub Release is created, the workflow calls GitHub's
+[Generate release notes API](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release)
+to populate the release body automatically from merged pull requests since the
+previous release tag. No manual editing of release notes is required.
+
+Pull requests are grouped into labelled sections (New Features, Bug Fixes,
+etc.) as defined in `.github/release.yml`. To get a PR into the right section,
+apply the appropriate label before merging it. A fixed **Artifacts** footer
+(Maven Central and Docker Hub links) is always appended by the workflow.
 
 ### Version Scheme
 
@@ -312,7 +332,8 @@ git push origin v0.4.1-beta
 ### Step 10 — Create GitHub Release
 
 Go to **GitHub → Releases → Draft a new release**, select the tag `v0.4.1-beta`,
-fill in the release notes, and publish.
+and click **Generate release notes** to auto-populate the body from merged PRs
+since the previous release. Review and publish.
 
 ---
 
@@ -543,10 +564,12 @@ Add a companion `rollback.yml` workflow that, given a version tag, reverts the
 pom changes and allows re-release from the same version. Useful if Maven Central
 publication succeeds but Docker push fails.
 
-### 7. Changelog automation
+### 7. ~~Changelog automation~~ ✅ Implemented
 
-Integrate a changelog generator (e.g. `git-cliff` or `github-changelog-generator`)
-into the release workflow to auto-populate the GitHub Release body from commit messages.
+GitHub automatic release notes are now enabled via `generate_release_notes`
+in the release workflow and configured through `.github/release.yml`. Pull
+request labels control which section each PR appears in. No third-party tools
+are needed.
 
 ### 8. Reusable workflow
 
