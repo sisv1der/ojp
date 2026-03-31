@@ -307,16 +307,6 @@
                             <jvmFlag>-Duser.timezone=UTC</jvmFlag>
                         </jvmFlags>
                     </container>
-                    <!-- Include open source JDBC drivers in Docker image ("batteries included") -->
-                    <!-- Drivers are downloaded to ojp-libs during build -->
-                    <extraDirectories>
-                        <paths>
-                            <path>
-                                <from>ojp-libs</from>
-                                <into>/opt/ojp/ojp-libs</into>
-                            </path>
-                        </paths>
-                    </extraDirectories>
                 </configuration>
             </plugin>
             <!-- Sources JAR -->
