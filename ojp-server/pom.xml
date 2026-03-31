@@ -295,7 +295,7 @@
                         <image>eclipse-temurin:22-jre</image>
                     </from>
                     <to>
-                        <image>rrobetti/ojp:0.4.1-SNAPSHOT</image>
+                        <image>rrobetti/ojp:${project.version}</image>
                     </to>
                     <container>
                         <mainClass>org.openjproxy.grpc.server.GrpcServer</mainClass>
