@@ -189,7 +189,8 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                                                                  OpResult.Builder opResultBuilder) throws SQLException {
         PreparedStatement ps = StatementFactory.createPreparedStatement(sessionManager, dto, request.getSql(), params,
                 request);
-        if (StatementRequestValidator.requiresGeneratedKeysTracking(request)) {
+        if (StatementRequestValidator.requiresGeneratedKeysTracking(request)
+                && !StatementRequestValidator.isAddBatchOperation(request)) {
             String psNewUUID = sessionManager.registerPreparedStatement(dto.getSession(), ps);
             opResultBuilder.setUuid(psNewUUID);
         }
