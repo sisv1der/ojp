@@ -274,49 +274,14 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
     /**
      * Invalidates cache entries for tables modified by the SQL statement.
      * <p>
-     * Phase 9: Write Invalidation - Extracts modified tables from SQL and invalidates
-     * cached query results that depend on those tables.
+     * Phase 9: Write Invalidation - Delegates to QueryCacheHelper for centralized cache management.
      * </p>
      *
-     * @param session the session containing cache configuration
+     * @param actionContext the action context
+     * @param sessionInfo the session info
      * @param sql     the SQL statement that modified data
      */
     private void invalidateCacheIfEnabled(ActionContext actionContext, SessionInfo sessionInfo, String sql) {
-        if (sessionInfo == null) {
-            return;  // No session
-        }
-        
-        // Get actual Session object to access cache configuration
-        Session session = actionContext.getSessionManager().getSession(sessionInfo);
-        if (session == null || session.getCacheConfiguration() == null) {
-            return;  // Caching not enabled
-        }
-        
-        try {
-            // Extract modified tables from SQL
-            java.util.Set<String> modifiedTables = 
-                    org.openjproxy.grpc.server.cache.SqlTableExtractor.extractModifiedTables(sql);
-            
-            if (modifiedTables.isEmpty()) {
-                log.debug("No tables extracted from SQL, skipping cache invalidation");
-                return;
-            }
-            
-            // Get datasource and cache
-            String datasourceName = sessionInfo.getConnHash();
-            org.openjproxy.grpc.server.cache.QueryResultCache cache = 
-                    org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance()
-                    .get(datasourceName);
-            
-            if (cache != null) {
-                log.debug("Invalidating cache: datasource={}, tables={}", 
-                        datasourceName, modifiedTables);
-                cache.invalidate(datasourceName, modifiedTables);
-            }
-            
-        } catch (Exception e) {
-            // Log but don't fail the update - caching is best-effort
-            log.warn("Failed to invalidate cache: error={}", e.getMessage());
-        }
+        org.openjproxy.grpc.server.cache.QueryCacheHelper.invalidateCacheIfEnabled(actionContext, sessionInfo, sql);
     }
 }

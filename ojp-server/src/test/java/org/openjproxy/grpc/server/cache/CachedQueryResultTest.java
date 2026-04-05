@@ -1,267 +1,235 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.Test;
-import java.time.Duration;
+
 import java.time.Instant;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests for CachedQueryResult that now stores proto objects directly.
+ */
 class CachedQueryResultTest {
+
+    private OpQueryResultProto createTestProto(int rowCount, int columnCount) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        builder.setResultSetUUID("test-uuid");
+        
+        // Add column labels
+        for (int i = 0; i < columnCount; i++) {
+            builder.addLabels("col" + i);
+        }
+        
+        // Add rows
+        for (int r = 0; r < rowCount; r++) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (int c = 0; c < columnCount; c++) {
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue("value" + r + "_" + c)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
 
     @Test
     void testConstructorWithValidParameters() {
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(300);
+        OpQueryResultProto proto = createTestProto(2, 3);
         
         CachedQueryResult result = new CachedQueryResult(
-            List.of(List.of("value1", "value2")),
-            List.of("col1", "col2"),
-            List.of("VARCHAR", "VARCHAR"),
+            proto,
             now,
             expiresAt,
             Set.of("users")
         );
         
-        assertEquals(1, result.getRowCount());
-        assertEquals(2, result.getColumnCount());
+        assertEquals(2, result.getRowCount());
+        assertEquals(3, result.getColumnCount());
         assertEquals(now, result.getCachedAt());
         assertEquals(expiresAt, result.getExpiresAt());
         assertEquals(Set.of("users"), result.getAffectedTables());
+        assertSame(proto, result.getQueryResultProto());
+    }
+
+    @Test
+    void testConstructorWithNullProto() {
+        assertThrows(NullPointerException.class, () ->
+            new CachedQueryResult(null, Instant.now(), Instant.now().plusSeconds(60), Set.of())
+        );
     }
 
     @Test
     void testConstructorWithNullCachedAt() {
+        OpQueryResultProto proto = createTestProto(1, 1);
         assertThrows(NullPointerException.class, () ->
-            new CachedQueryResult(List.of(), List.of(), List.of(), null, Instant.now(), Set.of())
+            new CachedQueryResult(proto, null, Instant.now(), Set.of())
         );
     }
 
     @Test
     void testConstructorWithNullExpiresAt() {
+        OpQueryResultProto proto = createTestProto(1, 1);
         assertThrows(NullPointerException.class, () ->
-            new CachedQueryResult(List.of(), List.of(), List.of(), Instant.now(), null, Set.of())
+            new CachedQueryResult(proto, Instant.now(), null, Set.of())
         );
     }
 
     @Test
-    void testConstructorWithNullRows() {
+    void testConstructorWithNullAffectedTables() {
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(null, List.of(), List.of(), now, now, Set.of());
+        OpQueryResultProto proto = createTestProto(1, 1);
         
-        assertEquals(0, result.getRowCount());
-        assertNotNull(result.getRows());
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), null);
+        
+        assertNotNull(result.getAffectedTables());
+        assertTrue(result.getAffectedTables().isEmpty());
     }
 
     @Test
-    void testIsExpiredWhenNotExpired() {
+    void testConstructorWithEmptyAffectedTables() {
+        Instant now = Instant.now();
+        OpQueryResultProto proto = createTestProto(1, 1);
+        
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
+        
+        assertNotNull(result.getAffectedTables());
+        assertTrue(result.getAffectedTables().isEmpty());
+    }
+
+    @Test
+    void testIsExpired_NotExpired() {
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(300);
+        OpQueryResultProto proto = createTestProto(1, 1);
         
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, expiresAt, Set.of()
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, expiresAt, Set.of());
         
         assertFalse(result.isExpired());
     }
 
     @Test
-    void testIsExpiredWhenExpired() {
+    void testIsExpired_Expired() {
         Instant now = Instant.now();
-        Instant expiresAt = now.minusSeconds(1);
+        Instant expiresAt = now.minusSeconds(1); // Already expired
+        OpQueryResultProto proto = createTestProto(1, 1);
         
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, expiresAt, Set.of()
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, expiresAt, Set.of());
         
         assertTrue(result.isExpired());
     }
 
     @Test
-    void testIsExpiredWithSpecificTime() {
+    void testIsExpired_WithTime_NotExpired() {
         Instant now = Instant.now();
-        Instant expiresAt = now.plusSeconds(100);
+        Instant expiresAt = now.plusSeconds(300);
+        OpQueryResultProto proto = createTestProto(1, 1);
         
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, expiresAt, Set.of()
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, expiresAt, Set.of());
         
-        assertFalse(result.isExpired(now));
-        assertFalse(result.isExpired(now.plusSeconds(50)));
-        assertTrue(result.isExpired(now.plusSeconds(101)));
+        assertFalse(result.isExpired(now.plusSeconds(100)));
     }
 
     @Test
-    void testEstimatedSizeWithEmptyResult() {
+    void testIsExpired_WithTime_Expired() {
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, now, Set.of()
-        );
+        Instant expiresAt = now.plusSeconds(300);
+        OpQueryResultProto proto = createTestProto(1, 1);
         
+        CachedQueryResult result = new CachedQueryResult(proto, now, expiresAt, Set.of());
+        
+        assertTrue(result.isExpired(now.plusSeconds(400)));
+    }
+
+    @Test
+    void testEstimatedSizeBytes() {
+        OpQueryResultProto proto = createTestProto(10, 5);
+        Instant now = Instant.now();
+        
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
+        
+        // Proto's serialized size should be used
         assertTrue(result.getEstimatedSizeBytes() > 0);
+        assertEquals(proto.getSerializedSize(), result.getEstimatedSizeBytes());
     }
 
     @Test
-    void testEstimatedSizeWithData() {
+    void testRowCountMatchesProto() {
+        OpQueryResultProto proto = createTestProto(5, 3);
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(
-                List.of("value1", 123, 456L),
-                List.of("value2", 789, 012L)
-            ),
-            List.of("col1", "col2", "col3"),
-            List.of("VARCHAR", "INTEGER", "BIGINT"),
-            now,
-            now,
-            Set.of("table1", "table2")
-        );
         
-        long size = result.getEstimatedSizeBytes();
-        assertTrue(size > 128);  // At least the base overhead
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
+        
+        assertEquals(5, result.getRowCount());
+        assertEquals(proto.getRowsCount(), result.getRowCount());
     }
 
     @Test
-    void testImmutability() {
-        java.util.ArrayList<List<Object>> rows = new java.util.ArrayList<>();
-        rows.add(List.of("value1"));
-        
+    void testColumnCountMatchesProto() {
+        OpQueryResultProto proto = createTestProto(3, 7);
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            rows, List.of("col1"), List.of("VARCHAR"), now, now, Set.of()
-        );
         
-        // Modify original list
-        rows.add(List.of("value2"));
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
         
-        // Result should not be affected
-        assertEquals(1, result.getRowCount());
+        assertEquals(7, result.getColumnCount());
+        assertEquals(proto.getLabelsCount(), result.getColumnCount());
     }
 
     @Test
-    void testRowsAreUnmodifiable() {
+    void testGetQueryResultProto() {
+        OpQueryResultProto proto = createTestProto(2, 2);
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(List.of("value1")),
-            List.of("col1"),
-            List.of("VARCHAR"),
-            now,
-            now,
-            Set.of()
-        );
         
-        assertThrows(UnsupportedOperationException.class, () ->
-            result.getRows().add(List.of("value2"))
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
+        
+        assertSame(proto, result.getQueryResultProto());
     }
 
     @Test
-    void testColumnNamesAreUnmodifiable() {
+    void testAffectedTablesImmutable() {
+        OpQueryResultProto proto = createTestProto(1, 1);
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of("col1"), List.of(), now, now, Set.of()
-        );
+        Set<String> tables = Set.of("users", "orders");
         
-        assertThrows(UnsupportedOperationException.class, () ->
-            result.getColumnNames().add("col2")
-        );
-    }
-
-    @Test
-    void testAffectedTablesAreUnmodifiable() {
-        Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, now, Set.of("table1")
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), tables);
         
-        assertThrows(UnsupportedOperationException.class, () ->
-            result.getAffectedTables().add("table2")
-        );
-    }
-
-    @Test
-    void testGetRowCount() {
-        Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(List.of(1), List.of(2), List.of(3)),
-            List.of("id"),
-            List.of("INTEGER"),
-            now,
-            now,
-            Set.of()
-        );
-        
-        assertEquals(3, result.getRowCount());
-    }
-
-    @Test
-    void testGetColumnCount() {
-        Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(),
-            List.of("id", "name", "email"),
-            List.of("INTEGER", "VARCHAR", "VARCHAR"),
-            now,
-            now,
-            Set.of()
-        );
-        
-        assertEquals(3, result.getColumnCount());
+        assertEquals(tables, result.getAffectedTables());
+        // Should be a copy, not the same instance
+        assertNotSame(tables, result.getAffectedTables());
     }
 
     @Test
     void testToString() {
+        OpQueryResultProto proto = createTestProto(10, 5);
         Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(List.of(1)),
-            List.of("id"),
-            List.of("INTEGER"),
-            now,
-            now.plusSeconds(300),
-            Set.of("users")
-        );
+        Instant expiresAt = now.plusSeconds(300);
+        
+        CachedQueryResult result = new CachedQueryResult(proto, now, expiresAt, Set.of("users"));
         
         String str = result.toString();
-        assertTrue(str.contains("rowCount=1"));
-        assertTrue(str.contains("columnCount=1"));
-        assertTrue(str.contains("users"));
+        assertTrue(str.contains("rowCount=10"));
+        assertTrue(str.contains("columnCount=5"));
+        assertTrue(str.contains("affectedTables"));
     }
 
     @Test
-    void testSizeEstimationWithVariousTypes() {
+    void testEmptyResult() {
+        OpQueryResultProto proto = OpQueryResultProto.newBuilder()
+                .setResultSetUUID("empty")
+                .build();
         Instant now = Instant.now();
-        // Create rows with various types (excluding null to avoid List.copyOf issues)
-        List<List<Object>> rows = List.of(
-            List.of(
-                "string value",
-                123,
-                456L,
-                78.9,
-                12.3f,
-                true,
-                new byte[]{1, 2, 3}
-            )
-        );
         
-        CachedQueryResult result = new CachedQueryResult(
-            rows,
-            List.of("str", "int", "long", "double", "float", "bool", "bytes"),
-            List.of("VARCHAR", "INTEGER", "BIGINT", "DOUBLE", "FLOAT", "BOOLEAN", "BLOB"),
-            now,
-            now,
-            Set.of()
-        );
+        CachedQueryResult result = new CachedQueryResult(proto, now, now.plusSeconds(60), Set.of());
         
-        assertTrue(result.getEstimatedSizeBytes() > 0);
-    }
-
-    @Test
-    void testEmptyAffectedTables() {
-        Instant now = Instant.now();
-        CachedQueryResult result = new CachedQueryResult(
-            List.of(), List.of(), List.of(), now, now, null
-        );
-        
-        assertEquals(Set.of(), result.getAffectedTables());
+        assertEquals(0, result.getRowCount());
+        assertEquals(0, result.getColumnCount());
+        assertTrue(result.getEstimatedSizeBytes() > 0); // Proto still has overhead
     }
 }

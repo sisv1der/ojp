@@ -81,41 +81,21 @@ public class CachingStreamObserver implements StreamObserver<OpResult> {
             return;
         }
         
-        // Extract column names (labels)
-        List<String> columnNames = new ArrayList<>(queryResult.getLabelsList());
-        
-        // Extract rows
-        List<List<Object>> rows = new ArrayList<>();
-        for (com.openjproxy.grpc.ResultRow row : queryResult.getRowsList()) {
-            List<Object> rowValues = new ArrayList<>();
-            for (com.openjproxy.grpc.ParameterValue val : row.getColumnsList()) {
-                rowValues.add(convertProtoValueToObject(val));
-            }
-            rows.add(rowValues);
-        }
-        
-        // Estimate size
-        long estimatedSize = estimateResultSize(rows, columnNames);
-        if (estimatedSize > MAX_CACHE_SIZE_BYTES) {
+        // Check size before caching
+        int serializedSize = queryResult.getSerializedSize();
+        if (serializedSize > MAX_CACHE_SIZE_BYTES) {
             log.debug("Result too large to cache: size={}KB, max={}KB, datasource={}", 
-                    estimatedSize / 1024, MAX_CACHE_SIZE_BYTES / 1024, datasourceName);
+                    serializedSize / 1024, MAX_CACHE_SIZE_BYTES / 1024, datasourceName);
             return;
         }
         
-        // Build CachedQueryResult
+        // Build CachedQueryResult with proto directly
         Instant now = Instant.now();
         Duration ttl = cacheRule.getTtl();
         Set<String> affectedTables = new HashSet<>(cacheRule.getInvalidateOn());
         
-        // Column types - use VARCHAR as generic type for all columns
-        // OpQueryResultProto only has labels (column names), not type info
-        List<String> columnTypes = new ArrayList<>();
-        for (int i = 0; i < columnNames.size(); i++) {
-            columnTypes.add("VARCHAR");  // Generic type
-        }
-        
         CachedQueryResult cachedResult = new CachedQueryResult(
-                rows, columnNames, columnTypes, now, now.plus(ttl), affectedTables);
+                queryResult, now, now.plus(ttl), affectedTables);
         
         // Store in cache
         QueryResultCacheRegistry registry = QueryResultCacheRegistry.getInstance();
@@ -124,35 +104,6 @@ public class CachingStreamObserver implements StreamObserver<OpResult> {
         cache.put(cacheKey, cachedResult);
         
         log.debug("Stored in cache: datasource={}, rows={}, size={}KB", 
-                datasourceName, rows.size(), estimatedSize / 1024);
-    }
-    
-    private Object convertProtoValueToObject(com.openjproxy.grpc.ParameterValue val) {
-        if (val.hasStringValue()) return val.getStringValue();
-        if (val.hasIntValue()) return val.getIntValue();
-        if (val.hasLongValue()) return val.getLongValue();
-        if (val.hasDoubleValue()) return val.getDoubleValue();
-        if (val.hasBoolValue()) return val.getBoolValue();
-        if (val.hasBytesValue()) return val.getBytesValue().toByteArray();
-        if (val.hasIsNull()) return null;
-        return null;
-    }
-    
-    private long estimateResultSize(List<List<Object>> rows, List<String> columnNames) {
-        long size = columnNames.size() * 50L; // Column names overhead
-        for (List<Object> row : rows) {
-            for (Object val : row) {
-                if (val == null) {
-                    size += 8;
-                } else if (val instanceof String str) {
-                    size += str.length() * 2L;
-                } else if (val instanceof byte[] bytes) {
-                    size += bytes.length;
-                } else {
-                    size += 16; // Primitive or small object
-                }
-            }
-        }
-        return size;
+                datasourceName, queryResult.getRowsCount(), serializedSize / 1024);
     }
 }

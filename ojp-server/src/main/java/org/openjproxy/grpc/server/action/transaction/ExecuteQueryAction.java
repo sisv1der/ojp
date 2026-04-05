@@ -74,13 +74,14 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
                 String datasourceName = dto.getSession().getConnHash();
                 List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
                 
-                OpQueryResult cachedResult = QueryCacheHelper.getCachedResult(
+                com.openjproxy.grpc.OpQueryResultProto cachedProto = QueryCacheHelper.getCachedResult(
                         cacheConfig, sql, params, datasourceName);
                 
-                if (cachedResult != null) {
-                    // CACHE HIT - Return cached result
-                    OpResult result = org.openjproxy.grpc.server.cache.CachedResultHandler
-                            .convertToOpResult(cachedResult);
+                if (cachedProto != null) {
+                    // CACHE HIT - Return cached proto directly (no conversion needed)
+                    OpResult result = OpResult.newBuilder()
+                            .setQueryResult(cachedProto)
+                            .build();
                     responseObserver.onNext(result);
                     responseObserver.onCompleted();
                     return;  // Skip database execution

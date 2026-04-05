@@ -1,9 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.openjproxy.grpc.ProtoConverter;
-import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.Session;
 import org.openjproxy.grpc.server.SessionManager;
@@ -15,7 +14,7 @@ import java.util.List;
 
 /**
  * Helper class for cache operations in query execution.
- * Centralizes cache lookup and storage logic.
+ * Centralizes cache lookup, storage, and invalidation logic.
  */
 @Slf4j
 public final class QueryCacheHelper {
@@ -42,15 +41,31 @@ public final class QueryCacheHelper {
     }
     
     /**
-     * Attempts to retrieve a cached query result.
+     * Checks if caching is enabled for the given session.
+     *
+     * @param actionContext the action context
+     * @param sessionInfo the session info
+     * @return true if caching is enabled
+     */
+    public static boolean isCacheEnabled(ActionContext actionContext, SessionInfo sessionInfo) {
+        if (sessionInfo == null) {
+            return false;
+        }
+        
+        CacheConfiguration cacheConfig = getCacheConfiguration(actionContext, sessionInfo);
+        return cacheConfig != null && cacheConfig.isEnabled();
+    }
+    
+    /**
+     * Attempts to retrieve a cached query result proto.
      *
      * @param cacheConfig cache configuration
      * @param sql SQL query
      * @param params query parameters
      * @param datasourceName datasource name
-     * @return cached result, or null if not found or caching disabled
+     * @return cached result proto, or null if not found or caching disabled
      */
-    public static OpQueryResult getCachedResult(
+    public static OpQueryResultProto getCachedResult(
             CacheConfiguration cacheConfig,
             String sql,
             List<Parameter> params,
@@ -83,10 +98,7 @@ public final class QueryCacheHelper {
         
         if (cachedResult != null) {
             log.debug("Cache HIT: datasource={}, sql={}", datasourceName, sql);
-            return new OpQueryResult(
-                    cachedResult.getColumns(),
-                    null, // resultSetUUID - not needed for cached results
-                    cachedResult.getRows());
+            return cachedResult.getQueryResultProto();
         }
         
         log.debug("Cache MISS: datasource={}, sql={}", datasourceName, sql);
@@ -132,6 +144,47 @@ public final class QueryCacheHelper {
         
         // Wrap with caching observer
         return new CachingStreamObserver(responseObserver, cacheKey, matchedRule, datasourceName);
+    }
+    
+    /**
+     * Invalidates cache entries affected by a SQL write operation.
+     *
+     * @param actionContext the action context
+     * @param sessionInfo the session info
+     * @param sql the SQL statement that modified data
+     */
+    public static void invalidateCacheIfEnabled(ActionContext actionContext, SessionInfo sessionInfo, String sql) {
+        if (!isCacheEnabled(actionContext, sessionInfo)) {
+            return;  // Caching not enabled
+        }
+        
+        try {
+            // Extract modified tables from SQL
+            java.util.Set<String> modifiedTables = SqlTableExtractor.extractModifiedTables(sql);
+            
+            if (modifiedTables.isEmpty()) {
+                log.debug("No tables extracted from SQL, skipping cache invalidation");
+                return;
+            }
+            
+            // Get datasource and cache
+            String datasourceName = sessionInfo.getConnHash();
+            QueryResultCache cache = QueryResultCacheRegistry.getInstance().get(datasourceName);
+            
+            if (cache == null) {
+                log.debug("No cache found for datasource: {}", datasourceName);
+                return;
+            }
+            
+            // Invalidate cache entries for affected tables
+            for (String table : modifiedTables) {
+                cache.invalidate(table);
+                log.debug("Cache invalidated: datasource={}, table={}", datasourceName, table);
+            }
+        } catch (Exception e) {
+            // Log but don't fail the query - cache invalidation is best-effort
+            log.warn("Failed to invalidate cache: error={}", e.getMessage());
+        }
     }
     
     /**
