@@ -2,67 +2,38 @@ package org.openjproxy.grpc.server.cache;
 
 import com.openjproxy.grpc.OpResult;
 import lombok.extern.slf4j.Slf4j;
-import org.openjproxy.grpc.dto.OpQueryResult;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Helper class to convert cached query results into OpResult format.
  * <p>
- * Transforms CachedQueryResult domain objects (stored in Caffeine cache)
- * into the OpQueryResult/OpResult format expected by the gRPC response.
+ * Since we now cache proto objects directly, this class simply wraps
+ * the cached proto into an OpResult without any conversion overhead.
  * </p>
  */
 @Slf4j
 public class CachedResultHandler {
 
     /**
-     * Converts a cached query result into an OpResult for streaming back to the client.
+     * Converts a cached query result proto into an OpResult for streaming back to the client.
+     * <p>
+     * Since the cache stores OpQueryResultProto directly, this is a zero-copy operation.
+     * </p>
      *
      * @param cachedResult The cached result from Caffeine cache
-     * @param resultSetUUID The UUID to identify this result set
-     * @param isComplete Whether this is the final block of results
-     * @return OpResult containing the cached data
+     * @return OpResult containing the cached proto data
      */
-    public static OpResult convertToOpResult(
-            CachedQueryResult cachedResult,
-            String resultSetUUID,
-            boolean isComplete) {
+    public static OpResult convertToOpResult(CachedQueryResult cachedResult) {
         
         if (cachedResult == null) {
             throw new IllegalArgumentException("CachedResult cannot be null");
         }
 
-        // Build OpQueryResult with column names
-        // Convert rows to Object arrays
-        List<Object[]> results = new ArrayList<>();
-        for (List<Object> row : cachedResult.getRows()) {
-            results.add(row.toArray(new Object[0]));
-        }
-        
-        OpQueryResult queryResult = OpQueryResult.builder()
-                .labels(new ArrayList<>(cachedResult.getColumnNames()))
-                .resultSetUUID(resultSetUUID)
-                .rows(results)
-                .build();
+        log.debug("Converted cached result to OpResult: {} rows, {} columns (zero-copy)",
+                cachedResult.getRowCount(), cachedResult.getColumnCount());
 
-        log.debug("Converted cached result to OpResult: {} rows, {} columns, resultSetUUID={}",
-                results.size(), cachedResult.getColumnNames().size(), resultSetUUID);
-
+        // Return the proto directly - zero conversion overhead
         return OpResult.newBuilder()
-                .setQueryResult(org.openjproxy.grpc.ProtoConverter.toProto(queryResult))
+                .setQueryResult(cachedResult.getQueryResultProto())
                 .build();
-    }
-
-    /**
-     * Converts cached query result directly without requiring a result set UUID.
-     * Used for simple cache hits that return all data in one response.
-     *
-     * @param cachedResult The cached result from Caffeine cache
-     * @return OpResult containing the cached data
-     */
-    public static OpResult convertToOpResult(CachedQueryResult cachedResult) {
-        return convertToOpResult(cachedResult, null, true);
     }
 }

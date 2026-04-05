@@ -76,7 +76,7 @@ public final class QueryCacheHelper {
         }
         
         // Check if query matches any cache rule
-        CacheRule matchedRule = cacheConfig.getQueryRules().stream()
+        CacheRule matchedRule = cacheConfig.getRules().stream()
                 .filter(rule -> rule.isEnabled() && rule.getSqlPattern().matcher(sql).matches())
                 .findFirst()
                 .orElse(null);
@@ -127,7 +127,7 @@ public final class QueryCacheHelper {
         }
         
         // Check if query matches any cache rule
-        CacheRule matchedRule = cacheConfig.getQueryRules().stream()
+        CacheRule matchedRule = cacheConfig.getRules().stream()
                 .filter(rule -> rule.isEnabled() && rule.getSqlPattern().matcher(sql).matches())
                 .findFirst()
                 .orElse(null);
@@ -177,10 +177,8 @@ public final class QueryCacheHelper {
             }
             
             // Invalidate cache entries for affected tables
-            for (String table : modifiedTables) {
-                cache.invalidate(table);
-                log.debug("Cache invalidated: datasource={}, table={}", datasourceName, table);
-            }
+            cache.invalidate(datasourceName, modifiedTables);
+            log.debug("Cache invalidated: datasource={}, tables={}", datasourceName, modifiedTables);
         } catch (Exception e) {
             // Log but don't fail the query - cache invalidation is best-effort
             log.warn("Failed to invalidate cache: error={}", e.getMessage());
