@@ -6,11 +6,14 @@ import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.openjproxy.grpc.ProtoConverter;
+import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.ConnectionSessionDTO;
 import org.openjproxy.grpc.server.Session;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
+import org.openjproxy.grpc.server.cache.CacheConfiguration;
+import org.openjproxy.grpc.server.cache.QueryCacheHelper;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 
 import javax.sql.DataSource;
@@ -64,58 +67,23 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
 
         // Phase 6: Cache Lookup (before query execution) - with graceful degradation
         String sql = request.getSql();
-        // Get actual Session object from SessionManager
-        Session actualSession = actionContext.getSessionManager().getSession(dto.getSession());
-        org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
-                actualSession != null ? actualSession.getCacheConfiguration() : null;
+        CacheConfiguration cacheConfig = QueryCacheHelper.getCacheConfiguration(actionContext, dto.getSession());
         
         if (cacheConfig != null && cacheConfig.isEnabled()) {
             try {
-                // Check if this query matches any cache rules
-                org.openjproxy.grpc.server.cache.CacheRule matchedRule = cacheConfig.findMatchingRule(sql);
+                String datasourceName = dto.getSession().getConnHash();
+                List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
                 
-                if (matchedRule != null && matchedRule.isEnabled()) {
-                    // Extract parameters for cache key
-                    List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
-                    List<Object> cacheParams = params != null ? 
-                            params.stream()
-                                .flatMap(p -> p.getValues() != null ? p.getValues().stream() : java.util.stream.Stream.empty())
-                                .toList() : List.of();
-                    
-                    // Build cache key (datasource from connection hash)
-                    String datasourceName = dto.getSession().getConnHash();
-                    org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey = 
-                            new org.openjproxy.grpc.server.cache.QueryCacheKey(
-                                    datasourceName, sql, cacheParams);
-                    
-                    // Security validation - prevent cache poisoning
-                    if (!org.openjproxy.grpc.server.cache.CacheSecurityValidator.isSafeCacheKey(cacheKey)) {
-                        log.warn("Cache key failed security validation - skipping cache: datasource={}", datasourceName);
-                    } else {
-                        // Try to get from cache
-                        org.openjproxy.grpc.server.cache.QueryResultCacheRegistry cacheRegistry = 
-                                org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance();
-                        org.openjproxy.grpc.server.cache.QueryResultCache cache = 
-                                cacheRegistry.getOrCreate(datasourceName);
-                        
-                        org.openjproxy.grpc.server.cache.CachedQueryResult cachedResult = cache.get(cacheKey);
-                        
-                        if (cachedResult != null && !cachedResult.isExpired()) {
-                            // CACHE HIT - Return cached result
-                            log.debug("Cache HIT: datasource={}, sql={}", datasourceName, 
-                                    sql.substring(0, Math.min(sql.length(), 50)));
-                            
-                            OpResult result = org.openjproxy.grpc.server.cache.CachedResultHandler
-                                    .convertToOpResult(cachedResult);
-                            responseObserver.onNext(result);
-                            responseObserver.onCompleted();
-                            return;  // Skip database execution
-                        } else {
-                            // CACHE MISS - Continue to database execution
-                            log.debug("Cache MISS: datasource={}, sql={}", datasourceName,
-                                    sql.substring(0, Math.min(sql.length(), 50)));
-                        }
-                    }
+                OpQueryResult cachedResult = QueryCacheHelper.getCachedResult(
+                        cacheConfig, sql, params, datasourceName);
+                
+                if (cachedResult != null) {
+                    // CACHE HIT - Return cached result
+                    OpResult result = org.openjproxy.grpc.server.cache.CachedResultHandler
+                            .convertToOpResult(cachedResult);
+                    responseObserver.onNext(result);
+                    responseObserver.onCompleted();
+                    return;  // Skip database execution
                 }
             } catch (Exception e) {
                 // Graceful degradation - cache failure doesn't block query execution
@@ -183,29 +151,10 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
         
         // Phase 7: Wrap response observer for cache storage (if caching enabled)
         StreamObserver<OpResult> finalObserver = responseObserver;
-        org.openjproxy.grpc.server.cache.CacheRule matchedCacheRule = null;
-        org.openjproxy.grpc.server.cache.QueryCacheKey finalCacheKey = null;
-        String finalDatasourceName = null;
-        
         if (cacheConfig != null && cacheConfig.isEnabled()) {
-            matchedCacheRule = cacheConfig.findMatchingRule(sql);
-            if (matchedCacheRule != null && matchedCacheRule.isEnabled()) {
-                // Prepare for caching after query execution
-                List<Parameter> cacheParams = params != null ? params : List.of();
-                List<Object> cacheParamValues = cacheParams.stream()
-                        .flatMap(p -> p.getValues() != null ? p.getValues().stream() : java.util.stream.Stream.empty())
-                        .toList();
-                finalDatasourceName = dto.getSession().getConnHash();
-                finalCacheKey = new org.openjproxy.grpc.server.cache.QueryCacheKey(
-                        finalDatasourceName, sql, cacheParamValues);
-                
-                // Wrap observer to capture results for caching
-                finalObserver = new CachingStreamObserver(
-                        responseObserver,
-                        finalCacheKey,
-                        matchedCacheRule,
-                        finalDatasourceName);
-            }
+            String datasourceName = dto.getSession().getConnHash();
+            finalObserver = QueryCacheHelper.wrapWithCaching(
+                    responseObserver, cacheConfig, sql, params, datasourceName);
         }
         
         if (CollectionUtils.isNotEmpty(params)) {
@@ -217,154 +166,6 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
             String resultSetUUID = sessionManager.registerResultSet(dto.getSession(),
                     stmt.executeQuery(sql));
             handleResultSet(actionContext, dto.getSession(), resultSetUUID, finalObserver);
-        }
-    }
-    
-    /**
-     * StreamObserver wrapper that intercepts query results for caching.
-     * <p>
-     * Forwards all calls to the wrapped observer immediately (no delay for client),
-     * and stores the first OpResult in cache after successful query completion.
-     * </p>
-     */
-    private static class CachingStreamObserver implements StreamObserver<OpResult> {
-        private final StreamObserver<OpResult> delegate;
-        private final org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey;
-        private final org.openjproxy.grpc.server.cache.CacheRule cacheRule;
-        private final String datasourceName;
-        private OpResult capturedResult = null;
-        private static final long MAX_CACHE_SIZE_BYTES = 200 * 1024; // 200KB
-        
-        public CachingStreamObserver(
-                StreamObserver<OpResult> delegate,
-                org.openjproxy.grpc.server.cache.QueryCacheKey cacheKey,
-                org.openjproxy.grpc.server.cache.CacheRule cacheRule,
-                String datasourceName) {
-            this.delegate = delegate;
-            this.cacheKey = cacheKey;
-            this.cacheRule = cacheRule;
-            this.datasourceName = datasourceName;
-        }
-        
-        @Override
-        public void onNext(OpResult value) {
-            // Forward immediately to client (no delay)
-            delegate.onNext(value);
-            
-            // Capture first result for caching (if not already captured)
-            if (capturedResult == null && value.hasQueryResult()) {
-                capturedResult = value;
-            }
-        }
-        
-        @Override
-        public void onError(Throwable t) {
-            // Query failed - don't cache, forward error
-            delegate.onError(t);
-        }
-        
-        @Override
-        public void onCompleted() {
-            // Forward completion to client first
-            delegate.onCompleted();
-            
-            // Then attempt to cache the result (if captured)
-            if (capturedResult != null) {
-                try {
-                    storeToCacheIfEligible();
-                } catch (Exception e) {
-                    // Log but don't fail - caching is best-effort
-                    log.warn("Failed to store result in cache: datasource={}, error={}", 
-                            datasourceName, e.getMessage());
-                }
-            }
-        }
-        
-        private void storeToCacheIfEligible() {
-            com.openjproxy.grpc.OpQueryResultProto queryResult = capturedResult.getQueryResult();
-            
-            // Check if result is empty
-            if (queryResult.getRowsCount() == 0) {
-                log.debug("Empty result set, not caching: datasource={}", datasourceName);
-                return;
-            }
-            
-            // Extract column names (labels)
-            List<String> columnNames = new ArrayList<>(queryResult.getLabelsList());
-            
-            // Extract rows
-            List<List<Object>> rows = new ArrayList<>();
-            for (com.openjproxy.grpc.ResultRow row : queryResult.getRowsList()) {
-                List<Object> rowValues = new ArrayList<>();
-                for (com.openjproxy.grpc.ParameterValue val : row.getColumnsList()) {
-                    rowValues.add(convertProtoValueToObject(val));
-                }
-                rows.add(rowValues);
-            }
-            
-            // Estimate size
-            long estimatedSize = estimateResultSize(rows, columnNames);
-            if (estimatedSize > MAX_CACHE_SIZE_BYTES) {
-                log.debug("Result too large to cache: size={}KB, max={}KB, datasource={}", 
-                        estimatedSize / 1024, MAX_CACHE_SIZE_BYTES / 1024, datasourceName);
-                return;
-            }
-            
-            // Build CachedQueryResult
-            java.time.Instant now = java.time.Instant.now();
-            java.time.Duration ttl = cacheRule.getTtl();
-            java.util.Set<String> affectedTables = new java.util.HashSet<>(cacheRule.getInvalidateOn());
-            
-            // Column types - use VARCHAR as generic type for all columns
-            // OpQueryResultProto only has labels (column names), not type info
-            List<String> columnTypes = new ArrayList<>();
-            for (int i = 0; i < columnNames.size(); i++) {
-                columnTypes.add("VARCHAR");  // Generic type
-            }
-            
-            org.openjproxy.grpc.server.cache.CachedQueryResult cachedResult = 
-                    new org.openjproxy.grpc.server.cache.CachedQueryResult(
-                            rows, columnNames, columnTypes, now, now.plus(ttl), affectedTables);
-            
-            // Store in cache
-            org.openjproxy.grpc.server.cache.QueryResultCacheRegistry registry = 
-                    org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance();
-            org.openjproxy.grpc.server.cache.QueryResultCache cache = 
-                    registry.getOrCreate(datasourceName);
-            
-            cache.put(cacheKey, cachedResult);
-            
-            log.debug("Stored in cache: datasource={}, rows={}, size={}KB", 
-                    datasourceName, rows.size(), estimatedSize / 1024);
-        }
-        
-        private Object convertProtoValueToObject(com.openjproxy.grpc.ParameterValue val) {
-            if (val.hasStringValue()) return val.getStringValue();
-            if (val.hasIntValue()) return val.getIntValue();
-            if (val.hasLongValue()) return val.getLongValue();
-            if (val.hasDoubleValue()) return val.getDoubleValue();
-            if (val.hasBoolValue()) return val.getBoolValue();
-            if (val.hasBytesValue()) return val.getBytesValue().toByteArray();
-            if (val.hasIsNull()) return null;
-            return null;
-        }
-        
-        private long estimateResultSize(List<List<Object>> rows, List<String> columnNames) {
-            long size = columnNames.size() * 50L; // Column names overhead
-            for (List<Object> row : rows) {
-                for (Object val : row) {
-                    if (val == null) {
-                        size += 8;
-                    } else if (val instanceof String str) {
-                        size += str.length() * 2L;
-                    } else if (val instanceof byte[] bytes) {
-                        size += bytes.length;
-                    } else {
-                        size += 16; // Primitive or small object
-                    }
-                }
-            }
-            return size;
         }
     }
 }

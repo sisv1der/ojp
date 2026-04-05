@@ -17,6 +17,7 @@ import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.pool.ConnectionPoolConfigurer;
 import org.openjproxy.grpc.server.pool.DataSourceConfigurationManager;
+import org.openjproxy.grpc.server.util.DatasourceNameExtractor;
 import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
 import org.openjproxy.grpc.server.utils.UrlParser;
 
@@ -243,11 +244,9 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
         // Parse and store cache configuration from properties
         if (connectionDetails.getPropertiesCount() > 0) {
             try {
-                // Extract datasource name from URL
-                String datasourceName = extractDatasourceName(connectionDetails.getUrl());
-                if (datasourceName == null) {
-                    datasourceName = "default";
-                }
+                // Extract datasource name from URL using helper utility
+                String datasourceName = DatasourceNameExtractor.extractDatasourceNameOrDefault(
+                        connectionDetails.getUrl(), "default");
                 
                 org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
                     org.openjproxy.grpc.server.cache.CacheConfigurationConverter.fromProperties(
@@ -308,36 +307,5 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
         context.getDbNameMap().put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
 
         responseObserver.onCompleted();
-    }
-    
-    /**
-     * Extract datasource name from OJP URL.
-     * Format: jdbc:ojp[host:port(datasourceName)]_actualJdbcUrl
-     *
-     * @param url OJP JDBC URL
-     * @return datasource name or null if not found
-     */
-    private String extractDatasourceName(String url) {
-        if (url == null || !url.startsWith("jdbc:ojp")) {
-            return null;
-        }
-        
-        // Look for pattern: [host:port(datasourceName)]
-        int startBracket = url.indexOf('[');
-        int endBracket = url.indexOf(']');
-        
-        if (startBracket < 0 || endBracket < 0 || endBracket <= startBracket) {
-            return null;
-        }
-        
-        String hostPortSection = url.substring(startBracket + 1, endBracket);
-        int startParen = hostPortSection.indexOf('(');
-        int endParen = hostPortSection.indexOf(')');
-        
-        if (startParen < 0 || endParen < 0 || endParen <= startParen) {
-            return null;
-        }
-        
-        return hostPortSection.substring(startParen + 1, endParen);
     }
 }

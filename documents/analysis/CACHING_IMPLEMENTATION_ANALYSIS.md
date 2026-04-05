@@ -71,7 +71,9 @@ postgres_prod.ojp.cache.queries.2.invalidateOn=users
 - ✅ **Real-time propagation** - Immediate, no polling delays
 - ✅ **Zero database overhead** - No notification tables or polling
 
-### 3. Fallback Options for Special Cases
+### 3. Future Enhancement Options (Under Discussion)
+
+**Note:** These are planned future enhancements for distributed cache synchronization, not implemented in v0.5.0-beta.
 
 - **Legacy Java (<21)**: Use JDBC Notification Table (polling-based)
 - **PostgreSQL-only**: Use LISTEN/NOTIFY for real-time propagation
