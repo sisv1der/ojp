@@ -199,6 +199,10 @@ jobs:
       # 8. Build and push Docker image for ojp-server
       #    Image tag is ${project.version} (e.g. rrobetti/ojp:0.4.1-beta)
       # -----------------------------------------------------------------------
+      - name: Create ojp-libs directory for Jib
+        if: ${{ inputs.dry_run == false }}
+        run: mkdir -p ojp-server/ojp-libs
+
       - name: Build and push Docker image (${{ steps.versions.outputs.release }})
         if: ${{ inputs.dry_run == false }}
         run: |
