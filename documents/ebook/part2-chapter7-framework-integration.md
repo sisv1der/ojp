@@ -47,7 +47,7 @@ The `spring-boot-starter-ojp` artifact provides zero-configuration Spring Boot i
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>spring-boot-starter-ojp</artifactId>
-    <version>0.4.0-beta</version>
+    <version>0.4.1-beta</version>
 </dependency>
 ```
 
