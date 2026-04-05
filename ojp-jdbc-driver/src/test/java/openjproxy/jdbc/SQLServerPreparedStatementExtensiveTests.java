@@ -322,4 +322,55 @@ public class SQLServerPreparedStatementExtensiveTests {
         TestDBUtils.cleanupTestTables(conn, "sqlserver_update_test");
         conn.close();
     }
+
+    /**
+     * Reproduces the Spring Data saveAll / batch insert scenario with generated keys (issue #408).
+     * Verifies that RETURN_GENERATED_KEYS is preserved when prepareStatement is followed by
+     * repeated addBatch() calls and executeBatch() — the exact sequence Spring Data uses for saveAll.
+     */
+    @ParameterizedTest
+    @ArgumentsSource(SQLServerConnectionProvider.class)
+    void testBatchInsertWithGeneratedKeys(String driverClass, String url, String user, String pwd) throws SQLException {
+        assumeFalse(isTestDisabled, "SQL Server tests are disabled");
+
+        Connection conn = DriverManager.getConnection(url, user, pwd);
+        Statement stmt = conn.createStatement();
+        try {
+            stmt.execute("DROP TABLE sqlserver_batch_gen_keys_test");
+        } catch (SQLException ignore) {}
+        stmt.execute("CREATE TABLE sqlserver_batch_gen_keys_test (id INT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100))");
+        stmt.close();
+
+        // Reproduces: prepareStatement(sql, RETURN_GENERATED_KEYS) → addBatch() x N → executeBatch() → getGeneratedKeys()
+        PreparedStatement ps = conn.prepareStatement("INSERT INTO sqlserver_batch_gen_keys_test (name) VALUES (?)", Statement.RETURN_GENERATED_KEYS);
+
+        ps.setString(1, "Alice");
+        ps.addBatch();
+
+        ps.setString(1, "Bob");
+        ps.addBatch();
+
+        ps.setString(1, "Carol");
+        ps.addBatch();
+
+        int[] batchResults = ps.executeBatch();
+        assertEquals(3, batchResults.length, "All 3 batch rows should be inserted");
+        for (int result : batchResults) {
+            assertTrue(result >= 0 || result == Statement.SUCCESS_NO_INFO, "Each batch row should succeed");
+        }
+
+        ResultSet keys = ps.getGeneratedKeys();
+        assertNotNull(keys, "getGeneratedKeys() must not return null after batch insert");
+        int keyCount = 0;
+        while (keys.next()) {
+            long generatedId = keys.getLong(1);
+            assertTrue(generatedId > 0, "Each generated key must be positive");
+            keyCount++;
+        }
+        assertTrue(keyCount > 0, "At least one generated key must be returned");
+        keys.close();
+        ps.close();
+        TestDBUtils.cleanupTestTables(conn, "sqlserver_batch_gen_keys_test");
+        conn.close();
+    }
 }
