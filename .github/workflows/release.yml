@@ -199,6 +199,10 @@ jobs:
       # 8. Build and push Docker image for ojp-server
       #    Image tag is ${project.version} (e.g. rrobetti/ojp:0.4.1-beta)
       # -----------------------------------------------------------------------
+      - name: Download Open Source Drivers
+        if: ${{ inputs.dry_run == false }}
+        run: bash ojp-server/download-drivers.sh ./ojp-server/ojp-libs
+
       - name: Build and push Docker image (${{ steps.versions.outputs.release }})
         if: ${{ inputs.dry_run == false }}
         run: |
