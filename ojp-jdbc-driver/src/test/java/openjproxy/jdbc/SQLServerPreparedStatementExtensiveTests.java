@@ -347,7 +347,9 @@ public class SQLServerPreparedStatementExtensiveTests {
         Statement stmt = conn.createStatement();
         try {
             stmt.execute("DROP TABLE sqlserver_batch_gen_keys_test");
-        } catch (SQLException ignore) {}
+        } catch (SQLException ignore) {
+            // Table may not exist on first run; ignore the error and proceed with CREATE TABLE
+        }
         stmt.execute("CREATE TABLE sqlserver_batch_gen_keys_test (id INT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100))");
         stmt.close();
 

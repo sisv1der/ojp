@@ -358,7 +358,9 @@ class CockroachDBPreparedStatementExtensiveTests {
         Statement stmt = connection.createStatement();
         try {
             stmt.execute("DROP TABLE cockroachdb_batch_gen_keys_test");
-        } catch (SQLException ignore) {}
+        } catch (SQLException ignore) {
+            // Table may not exist on first run; ignore the error and proceed with CREATE TABLE
+        }
         stmt.execute("CREATE TABLE cockroachdb_batch_gen_keys_test (id SERIAL PRIMARY KEY, name VARCHAR(100))");
         stmt.close();
 
