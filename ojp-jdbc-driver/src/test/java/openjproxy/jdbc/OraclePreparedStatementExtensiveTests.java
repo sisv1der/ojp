@@ -356,6 +356,17 @@ public class OraclePreparedStatementExtensiveTests {
      * Reproduces the Spring Data saveAll / batch insert scenario with generated keys (issue #408).
      * Verifies that RETURN_GENERATED_KEYS is preserved when prepareStatement is followed by
      * repeated addBatch() calls and executeBatch() — the exact sequence Spring Data uses for saveAll.
+     *
+     * <p><b>Oracle limitation:</b> When using {@code Statement.RETURN_GENERATED_KEYS}, the Oracle
+     * JDBC driver returns ROWIDs (not integer primary key values) in the generated-keys ResultSet.
+     * Calling {@code getLong(1)} on a ROWID throws {@code ORA-17132: Invalid conversion requested}.
+     * This test therefore reads the generated key as a String (ROWID) and asserts it is non-null
+     * and non-empty. The key goal — that RETURN_GENERATED_KEYS is accepted without error and
+     * survives the addBatch() round-trip (the OJP fix) — is still fully exercised.
+     *
+     * <p>Note: The existing {@code OracleStatementExtensiveTests.testGeneratedKeys} already uses
+     * column names ({@code new String[]{"id"}}) instead of {@code RETURN_GENERATED_KEYS} because of
+     * this Oracle ROWID behavior.
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/oracle_connections.csv")
@@ -370,6 +381,7 @@ public class OraclePreparedStatementExtensiveTests {
         stmt.close();
 
         // Reproduces: prepareStatement(sql, RETURN_GENERATED_KEYS) → addBatch() x N → executeBatch() → getGeneratedKeys()
+        // The key goal is that RETURN_GENERATED_KEYS survives the addBatch() round-trip (the OJP bug that was fixed).
         ps = connection.prepareStatement("INSERT INTO oracle_batch_gen_keys_test (name) VALUES (?)", Statement.RETURN_GENERATED_KEYS);
 
         ps.setString(1, "Alice");
@@ -391,11 +403,14 @@ public class OraclePreparedStatementExtensiveTests {
         assertNotNull(keys, "getGeneratedKeys() must not return null after batch insert");
         int keyCount = 0;
         while (keys.next()) {
-            long generatedId = keys.getLong(1);
-            assertTrue(generatedId > 0, "Each generated key must be positive");
+            // Oracle returns ROWIDs (not integers) when using RETURN_GENERATED_KEYS.
+            // getLong(1) would throw ORA-17132; use getString(1) to retrieve the ROWID string.
+            String rowId = keys.getString(1);
+            assertNotNull(rowId, "Each generated ROWID must be non-null");
+            assertFalse(rowId.isEmpty(), "Each generated ROWID must be non-empty");
             keyCount++;
         }
-        assertTrue(keyCount > 0, "At least one generated key must be returned");
+        assertTrue(keyCount > 0, "At least one generated key (ROWID) must be returned");
         keys.close();
     }
 }
