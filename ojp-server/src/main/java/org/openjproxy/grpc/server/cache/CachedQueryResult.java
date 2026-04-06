@@ -78,7 +78,7 @@ public final class CachedQueryResult {
     }
 
     public Set<String> getAffectedTables() {
-        return affectedTables;
+        return Set.copyOf(affectedTables);
     }
 
     public long getEstimatedSizeBytes() {
