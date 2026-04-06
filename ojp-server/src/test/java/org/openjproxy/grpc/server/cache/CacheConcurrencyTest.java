@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +24,7 @@ public class CacheConcurrencyTest {
 
     private QueryResultCache cache;
     private final String datasourceName = "testds";
+    private static final String TEST_UUID = "test-uuid";
 
     @BeforeEach
     public void setUp() {
@@ -33,14 +37,39 @@ public class CacheConcurrencyTest {
         );
     }
 
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        builder.setResultSetUUID(TEST_UUID);
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
+
     @Test
     public void testConcurrentReads() throws Exception {
         // Pre-populate cache
         QueryCacheKey key = new QueryCacheKey(datasourceName, "SELECT * FROM products", Collections.emptyList());
         CachedQueryResult result = new CachedQueryResult(
-            new ArrayList<>(),
-            new ArrayList<>(),
-            new ArrayList<>(),
+            createTestProto(new ArrayList<>(), new ArrayList<>()),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of()
@@ -94,9 +123,7 @@ public class CacheConcurrencyTest {
                             Collections.emptyList()
                         );
                         CachedQueryResult result = new CachedQueryResult(
-                            new ArrayList<>(),
-                            new ArrayList<>(),
-                            new ArrayList<>(),
+                            createTestProto(new ArrayList<>(), new ArrayList<>()),
                             Instant.now(),
                             Instant.now().plus(Duration.ofMinutes(10)),
                             Set.of()
@@ -158,9 +185,7 @@ public class CacheConcurrencyTest {
                             Collections.emptyList()
                         );
                         CachedQueryResult result = new CachedQueryResult(
-                            new ArrayList<>(),
-                            new ArrayList<>(),
-                            new ArrayList<>(),
+                            createTestProto(new ArrayList<>(), new ArrayList<>()),
                             Instant.now(),
                             Instant.now().plus(Duration.ofMinutes(10)),
                             Set.of()
@@ -191,9 +216,7 @@ public class CacheConcurrencyTest {
                 Collections.emptyList()
             );
             CachedQueryResult result = new CachedQueryResult(
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>(),
+                createTestProto(new ArrayList<>(), new ArrayList<>()),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
                 Set.of("products")  // Add affected table so invalidation works
@@ -257,9 +280,7 @@ public class CacheConcurrencyTest {
                                 break;
                             case 1: // Write
                                 CachedQueryResult result = new CachedQueryResult(
-                                    new ArrayList<>(),
-                                    new ArrayList<>(),
-                                    new ArrayList<>(),
+                                    createTestProto(new ArrayList<>(), new ArrayList<>()),
                                     Instant.now(),
                                     Instant.now().plus(Duration.ofMinutes(10)),
                                     Set.of()
@@ -365,9 +386,10 @@ public class CacheConcurrencyTest {
                             Collections.emptyList()
                         );
                         CachedQueryResult result = new CachedQueryResult(
-                            Arrays.asList(Arrays.asList("value" + j)),
-                            Arrays.asList("column1"),
-                            Arrays.asList("VARCHAR"),
+                            createTestProto(
+                                List.of(List.of("value" + j)),
+                                List.of("column1")
+                            ),
                             Instant.now(),
                             Instant.now().plus(Duration.ofMinutes(10)),
                             Set.of()
@@ -458,9 +480,7 @@ public class CacheConcurrencyTest {
                                     break;
                                 case 2: // Write
                                     cache.put(key, new CachedQueryResult(
-                                        new ArrayList<>(),
-                                        new ArrayList<>(),
-                                        new ArrayList<>(),
+                                        createTestProto(new ArrayList<>(), new ArrayList<>()),
                                         Instant.now(),
                                         Instant.now().plus(Duration.ofMinutes(10)),
                                         Set.of()

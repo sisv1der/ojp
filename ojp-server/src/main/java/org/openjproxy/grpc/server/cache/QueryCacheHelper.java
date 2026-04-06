@@ -1,12 +1,14 @@
 package org.openjproxy.grpc.server.cache;
 
 import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.Property;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.Session;
 import org.openjproxy.grpc.server.SessionManager;
 import org.openjproxy.grpc.server.action.ActionContext;
+import org.openjproxy.grpc.server.util.DatasourceNameExtractor;
 import com.openjproxy.grpc.OpResult;
 import com.openjproxy.grpc.SessionInfo;
 
@@ -21,6 +23,24 @@ public final class QueryCacheHelper {
     
     private QueryCacheHelper() {
         throw new UnsupportedOperationException("Utility class");
+    }
+    
+    /**
+     * Parses cache configuration from connection properties.
+     *
+     * @param url the datasource URL
+     * @param properties the connection properties
+     * @param connHash the connection hash for logging
+     * @return cache configuration, or null if not configured
+     */
+    public static CacheConfiguration parseCacheConfiguration(String url, List<Property> properties, String connHash) {
+        try {
+            String datasourceName = DatasourceNameExtractor.extractDatasourceNameOrDefault(url, "default");
+            return CacheConfigurationConverter.fromProperties(properties, datasourceName);
+        } catch (Exception e) {
+            log.error("Failed to parse cache configuration for connHash '{}': {}", connHash, e.getMessage());
+            return null;
+        }
     }
     
     /**

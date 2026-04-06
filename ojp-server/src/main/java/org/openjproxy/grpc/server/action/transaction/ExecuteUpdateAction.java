@@ -139,7 +139,7 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
             OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
             
             // Phase 9: Cache Invalidation (after successful update)
-            invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
+            QueryCacheHelper.invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
             
             return result;
         } finally {
@@ -269,19 +269,5 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                 log.error("Failure closing connection: {}", e.getMessage(), e);
             }
         }
-    }
-    
-    /**
-     * Invalidates cache entries for tables modified by the SQL statement.
-     * <p>
-     * Phase 9: Write Invalidation - Delegates to QueryCacheHelper for centralized cache management.
-     * </p>
-     *
-     * @param actionContext the action context
-     * @param sessionInfo the session info
-     * @param sql     the SQL statement that modified data
-     */
-    private void invalidateCacheIfEnabled(ActionContext actionContext, SessionInfo sessionInfo, String sql) {
-        org.openjproxy.grpc.server.cache.QueryCacheHelper.invalidateCacheIfEnabled(actionContext, sessionInfo, sql);
     }
 }

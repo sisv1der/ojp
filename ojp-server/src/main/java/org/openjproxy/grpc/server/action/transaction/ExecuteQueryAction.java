@@ -151,12 +151,8 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
         List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
         
         // Phase 7: Wrap response observer for cache storage (if caching enabled)
-        StreamObserver<OpResult> finalObserver = responseObserver;
-        if (cacheConfig != null && cacheConfig.isEnabled()) {
-            String datasourceName = dto.getSession().getConnHash();
-            finalObserver = QueryCacheHelper.wrapWithCaching(
-                    responseObserver, cacheConfig, sql, params, datasourceName);
-        }
+        StreamObserver<OpResult> finalObserver = QueryCacheHelper.wrapWithCaching(
+                responseObserver, cacheConfig, sql, params, dto.getSession().getConnHash());
         
         if (CollectionUtils.isNotEmpty(params)) {
             PreparedStatement ps = StatementFactory.createPreparedStatement(sessionManager, dto, sql, params, request);

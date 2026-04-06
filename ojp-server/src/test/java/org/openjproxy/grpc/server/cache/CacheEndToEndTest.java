@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,7 @@ public class CacheEndToEndTest {
     
     private QueryResultCacheRegistry registry;
     private String datasourceName;
+    private static final String TEST_UUID = "test-uuid";
     
     @BeforeEach
     public void setUp() {
@@ -46,6 +50,32 @@ public class CacheEndToEndTest {
         registry.clear();
     }
     
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        builder.setResultSetUUID(TEST_UUID);
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
     /**
      * Test: Complete query lifecycle from first query to cache hit
      * 
@@ -87,11 +117,8 @@ public class CacheEndToEndTest {
             List.of(1, "Laptop", "electronics", 999.99),
             List.of(2, "Phone", "electronics", 599.99)
         );
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR", "DECIMAL");
         CachedQueryResult result = new CachedQueryResult(
-            rows,
-            columnNames,
-            columnTypes,
+            createTestProto(rows, columnNames),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of("products")
@@ -102,8 +129,8 @@ public class CacheEndToEndTest {
         // Simulate second query (cache HIT)
         CachedQueryResult cachedResult2 = cache.get(key);
         assertNotNull(cachedResult2, "Second query should be cache HIT");
-        assertEquals(2, cachedResult2.getRows().size());
-        assertEquals("Laptop", cachedResult2.getRows().get(0).get(1));
+        assertEquals(2, cachedResult2.getQueryResultProto().getRowsCount());
+        assertEquals("Laptop", cachedResult2.getQueryResultProto().getRows(0).getColumns(1).getStringValue());
         
         // Verify statistics
         CacheStatistics stats = cache.getStatistics();
@@ -144,12 +171,9 @@ public class CacheEndToEndTest {
         QueryCacheKey key = new QueryCacheKey(datasourceName, sql, params);
         
         List<String> columnNames = List.of("id", "name");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR");
         List<List<Object>> rows = List.of(List.of(1, "Laptop"));
         CachedQueryResult result = new CachedQueryResult(
-            rows,
-            columnNames,
-            columnTypes,
+            createTestProto(rows, columnNames),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of("products")
@@ -200,12 +224,11 @@ public class CacheEndToEndTest {
         QueryCacheKey key2 = new QueryCacheKey(ds2, sql, List.of());
         
         List<String> columns = List.of("id", "name");
-        List<String> types = List.of("INTEGER", "VARCHAR");
         List<List<Object>> rows1 = List.of(List.of(1, "Alice"));
         List<List<Object>> rows2 = List.of(List.of(2, "Bob"));
         
-        cache1.put(key1, new CachedQueryResult(rows1, columns, types, Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
-        cache2.put(key2, new CachedQueryResult(rows2, columns, types, Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
+        cache1.put(key1, new CachedQueryResult(createTestProto(rows1, columns), Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
+        cache2.put(key2, new CachedQueryResult(createTestProto(rows2, columns), Instant.now(), Instant.now().plus(Duration.ofMinutes(10)), Set.of("users")));
         
         // Verify isolation
         CachedQueryResult result1 = cache1.get(key1);
@@ -213,8 +236,8 @@ public class CacheEndToEndTest {
         
         assertNotNull(result1);
         assertNotNull(result2);
-        assertEquals("Alice", result1.getRows().get(0).get(1));
-        assertEquals("Bob", result2.getRows().get(0).get(1));
+        assertEquals("Alice", result1.getQueryResultProto().getRows(0).getColumns(1).getStringValue());
+        assertEquals("Bob", result2.getQueryResultProto().getRows(0).getColumns(1).getStringValue());
         
         // Invalidate ds1, verify ds2 unaffected
         cache1.invalidate(ds1, Set.of("users"));
@@ -256,15 +279,12 @@ public class CacheEndToEndTest {
         
         // Store complex result
         List<String> columns = List.of("id", "customer_id", "product_id", "quantity");
-        List<String> types = List.of("INTEGER", "INTEGER", "INTEGER", "INTEGER");
         List<List<Object>> rows = List.of(
             List.of(1, 12345, 101, 2),
             List.of(1, 12345, 102, 1)
         );
         CachedQueryResult result = new CachedQueryResult(
-            rows,
-            columns,
-            types,
+            createTestProto(rows, columns),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(5)),
             Set.of("orders", "order_items")
@@ -274,7 +294,7 @@ public class CacheEndToEndTest {
         // Verify cached
         CachedQueryResult cached = cache.get(key);
         assertNotNull(cached);
-        assertEquals(2, cached.getRows().size());
+        assertEquals(2, cached.getQueryResultProto().getRowsCount());
         
         // Invalidate by orders table
         cache.invalidate(datasourceName, Set.of("orders"));
@@ -325,9 +345,7 @@ public class CacheEndToEndTest {
             QueryCacheKey key = new QueryCacheKey(datasourceName, sql, List.of(i % 10));
             List<List<Object>> rows = List.of(List.of(i % 10, "Product" + i));
             cache.put(key, new CachedQueryResult(
-                rows,
-                List.of("id", "name"),
-                List.of("INTEGER", "VARCHAR"),
+                createTestProto(rows, List.of("id", "name")),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
                 Set.of("products")
@@ -349,9 +367,7 @@ public class CacheEndToEndTest {
                     // Cache miss, store result
                     List<List<Object>> rows = List.of(List.of(productId, "Product" + productId));
                     cache.put(key, new CachedQueryResult(
-                        rows,
-                        List.of("id", "name"),
-                        List.of("INTEGER", "VARCHAR"),
+                        createTestProto(rows, List.of("id", "name")),
                         Instant.now(),
                         Instant.now().plus(Duration.ofMinutes(10)),
                         Set.of("products")
@@ -369,9 +385,7 @@ public class CacheEndToEndTest {
                 if (result == null) {
                     List<List<Object>> rows = List.of(List.of(userId, "User" + userId));
                     cache.put(key, new CachedQueryResult(
-                        rows,
-                        List.of("id", "name"),
-                        List.of("INTEGER", "VARCHAR"),
+                        createTestProto(rows, List.of("id", "name")),
                         Instant.now(),
                         Instant.now().plus(Duration.ofMinutes(5)),
                         Set.of("users")
@@ -446,9 +460,7 @@ public class CacheEndToEndTest {
                             // Store
                             List<List<Object>> rows = List.of(List.of(id, "Value" + id));
                             cache.put(key, new CachedQueryResult(
-                                rows,
-                                List.of("id", "value"),
-                                List.of("INTEGER", "VARCHAR"),
+                                createTestProto(rows, List.of("id", "value")),
                                 Instant.now(),
                                 Instant.now().plus(Duration.ofMinutes(10)),
                                 Set.of("test_table")
@@ -509,8 +521,6 @@ public class CacheEndToEndTest {
         
         // Create large result set (1000 rows, each with 10 columns)
         List<String> columns = List.of("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10");
-        List<String> types = List.of("INTEGER", "VARCHAR", "INTEGER", "VARCHAR", "INTEGER", 
-                                     "VARCHAR", "INTEGER", "VARCHAR", "INTEGER", "VARCHAR");
         List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
             rows.add(List.of(i, "value" + i, i * 2, "data" + i, i * 3, 
@@ -518,9 +528,7 @@ public class CacheEndToEndTest {
         }
         
         CachedQueryResult result = new CachedQueryResult(
-            rows,
-            columns,
-            types,
+            createTestProto(rows, columns),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of("large_table")
@@ -535,7 +543,7 @@ public class CacheEndToEndTest {
         CachedQueryResult cached = cache.get(key);
         if (estimatedSize <= 204800) { // 200KB default limit
             assertNotNull(cached, "Should cache if under size limit");
-            assertEquals(1000, cached.getRows().size());
+            assertEquals(1000, cached.getQueryResultProto().getRowsCount());
         } else {
             // May or may not be cached depending on configuration
             CacheStatistics stats = cache.getStatistics();

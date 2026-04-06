@@ -244,17 +244,14 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
         // Parse and store cache configuration from properties
         if (connectionDetails.getPropertiesCount() > 0) {
             try {
-                // Extract datasource name from URL using helper utility
-                String datasourceName = DatasourceNameExtractor.extractDatasourceNameOrDefault(
-                        connectionDetails.getUrl(), "default");
-                
                 org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
-                    org.openjproxy.grpc.server.cache.CacheConfigurationConverter.fromProperties(
-                        connectionDetails.getPropertiesList(), 
-                        datasourceName);
+                    org.openjproxy.grpc.server.cache.QueryCacheHelper.parseCacheConfiguration(
+                        connectionDetails.getUrl(),
+                        connectionDetails.getPropertiesList(),
+                        connHash);
                 
                 // Validate cache configuration
-                if (cacheConfig.isEnabled()) {
+                if (cacheConfig != null && cacheConfig.isEnabled()) {
                     org.openjproxy.grpc.server.cache.CacheConfigurationValidator.ValidationResult validation = 
                         org.openjproxy.grpc.server.cache.CacheConfigurationValidator.validate(cacheConfig);
                     

@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Disabled;
@@ -23,6 +26,7 @@ public class CachePerformanceBenchmarkTest {
 
     private QueryResultCache cache;
     private final String datasourceName = "perftest";
+    private static final String TEST_UUID = "test-uuid";
 
     @BeforeEach
     public void setUp() {
@@ -35,14 +39,42 @@ public class CachePerformanceBenchmarkTest {
         );
     }
 
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        builder.setResultSetUUID(TEST_UUID);
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
+
     @Test
     public void benchmarkCacheHitLatency() {
         // Pre-populate cache
         QueryCacheKey key = new QueryCacheKey(datasourceName, "SELECT * FROM products", Collections.emptyList());
         CachedQueryResult result = new CachedQueryResult(
-            Arrays.asList(Arrays.asList("value1", "value2")),
-            Arrays.asList("col1", "col2"),
-            Arrays.asList("VARCHAR", "VARCHAR"),
+            createTestProto(
+                List.of(List.of("value1", "value2")),
+                List.of("col1", "col2")
+            ),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of()
@@ -103,9 +135,10 @@ public class CachePerformanceBenchmarkTest {
     public void benchmarkCachePutLatency() {
         int iterations = 50000;
         CachedQueryResult result = new CachedQueryResult(
-            Arrays.asList(Arrays.asList("value1", "value2")),
-            Arrays.asList("col1", "col2"),
-            Arrays.asList("VARCHAR", "VARCHAR"),
+            createTestProto(
+                List.of(List.of("value1", "value2")),
+                List.of("col1", "col2")
+            ),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of()
@@ -142,9 +175,7 @@ public class CachePerformanceBenchmarkTest {
                 Collections.emptyList()
             );
             cache.put(key, new CachedQueryResult(
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>(),
+                createTestProto(new ArrayList<>(), new ArrayList<>()),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
                 Set.of()
@@ -164,9 +195,7 @@ public class CachePerformanceBenchmarkTest {
                         Collections.emptyList()
                     );
                     cache.put(key, new CachedQueryResult(
-                        new ArrayList<>(),
-                        new ArrayList<>(),
-                        new ArrayList<>(),
+                        createTestProto(new ArrayList<>(), new ArrayList<>()),
                         Instant.now(),
                         Instant.now().plus(Duration.ofMinutes(10)),
                         Set.of()
@@ -193,9 +222,10 @@ public class CachePerformanceBenchmarkTest {
     @Test
     public void benchmarkCacheThroughput() {
         CachedQueryResult result = new CachedQueryResult(
-            Arrays.asList(Arrays.asList("value1")),
-            Arrays.asList("col1"),
-            Arrays.asList("VARCHAR"),
+            createTestProto(
+                List.of(List.of("value1")),
+                List.of("col1")
+            ),
             Instant.now(),
             Instant.now().plus(Duration.ofMinutes(10)),
             Set.of()
@@ -256,9 +286,10 @@ public class CachePerformanceBenchmarkTest {
                     Collections.emptyList()
                 );
                 CachedQueryResult result = new CachedQueryResult(
-                    Arrays.asList(Arrays.asList("value1", "value2", "value3")),
-                    Arrays.asList("col1", "col2", "col3"),
-                    Arrays.asList("VARCHAR", "VARCHAR", "VARCHAR"),
+                    createTestProto(
+                        List.of(List.of("value1", "value2", "value3")),
+                        List.of("col1", "col2", "col3")
+                    ),
                     Instant.now(),
                     Instant.now().plus(Duration.ofMinutes(10)),
                     Set.of()
@@ -308,9 +339,7 @@ public class CachePerformanceBenchmarkTest {
                 Collections.emptyList()
             );
             cache.put(key, new CachedQueryResult(
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>(),
+                createTestProto(new ArrayList<>(), new ArrayList<>()),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
                 Set.of()
@@ -396,12 +425,13 @@ public class CachePerformanceBenchmarkTest {
         
         for (int i = 0; i < iterations; i++) {
             CachedQueryResult result = new CachedQueryResult(
-                Arrays.asList(
-                    Arrays.asList("value1", "value2", "value3"),
-                    Arrays.asList("value4", "value5", "value6")
+                createTestProto(
+                    List.of(
+                        List.of("value1", "value2", "value3"),
+                        List.of("value4", "value5", "value6")
+                    ),
+                    List.of("col1", "col2", "col3")
                 ),
-                Arrays.asList("col1", "col2", "col3"),
-                Arrays.asList("VARCHAR", "VARCHAR", "VARCHAR"),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(10)),
                 Set.of()
