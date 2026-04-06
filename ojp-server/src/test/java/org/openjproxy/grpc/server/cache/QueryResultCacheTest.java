@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +29,32 @@ class QueryResultCacheTest {
     @BeforeEach
     void setUp() {
         cache = new QueryResultCache(1000, Duration.ofMinutes(10), 10 * 1024 * 1024);
+    }
+    
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private static OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
     }
     
     @Test
@@ -200,7 +229,7 @@ class QueryResultCacheTest {
             List.of(3, "test".repeat(100))
         );
         CachedQueryResult result = new CachedQueryResult(
-            largeData, List.of("id", "name"), List.of("INTEGER", "VARCHAR"),
+            createTestProto(largeData, List.of("id", "name")),
             Instant.now(), Instant.now().plusSeconds(600), Set.of("users")
         );
         
@@ -322,14 +351,9 @@ class QueryResultCacheTest {
             List.of(1, "test"),
             List.of(2, "test2")
         );
-        List<String> columnTypes = columnNames.stream()
-            .map(c -> "VARCHAR")
-            .toList();
         
         return new CachedQueryResult(
-            rows,
-            columnNames,
-            columnTypes,
+            createTestProto(rows, columnNames),
             Instant.now(),
             Instant.now().plusSeconds(600),
             affectedTables

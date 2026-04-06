@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -242,14 +245,38 @@ class WriteInvalidationIntegrationTest {
     }
 
     // Helper methods
+    
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private static OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
 
     private CachedQueryResult createCachedResult(List<String> columns, List<List<Object>> rows, 
                                                   Set<String> affectedTables) {
         Instant now = Instant.now();
         return new CachedQueryResult(
-            rows,
-            columns,
-            null,  // column types not needed for tests
+            createTestProto(rows, columns),
             now,
             now.plus(Duration.ofSeconds(30)),
             affectedTables

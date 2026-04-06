@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,32 @@ public class QueryCacheLookupIntegrationTest {
 
     private QueryResultCacheRegistry cacheRegistry;
     private static final String DATASOURCE = "test_datasource";
+
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private static OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
 
     @BeforeEach
     public void setUp() {
@@ -54,10 +83,9 @@ public class QueryCacheLookupIntegrationTest {
                 List.of(2, "Jane", "jane@example.com")
         );
         List<String> columnNames = List.of("id", "name", "email");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR");
         
         CachedQueryResult result = new CachedQueryResult(
-                rows, columnNames, columnTypes, 
+                createTestProto(rows, columnNames),
                 Instant.now(), 
                 Instant.now().plus(Duration.ofMinutes(5)), 
                 Set.of());
@@ -69,9 +97,9 @@ public class QueryCacheLookupIntegrationTest {
         // Assert: Cache hit
         assertNotNull(cachedResult, "Cache should return result");
         assertFalse(cachedResult.isExpired(), "Result should not be expired");
-        assertEquals(2, cachedResult.getRows().size(), "Should have 2 rows");
-        assertEquals(3, cachedResult.getColumnNames().size(), "Should have 3 columns");
-        assertEquals("John", cachedResult.getRows().get(0).get(1), "First row name should be John");
+        assertEquals(2, cachedResult.getQueryResultProto().getRowsCount(), "Should have 2 rows");
+        assertEquals(3, cachedResult.getQueryResultProto().getLabelsCount(), "Should have 3 columns");
+        assertEquals("John", cachedResult.getQueryResultProto().getRows(0).getColumns(1).getStringValue(), "First row name should be John");
         
         // Verify statistics
         CacheStatistics stats = cache.getStatistics();
@@ -110,10 +138,9 @@ public class QueryCacheLookupIntegrationTest {
         // Setup: Add entry with short TTL
         List<List<Object>> rows = List.of(List.of(1, "completed", 100.00));
         List<String> columnNames = List.of("id", "status", "total");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "DECIMAL");
         
         CachedQueryResult result = new CachedQueryResult(
-                rows, columnNames, columnTypes, 
+                createTestProto(rows, columnNames),
                 Instant.now(), 
                 Instant.now().plus(Duration.ofMillis(50)), 
                 Set.of());
@@ -140,9 +167,7 @@ public class QueryCacheLookupIntegrationTest {
         // Add entry for id=1
         QueryCacheKey key1 = new QueryCacheKey(DATASOURCE, sql, List.of(1));
         CachedQueryResult result1 = new CachedQueryResult(
-                List.of(List.of(1, "John")),
-                List.of("id", "name"),
-                List.of("INTEGER", "VARCHAR"),
+                createTestProto(List.of(List.of(1, "John")), List.of("id", "name")),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(5)),
                 Set.of());
@@ -151,9 +176,7 @@ public class QueryCacheLookupIntegrationTest {
         // Add entry for id=2
         QueryCacheKey key2 = new QueryCacheKey(DATASOURCE, sql, List.of(2));
         CachedQueryResult result2 = new CachedQueryResult(
-                List.of(List.of(2, "Jane")),
-                List.of("id", "name"),
-                List.of("INTEGER", "VARCHAR"),
+                createTestProto(List.of(List.of(2, "Jane")), List.of("id", "name")),
                 Instant.now(),
                 Instant.now().plus(Duration.ofMinutes(5)),
                 Set.of());
@@ -165,8 +188,8 @@ public class QueryCacheLookupIntegrationTest {
 
         assertNotNull(cached1);
         assertNotNull(cached2);
-        assertEquals("John", cached1.getRows().get(0).get(1));
-        assertEquals("Jane", cached2.getRows().get(0).get(1));
+        assertEquals("John", cached1.getQueryResultProto().getRows(0).getColumns(1).getStringValue());
+        assertEquals("Jane", cached2.getQueryResultProto().getRows(0).getColumns(1).getStringValue());
     }
 
     @Test

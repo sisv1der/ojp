@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -241,24 +244,52 @@ class CacheSecurityValidatorTest {
     }
     
     /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private static OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
+
+    /**
      * Helper method to create a CachedQueryResult with approximate size.
      */
     private CachedQueryResult createCachedResult(long approximateSize) {
         // Create result with enough data to reach approximate size
-        int numRows = (int) (approximateSize / 100);  // Rough estimate
+        // Note: Proto serialization is more efficient than row-based format,
+        // so we need more rows to reach the target size
+        int numRows = (int) (approximateSize / 50);  // Adjusted for proto efficiency
         List<List<Object>> rows = List.of();
         
         if (numRows > 0) {
             rows = new java.util.ArrayList<>();
             for (int i = 0; i < numRows; i++) {
-                rows.add(List.of("value1", "value2", "value3"));
+                rows.add(List.of("value1_" + i, "value2_" + i, "value3_" + i));
             }
         }
         
+        List<String> columnNames = List.of("col1", "col2", "col3");
+        
         return new CachedQueryResult(
-            rows,
-            List.of("col1", "col2", "col3"),
-            List.of("VARCHAR", "VARCHAR", "VARCHAR"),
+            createTestProto(rows, columnNames),
             Instant.now(),
             Instant.now().plusSeconds(600),
             Set.of("test_table")

@@ -1,5 +1,8 @@
 package org.openjproxy.grpc.server.cache;
 
+import com.openjproxy.grpc.OpQueryResultProto;
+import com.openjproxy.grpc.ParameterValue;
+import com.openjproxy.grpc.ResultRow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +24,32 @@ class QueryCacheStorageIntegrationTest {
 
     private QueryResultCacheRegistry cacheRegistry;
     private String datasourceName;
+
+    /**
+     * Helper method to create a test proto from rows and columns
+     */
+    private static OpQueryResultProto createTestProto(List<List<Object>> rows, List<String> columns) {
+        OpQueryResultProto.Builder builder = OpQueryResultProto.newBuilder();
+        
+        // Add column labels
+        for (String column : columns) {
+            builder.addLabels(column);
+        }
+        
+        // Add rows
+        for (List<Object> row : rows) {
+            ResultRow.Builder rowBuilder = ResultRow.newBuilder();
+            for (Object value : row) {
+                String stringValue = value != null ? value.toString() : "";
+                rowBuilder.addColumns(ParameterValue.newBuilder()
+                        .setStringValue(stringValue)
+                        .build());
+            }
+            builder.addRows(rowBuilder.build());
+        }
+        
+        return builder.build();
+    }
 
     @BeforeEach
     void setUp() {
@@ -52,10 +81,9 @@ class QueryCacheStorageIntegrationTest {
                 List.of(2, "Bob", "bob@example.com")
         );
         List<String> columnNames = List.of("id", "name", "email");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR");
         Instant now = Instant.now();
         CachedQueryResult result = new CachedQueryResult(
-                rows, columnNames, columnTypes, now, now.plus(Duration.ofMinutes(10)),
+                createTestProto(rows, columnNames), now, now.plus(Duration.ofMinutes(10)),
                 Set.of("users"));
         
         cache.put(cacheKey, result);
@@ -67,8 +95,8 @@ class QueryCacheStorageIntegrationTest {
         assertNotNull(secondLookup, "Second lookup should be a cache hit");
         assertEquals(1, cache.getStatistics().getHits(), "Should have 1 hit");
         assertEquals(1, cache.getStatistics().getMisses(), "Should still have 1 miss");
-        assertEquals(2, secondLookup.getRows().size(), "Should have 2 rows");
-        assertEquals(3, secondLookup.getColumnNames().size(), "Should have 3 columns");
+        assertEquals(2, secondLookup.getQueryResultProto().getRowsCount(), "Should have 2 rows");
+        assertEquals(3, secondLookup.getQueryResultProto().getLabelsCount(), "Should have 3 columns");
     }
 
     @Test
@@ -82,10 +110,9 @@ class QueryCacheStorageIntegrationTest {
         // Act: Try to cache empty result
         List<List<Object>> emptyRows = List.of();
         List<String> columnNames = List.of("id", "name", "email");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR");
         Instant now = Instant.now();
         CachedQueryResult emptyResult = new CachedQueryResult(
-                emptyRows, columnNames, columnTypes, now, now.plus(Duration.ofMinutes(10)),
+                createTestProto(emptyRows, columnNames), now, now.plus(Duration.ofMinutes(10)),
                 Set.of("users"));
 
         // In real implementation, we check row count before calling put()
@@ -95,7 +122,7 @@ class QueryCacheStorageIntegrationTest {
 
         // Assert: Empty result is technically cached but should be checked before storage
         assertNotNull(lookup, "Empty result was stored");
-        assertEquals(0, lookup.getRows().size(), "Should have 0 rows");
+        assertEquals(0, lookup.getQueryResultProto().getRowsCount(), "Should have 0 rows");
     }
 
     @Test
@@ -106,10 +133,9 @@ class QueryCacheStorageIntegrationTest {
             largeRows.add(List.of(i, "User" + i, "user" + i + "@example.com"));
         }
         List<String> columnNames = List.of("id", "name", "email");
-        List<String> columnTypes = List.of("INTEGER", "VARCHAR", "VARCHAR");
         Instant now = Instant.now();
         CachedQueryResult largeResult = new CachedQueryResult(
-                largeRows, columnNames, columnTypes, now, now.plus(Duration.ofMinutes(10)),
+                createTestProto(largeRows, columnNames), now, now.plus(Duration.ofMinutes(10)),
                 Set.of("users"));
 
         // Act: Estimate size
@@ -156,9 +182,7 @@ class QueryCacheStorageIntegrationTest {
         // Act: Store with short TTL (100ms)
         Instant now = Instant.now();
         CachedQueryResult shortTtlResult = new CachedQueryResult(
-                List.of(List.of(1, "Alice", "alice@example.com")),
-                List.of("id", "name", "email"),
-                List.of("INTEGER", "VARCHAR", "VARCHAR"),
+                createTestProto(List.of(List.of(1, "Alice", "alice@example.com")), List.of("id", "name", "email")),
                 now,
                 now.plus(Duration.ofMillis(100)),
                 Set.of("users"));
@@ -220,9 +244,7 @@ class QueryCacheStorageIntegrationTest {
     private CachedQueryResult createTestResult(String name) {
         Instant now = Instant.now();
         return new CachedQueryResult(
-                List.of(List.of(1, name, name.toLowerCase() + "@example.com")),
-                List.of("id", "name", "email"),
-                List.of("INTEGER", "VARCHAR", "VARCHAR"),
+                createTestProto(List.of(List.of(1, name, name.toLowerCase() + "@example.com")), List.of("id", "name", "email")),
                 now,
                 now.plus(Duration.ofMinutes(10)),
                 Set.of("users"));
