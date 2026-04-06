@@ -266,7 +266,7 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
                         log.error("Cache configuration rejected for connHash '{}': {}", connHash, errorMsg);
                         // Disable caching but allow connection
                         cacheConfig = new org.openjproxy.grpc.server.cache.CacheConfiguration(
-                            datasourceName, false, java.util.List.of());
+                            cacheConfig.getDatasourceName(), false, java.util.List.of());
                     }
                 }
                 
