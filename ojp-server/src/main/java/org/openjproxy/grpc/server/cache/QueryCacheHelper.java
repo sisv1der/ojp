@@ -1,7 +1,7 @@
 package org.openjproxy.grpc.server.cache;
 
 import com.openjproxy.grpc.OpQueryResultProto;
-import com.openjproxy.grpc.Property;
+import com.openjproxy.grpc.PropertyEntry;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.openjproxy.grpc.dto.Parameter;
@@ -33,7 +33,7 @@ public final class QueryCacheHelper {
      * @param connHash the connection hash for logging
      * @return cache configuration, or null if not configured
      */
-    public static CacheConfiguration parseCacheConfiguration(String url, List<Property> properties, String connHash) {
+    public static CacheConfiguration parseCacheConfiguration(String url, List<PropertyEntry> properties, String connHash) {
         try {
             String datasourceName = DatasourceNameExtractor.extractDatasourceNameOrDefault(url, "default");
             return CacheConfigurationConverter.fromProperties(properties, datasourceName);
