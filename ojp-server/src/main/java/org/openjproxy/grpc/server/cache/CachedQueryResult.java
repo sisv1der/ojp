@@ -78,7 +78,10 @@ public final class CachedQueryResult {
     }
 
     public Set<String> getAffectedTables() {
-        return Set.copyOf(affectedTables);
+        // Always return a new defensive copy - can't use Set.copyOf() because it returns
+        // the same instance when given an already-immutable Set (idempotent behavior).
+        // Wrap in unmodifiableSet to maintain immutability while ensuring new instance.
+        return java.util.Collections.unmodifiableSet(new java.util.HashSet<>(affectedTables));
     }
 
     public long getEstimatedSizeBytes() {
