@@ -171,9 +171,8 @@ class CacheRuleTest {
             true
         );
         
-        assertThrows(UnsupportedOperationException.class, () ->
-            rule.getInvalidateOn().add("products")
-        );
+        List<String> invalidateOn = rule.getInvalidateOn();
+        assertThrows(UnsupportedOperationException.class, () -> invalidateOn.add("products"));
     }
 
     @Test

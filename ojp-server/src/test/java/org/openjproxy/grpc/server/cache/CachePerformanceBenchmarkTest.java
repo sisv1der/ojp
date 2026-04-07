@@ -22,14 +22,14 @@ import static org.junit.jupiter.api.Assertions.*;
  * Note: These are benchmark tests and may be disabled in CI.
  * Run them manually to verify performance characteristics.
  */
-public class CachePerformanceBenchmarkTest {
+class CachePerformanceBenchmarkTest {
 
     private QueryResultCache cache;
     private final String datasourceName = "perftest";
     private static final String TEST_UUID = "test-uuid";
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         cache = new QueryResultCache(
             datasourceName,
             10000,  // maxEntries
@@ -67,7 +67,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkCacheHitLatency() {
+    void benchmarkCacheHitLatency() {
         // Pre-populate cache
         QueryCacheKey key = new QueryCacheKey(datasourceName, "SELECT * FROM products", Collections.emptyList());
         CachedQueryResult result = new CachedQueryResult(
@@ -106,7 +106,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkCacheMissLatency() {
+    void benchmarkCacheMissLatency() {
         // Benchmark cache miss (key not in cache)
         int iterations = 100000;
         long start = System.nanoTime();
@@ -132,7 +132,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkCachePutLatency() {
+    void benchmarkCachePutLatency() {
         int iterations = 50000;
         CachedQueryResult result = new CachedQueryResult(
             createTestProto(
@@ -166,7 +166,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkInvalidationLatency() {
+    void benchmarkInvalidationLatency() {
         // Pre-populate with 1000 entries
         for (int i = 0; i < 1000; i++) {
             QueryCacheKey key = new QueryCacheKey(
@@ -220,7 +220,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkCacheThroughput() {
+    void benchmarkCacheThroughput() {
         CachedQueryResult result = new CachedQueryResult(
             createTestProto(
                 List.of(List.of("value1")),
@@ -265,7 +265,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkMemoryFootprint() {
+    void benchmarkMemoryFootprint() {
         // Measure memory used by different cache sizes
         long[][] measurements = new long[5][2]; // [iteration][before, after]
         int[] sizes = {100, 500, 1000, 5000, 10000};
@@ -316,7 +316,7 @@ public class CachePerformanceBenchmarkTest {
 
     @Test
     @Disabled("Performance comparison test - enable for manual testing")
-    public void compareVsDatabaseQuery() {
+    void compareVsDatabaseQuery() {
         /*
          * This test would require actual database connection.
          * It's disabled by default but can be enabled for manual performance testing.
@@ -330,7 +330,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkConcurrentReadPerformance() throws Exception {
+    void benchmarkConcurrentReadPerformance() throws Exception {
         // Pre-populate cache
         for (int i = 0; i < 100; i++) {
             QueryCacheKey key = new QueryCacheKey(
@@ -388,7 +388,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkStatisticsOverhead() {
+    void benchmarkStatisticsOverhead() {
         // Benchmark with statistics tracking
         int iterations = 100000;
         
@@ -418,7 +418,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void benchmarkSizeEstimation() {
+    void benchmarkSizeEstimation() {
         int iterations = 10000;
         
         long start = System.nanoTime();
@@ -451,7 +451,7 @@ public class CachePerformanceBenchmarkTest {
     }
 
     @Test
-    public void printPerformanceSummary() {
+    void printPerformanceSummary() {
         System.out.println("\n========== Cache Performance Summary ==========");
         System.out.println("Target Metrics:");
         System.out.println("  - Cache hit latency: < 0.01ms (10 microseconds)");

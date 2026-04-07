@@ -135,9 +135,8 @@ class QueryCacheKeyTest {
     void testParametersAreUnmodifiable() {
         QueryCacheKey key = new QueryCacheKey("ds", "SELECT *", List.of(1, 2));
         
-        assertThrows(UnsupportedOperationException.class, () ->
-            key.getParameters().add(3)
-        );
+        List<Object> parameters = key.getParameters();
+        assertThrows(UnsupportedOperationException.class, () -> parameters.add(3));
     }
 
     @Test

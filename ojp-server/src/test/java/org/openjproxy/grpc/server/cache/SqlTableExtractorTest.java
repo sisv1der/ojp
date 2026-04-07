@@ -3,9 +3,13 @@ package org.openjproxy.grpc.server.cache;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Set;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.params.provider.Arguments;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,13 +30,6 @@ class SqlTableExtractorTest {
     // ========== Basic SELECT Tests ==========
     
     @Test
-    void testExtractTablesFromSimpleSelect() {
-        String sql = "SELECT * FROM products WHERE category = 'electronics'";
-        Set<String> tables = SqlTableExtractor.extractTables(sql);
-        assertEquals(Set.of("products"), tables);
-    }
-    
-    @Test
     void testExtractTablesFromSelectWithSchema() {
         String sql = "SELECT * FROM public.users WHERE id = 1";
         Set<String> tables = SqlTableExtractor.extractTables(sql);
@@ -40,11 +37,21 @@ class SqlTableExtractorTest {
         assertTrue(tables.contains("users") || tables.contains("public.users"));
     }
     
-    @Test
-    void testExtractTablesFromSelectWithAlias() {
-        String sql = "SELECT p.* FROM products p WHERE p.price > 100";
+    static Stream<Arguments> singleTableSqlProvider() {
+        return Stream.of(
+            Arguments.of("SELECT * FROM products WHERE category = 'electronics'", "products"),
+            Arguments.of("SELECT p.* FROM products p WHERE p.price > 100", "products"),
+            Arguments.of("INSERT INTO products (name, price) VALUES ('Widget', 9.99)", "products"),
+            Arguments.of("UPDATE products SET price = 19.99 WHERE id = 123", "products"),
+            Arguments.of("DELETE FROM orders WHERE created_at < '2020-01-01'", "orders")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("singleTableSqlProvider")
+    void testExtractSingleTable(String sql, String expectedTable) {
         Set<String> tables = SqlTableExtractor.extractTables(sql);
-        assertEquals(Set.of("products"), tables);
+        assertEquals(Set.of(expectedTable), tables);
     }
     
     // ========== JOIN Tests ==========
@@ -88,29 +95,6 @@ class SqlTableExtractorTest {
         String sql = "SELECT * FROM orders WHERE customer_id IN (SELECT id FROM customers WHERE country = 'US')";
         Set<String> tables = SqlTableExtractor.extractTables(sql);
         assertEquals(Set.of("orders", "customers"), tables);
-    }
-    
-    // ========== INSERT/UPDATE/DELETE Tests ==========
-    
-    @Test
-    void testExtractTablesFromInsert() {
-        String sql = "INSERT INTO products (name, price) VALUES ('Widget', 9.99)";
-        Set<String> tables = SqlTableExtractor.extractTables(sql);
-        assertEquals(Set.of("products"), tables);
-    }
-    
-    @Test
-    void testExtractTablesFromUpdate() {
-        String sql = "UPDATE products SET price = 19.99 WHERE id = 123";
-        Set<String> tables = SqlTableExtractor.extractTables(sql);
-        assertEquals(Set.of("products"), tables);
-    }
-    
-    @Test
-    void testExtractTablesFromDelete() {
-        String sql = "DELETE FROM orders WHERE created_at < '2020-01-01'";
-        Set<String> tables = SqlTableExtractor.extractTables(sql);
-        assertEquals(Set.of("orders"), tables);
     }
     
     // ========== extractModifiedTables Tests ==========

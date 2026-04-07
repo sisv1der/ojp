@@ -195,7 +195,7 @@ class QueryCacheStorageIntegrationTest {
         assertFalse(lookup1.isExpired(), "Result should not be expired yet");
 
         // Wait for expiration
-        Thread.sleep(150);
+        Thread.sleep(150); //NOSONAR
 
         // Assert 2: After TTL expires, the cache entry should be treated as expired
         // The get() method checks isExpired() and removes expired entries

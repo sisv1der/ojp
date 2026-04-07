@@ -22,19 +22,19 @@ import static org.mockito.Mockito.*;
 /**
  * Integration tests for cache configuration in sessions.
  */
-public class SessionCacheIntegrationTest {
+class SessionCacheIntegrationTest {
 
     private Map<String, CacheConfiguration> cacheConfigurationMap;
     private SessionManagerImpl sessionManager;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         cacheConfigurationMap = new ConcurrentHashMap<>();
         sessionManager = new SessionManagerImpl(cacheConfigurationMap);
     }
 
     @Test
-    public void testSessionCreationWithCacheConfiguration() {
+    void testSessionCreationWithCacheConfiguration() {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
         rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(600), List.of("products"), true));
@@ -60,7 +60,7 @@ public class SessionCacheIntegrationTest {
     }
 
     @Test
-    public void testSessionCreationWithoutCacheConfiguration() {
+    void testSessionCreationWithoutCacheConfiguration() {
         // Setup: No cache configuration in map
         String connectionHash = "test-connection-hash-2";
         String clientUUID = "test-client-uuid-2";
@@ -77,7 +77,7 @@ public class SessionCacheIntegrationTest {
     }
 
     @Test
-    public void testXASessionCreationWithCacheConfiguration() throws Exception {
+    void testXASessionCreationWithCacheConfiguration() throws Exception {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
         rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(300), List.of("users"), true));
@@ -104,7 +104,7 @@ public class SessionCacheIntegrationTest {
     }
 
     @Test
-    public void testMultipleSessionsWithDifferentConfigurations() {
+    void testMultipleSessionsWithDifferentConfigurations() {
         // Setup: Create different cache configurations
         List<CacheRule> rules1 = new ArrayList<>();
         rules1.add(new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofSeconds(600), List.of("products"), true));
@@ -139,7 +139,7 @@ public class SessionCacheIntegrationTest {
     }
 
     @Test
-    public void testConcurrentSessionCreation() throws InterruptedException {
+    void testConcurrentSessionCreation() throws InterruptedException {
         // Setup: Create cache configuration
         List<CacheRule> rules = new ArrayList<>();
         rules.add(new CacheRule(Pattern.compile("SELECT .*"), Duration.ofSeconds(600), List.of("test_table"), true));
