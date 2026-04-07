@@ -67,13 +67,14 @@ class CacheSecurityValidatorTest {
     
     @Test
     void testSqlInjection_Union() {
+        // UNION queries are now allowed for caching (validation removed)
         QueryCacheKey key = new QueryCacheKey(
             "testds",
             "SELECT * FROM products UNION SELECT * FROM users",
             List.of()
         );
         
-        assertFalse(CacheSecurityValidator.isSafeCacheKey(key));
+        assertTrue(CacheSecurityValidator.isSafeCacheKey(key));
     }
     
     @Test
@@ -222,25 +223,25 @@ class CacheSecurityValidatorTest {
     
     @Test
     void testLegitimateUnionQuery() {
-        // Legitimate UNION queries might be flagged - this is a known limitation
+        // Legitimate UNION queries are now allowed for caching
         QueryCacheKey key = new QueryCacheKey(
             "testds",
             "SELECT id, name FROM products UNION SELECT id, name FROM archived_products",
             List.of()
         );
         
-        // This will be flagged as suspicious due to UNION + SELECT combination
-        assertFalse(CacheSecurityValidator.isSafeCacheKey(key));
+        // UNION queries are now cacheable
+        assertTrue(CacheSecurityValidator.isSafeCacheKey(key));
     }
     
     @Test
     void testCaseInsensitiveDetection() {
-        // SQL injection attempts in different cases
+        // UNION queries in different cases are now allowed
         QueryCacheKey key1 = new QueryCacheKey("testds", "SELECT * FROM users UNION select * from passwords", List.of());
         QueryCacheKey key2 = new QueryCacheKey("testds", "SELECT * FROM users union SELECT * FROM passwords", List.of());
         
-        assertFalse(CacheSecurityValidator.isSafeCacheKey(key1));
-        assertFalse(CacheSecurityValidator.isSafeCacheKey(key2));
+        assertTrue(CacheSecurityValidator.isSafeCacheKey(key1));
+        assertTrue(CacheSecurityValidator.isSafeCacheKey(key2));
     }
     
     /**

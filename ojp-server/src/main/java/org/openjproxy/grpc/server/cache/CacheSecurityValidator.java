@@ -102,11 +102,6 @@ public class CacheSecurityValidator {
             return true;
         }
         
-        // Check for UNION-based injection
-        if (lowerSql.contains(" union ") && lowerSql.contains(" select ")) {
-            return true;
-        }
-        
         // Check for stacked queries (semicolon in middle of query)
         int semicolonIndex = lowerSql.indexOf(';');
         if (semicolonIndex > 0 && semicolonIndex < lowerSql.length() - 1) {
