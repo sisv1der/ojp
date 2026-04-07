@@ -322,7 +322,7 @@ class CacheEndToEndTest {
      * - Statistics accuracy
      */
     @Test
-    void testRealisticEcommerceWorkload() throws Exception {
+    void testRealisticEcommerceWorkload() {
         // Configure cache for product and user queries
         List<CacheRule> rules = List.of(
             new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofMinutes(10), List.of("products"), true),

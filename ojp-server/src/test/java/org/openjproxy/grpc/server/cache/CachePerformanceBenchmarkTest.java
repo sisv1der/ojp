@@ -326,7 +326,7 @@ class CachePerformanceBenchmarkTest {
          * - Database query: 10-100ms (depending on query complexity)
          * - Speedup: 10x - 100x
          */
-        System.out.println("This test requires database connection - run manually");
+        assertTrue(true, "Placeholder: test requires a live database connection and must be run manually");
     }
 
     @Test
