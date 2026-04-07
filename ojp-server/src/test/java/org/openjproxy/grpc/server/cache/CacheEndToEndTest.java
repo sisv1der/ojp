@@ -30,14 +30,14 @@ import static org.junit.jupiter.api.Assertions.*;
  * - Complex query patterns
  * - Realistic workload simulations
  */
-public class CacheEndToEndTest {
+class CacheEndToEndTest {
     
     private QueryResultCacheRegistry registry;
     private String datasourceName;
     private static final String TEST_UUID = "test-uuid";
     
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         registry = QueryResultCacheRegistry.getInstance();
         datasourceName = "test_ds_" + UUID.randomUUID().toString();
         
@@ -46,7 +46,7 @@ public class CacheEndToEndTest {
     }
     
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         registry.clear();
     }
     
@@ -87,7 +87,7 @@ public class CacheEndToEndTest {
      * 5. Verify statistics updated correctly
      */
     @Test
-    public void testCompleteQueryLifecycle() {
+    void testCompleteQueryLifecycle() {
         // Configure cache
         CacheRule rule = new CacheRule(
             Pattern.compile("SELECT .* FROM products.*"),
@@ -149,7 +149,7 @@ public class CacheEndToEndTest {
      * 4. Query again (should be cache MISS)
      */
     @Test
-    public void testAutomaticInvalidationOnWrite() {
+    void testAutomaticInvalidationOnWrite() {
         // Configure cache
         CacheRule rule = new CacheRule(
             Pattern.compile("SELECT .* FROM products.*"),
@@ -201,7 +201,7 @@ public class CacheEndToEndTest {
      * and don't interfere with each other.
      */
     @Test
-    public void testMultiDatasourceIsolation() {
+    void testMultiDatasourceIsolation() {
         String ds1 = "datasource1";
         String ds2 = "datasource2";
         
@@ -255,7 +255,7 @@ public class CacheEndToEndTest {
      * Tests caching behavior with complex queries involving multiple tables.
      */
     @Test
-    public void testComplexQueryPatterns() {
+    void testComplexQueryPatterns() {
         CacheRule rule = new CacheRule(
             Pattern.compile("SELECT .* FROM orders.*JOIN.*"),
             Duration.ofMinutes(5),
@@ -322,7 +322,7 @@ public class CacheEndToEndTest {
      * - Statistics accuracy
      */
     @Test
-    public void testRealisticEcommerceWorkload() throws Exception {
+    void testRealisticEcommerceWorkload() {
         // Configure cache for product and user queries
         List<CacheRule> rules = List.of(
             new CacheRule(Pattern.compile("SELECT .* FROM products.*"), Duration.ofMinutes(10), List.of("products"), true),
@@ -428,7 +428,7 @@ public class CacheEndToEndTest {
      * to verify thread safety and performance under load.
      */
     @Test
-    public void testConcurrentAccessUnderLoad() throws Exception {
+    void testConcurrentAccessUnderLoad() throws Exception {
         CacheRule rule = new CacheRule(
             Pattern.compile("SELECT .*"),
             Duration.ofMinutes(10),
@@ -506,7 +506,7 @@ public class CacheEndToEndTest {
      * and respects size limits.
      */
     @Test
-    public void testLargeResultSetHandling() {
+    void testLargeResultSetHandling() {
         CacheRule rule = new CacheRule(
             Pattern.compile("SELECT .*"),
             Duration.ofMinutes(10),

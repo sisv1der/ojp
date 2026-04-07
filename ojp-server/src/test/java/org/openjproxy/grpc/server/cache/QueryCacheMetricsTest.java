@@ -4,7 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -12,17 +11,17 @@ import static org.junit.jupiter.api.Assertions.*;
  * Unit tests for QueryCacheMetrics implementations.
  * Tests the SPI pattern with no-op and OpenTelemetry implementations.
  */
-public class QueryCacheMetricsTest {
+class QueryCacheMetricsTest {
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         // Reset state before each test
     }
 
     // ==================== NoOpQueryCacheMetrics Tests ====================
 
     @Test
-    public void testNoOpMetricsDoesNotThrow() {
+    void testNoOpMetricsDoesNotThrow() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // All methods should execute without throwing exceptions
@@ -38,7 +37,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testNoOpMetricsIsSingleton() {
+    void testNoOpMetricsIsSingleton() {
         QueryCacheMetrics instance1 = NoOpQueryCacheMetrics.getInstance();
         QueryCacheMetrics instance2 = NoOpQueryCacheMetrics.getInstance();
         
@@ -46,7 +45,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testNoOpMetricsWithNullParameters() {
+    void testNoOpMetricsWithNullParameters() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Should not throw with null parameters
@@ -61,7 +60,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testNoOpMetricsWithExtremeValues() {
+    void testNoOpMetricsWithExtremeValues() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Should handle extreme values without issues
@@ -73,7 +72,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testNoOpMetricsPerformance() {
+    void testNoOpMetricsPerformance() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Should be extremely fast (no-op)
@@ -91,14 +90,14 @@ public class QueryCacheMetricsTest {
     // ==================== Metrics Interface Contract Tests ====================
 
     @Test
-    public void testMetricsInterfaceContract() {
+    void testMetricsInterfaceContract() {
         // Test that the interface can be implemented
         QueryCacheMetrics testMetrics = new QueryCacheMetrics() {
             @Override
-            public void recordCacheHit(String datasource, String sql) {}
+            public void recordCacheHit(String datasource, String sql) { /* no-op test implementation */ }
             
             @Override
-            public void recordCacheMiss(String datasource, String sql) {}
+            public void recordCacheMiss(String datasource, String sql) { /* no-op test implementation */ }
             
             @Override
             public void recordCacheEviction(String datasource, String reason) {}
@@ -134,7 +133,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsWithVeryLongSQL() {
+    void testMetricsWithVeryLongSQL() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Create SQL longer than truncation limit
@@ -153,7 +152,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsWithSpecialCharacters() {
+    void testMetricsWithSpecialCharacters() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         String sqlWithSpecialChars = "SELECT * FROM \"test-table\" WHERE name = 'O''Reilly' AND data LIKE '%test%'";
@@ -166,7 +165,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsWithEmptyStrings() {
+    void testMetricsWithEmptyStrings() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         assertDoesNotThrow(() -> {
@@ -180,7 +179,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsWithNegativeValues() {
+    void testMetricsWithNegativeValues() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Should handle negative values gracefully
@@ -192,7 +191,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsConcurrentAccess() throws Exception {
+    void testMetricsConcurrentAccess() throws Exception {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Test concurrent access from multiple threads
@@ -219,7 +218,7 @@ public class QueryCacheMetricsTest {
     }
 
     @Test
-    public void testMetricsMethodChaining() {
+    void testMetricsMethodChaining() {
         QueryCacheMetrics metrics = NoOpQueryCacheMetrics.getInstance();
         
         // Methods should return void, so no chaining

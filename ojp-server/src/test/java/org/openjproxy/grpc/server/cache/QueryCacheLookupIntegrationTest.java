@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Integration tests for query cache lookup functionality.
  * Tests the integration between cache configuration, cache storage, and query execution.
  */
-public class QueryCacheLookupIntegrationTest {
+class QueryCacheLookupIntegrationTest {
 
     private QueryResultCacheRegistry cacheRegistry;
     private static final String DATASOURCE = "test_datasource";
@@ -51,18 +51,18 @@ public class QueryCacheLookupIntegrationTest {
     }
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         cacheRegistry = QueryResultCacheRegistry.getInstance();
         cacheRegistry.clear();  // Clean state
     }
 
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         cacheRegistry.clear();
     }
 
     @Test
-    public void testCacheLookup_Hit() {
+    void testCacheLookup_Hit() {
         // Setup: Create cache configuration
         CacheRule rule = new CacheRule(
                 Pattern.compile("SELECT .*"),
@@ -108,7 +108,7 @@ public class QueryCacheLookupIntegrationTest {
     }
 
     @Test
-    public void testCacheLookup_Miss() {
+    void testCacheLookup_Miss() {
         // Setup: Create empty cache
         QueryResultCache cache = cacheRegistry.getOrCreate(DATASOURCE);
         String sql = "SELECT * FROM products WHERE category = ?";
@@ -128,7 +128,7 @@ public class QueryCacheLookupIntegrationTest {
     }
 
     @Test
-    public void testCacheLookup_ExpiredEntry() throws InterruptedException {
+    void testCacheLookup_ExpiredEntry() throws InterruptedException {
         // Setup: Create cache with very short TTL
         QueryResultCache cache = cacheRegistry.getOrCreate(DATASOURCE, 1000, Duration.ofMillis(100), 1024 * 1024);
         String sql = "SELECT * FROM orders WHERE status = ?";
@@ -159,7 +159,7 @@ public class QueryCacheLookupIntegrationTest {
     }
 
     @Test
-    public void testCacheLookup_DifferentParameters() {
+    void testCacheLookup_DifferentParameters() {
         // Setup: Cache with same SQL but different parameters
         QueryResultCache cache = cacheRegistry.getOrCreate(DATASOURCE);
         String sql = "SELECT * FROM users WHERE id = ?";
@@ -193,7 +193,7 @@ public class QueryCacheLookupIntegrationTest {
     }
 
     @Test
-    public void testCacheLookup_PatternMatching() {
+    void testCacheLookup_PatternMatching() {
         // Setup: Create cache rule with pattern that requires trailing space/chars
         CacheRule selectUsersRule = new CacheRule(
                 Pattern.compile("SELECT .* FROM users.*"),
@@ -205,11 +205,11 @@ public class QueryCacheLookupIntegrationTest {
 
         // Test various SQL statements - the pattern "SELECT .* FROM users.*" requires content after "users"
         // So we test with variations that match
-        assertTrue(config.findMatchingRule("SELECT * FROM users WHERE id = 1") != null,
+        assertNotNull(config.findMatchingRule("SELECT * FROM users WHERE id = 1"),
                 "Should match SELECT with WHERE");
-        assertTrue(config.findMatchingRule("SELECT id, name FROM users ORDER BY id") != null,
+        assertNotNull(config.findMatchingRule("SELECT id, name FROM users ORDER BY id"),
                 "Should match SELECT with ORDER BY");
-        assertTrue(config.findMatchingRule("SELECT * FROM users") != null,
+        assertNotNull(config.findMatchingRule("SELECT * FROM users"),
                 "Should match SELECT without WHERE (. matches empty string with *)");
         assertNull(config.findMatchingRule("UPDATE users SET name = 'John'"),
                 "Should not match UPDATE");
