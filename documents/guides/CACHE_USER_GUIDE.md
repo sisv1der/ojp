@@ -2,20 +2,20 @@
 
 ## Overview
 
-OJP query result caching provides automatic caching of SELECT query results to reduce database load and improve query performance. This guide covers configuration, usage, monitoring, and troubleshooting.
+OJP query result caching provides automatic caching of SELECT query results to reduce database load and improve query performance. Cache configuration is specified by the client application in the JDBC connection string. This guide covers configuration, usage, monitoring, and troubleshooting.
 
 ## Quick Start
 
-Add cache configuration to your `ojp.properties` file:
+Add cache configuration properties to your JDBC connection string:
 
-```properties
-# Enable caching for your datasource
-postgres_prod.ojp.cache.enabled=true
+```java
+String url = "jdbc:ojp://localhost:5053/mydb?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*&" +
+             "ojp.cache.queries.1.ttl=600s&" +
+             "ojp.cache.queries.1.invalidateOn=products";
 
-# Define cache rule for product queries
-postgres_prod.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE .*
-postgres_prod.ojp.cache.queries.1.ttl=600s
-postgres_prod.ojp.cache.queries.1.invalidateOn=products
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 That's it! Queries matching your pattern will now be cached automatically.
@@ -24,15 +24,17 @@ That's it! Queries matching your pattern will now be cached automatically.
 
 ### Basic Configuration
 
+Cache configuration is specified via JDBC connection properties:
+
 ```properties
 # Enable or disable caching
-<datasource>.ojp.cache.enabled=true
+ojp.cache.enabled=true
 
 # Define cache rules (multiple rules supported)
-<datasource>.ojp.cache.queries.<N>.pattern=<regex>
-<datasource>.ojp.cache.queries.<N>.ttl=<duration>
-<datasource>.ojp.cache.queries.<N>.invalidateOn=<table1>,<table2>
-<datasource>.ojp.cache.queries.<N>.enabled=true
+ojp.cache.queries.<N>.pattern=<regex>
+ojp.cache.queries.<N>.ttl=<duration>
+ojp.cache.queries.<N>.invalidateOn=<table1>,<table2>
+ojp.cache.queries.<N>.enabled=true
 ```
 
 ### Pattern Syntax
@@ -42,25 +44,25 @@ Patterns use Java regular expressions to match SQL queries:
 **Basic patterns:**
 ```properties
 # Match exact query
-queries.1.pattern=SELECT * FROM users WHERE id = \?
+ojp.cache.queries.1.pattern=SELECT * FROM users WHERE id = \?
 
 # Match any query on products table
-queries.2.pattern=SELECT .* FROM products.*
+ojp.cache.queries.2.pattern=SELECT .* FROM products.*
 
 # Match queries with specific WHERE clause
-queries.3.pattern=SELECT .* FROM orders WHERE status = 'PENDING'
+ojp.cache.queries.3.pattern=SELECT .* FROM orders WHERE status = 'PENDING'
 
 # Match category filter queries
-queries.4.pattern=SELECT .* FROM products WHERE category IN \(.*\)
+ojp.cache.queries.4.pattern=SELECT .* FROM products WHERE category IN \(.*\)
 ```
 
 **Advanced patterns:**
 ```properties
 # Match multiple tables
-queries.5.pattern=SELECT .* FROM (products|categories).*
+ojp.cache.queries.5.pattern=SELECT .* FROM (products|categories).*
 
 # Match complex queries
-queries.6.pattern=SELECT p\..*,c\..* FROM products p JOIN categories c.*
+ojp.cache.queries.6.pattern=SELECT p\..*,c\..* FROM products p JOIN categories c.*
 ```
 
 **Tips:**
@@ -76,13 +78,13 @@ Time-To-Live specifies how long results stay cached:
 
 ```properties
 # Seconds
-queries.1.ttl=300s    # 5 minutes
+ojp.cache.queries.1.ttl=300s    # 5 minutes
 
 # Minutes  
-queries.2.ttl=10m     # 10 minutes
+ojp.cache.queries.2.ttl=10m     # 10 minutes
 
 # Hours
-queries.3.ttl=2h      # 2 hours
+ojp.cache.queries.3.ttl=2h      # 2 hours
 ```
 
 **Guidelines:**
@@ -102,13 +104,13 @@ Cache entries are automatically invalidated when tables are modified:
 
 ```properties
 # Invalidate when products table is updated
-queries.1.invalidateOn=products
+ojp.cache.queries.1.invalidateOn=products
 
 # Invalidate when any of these tables are updated
-queries.2.invalidateOn=products,product_prices,product_inventory
+ojp.cache.queries.2.invalidateOn=products,product_prices,product_inventory
 
 # No automatic invalidation (rely only on TTL)
-queries.3.invalidateOn=
+ojp.cache.queries.3.invalidateOn=
 ```
 
 **How it works:**
@@ -121,47 +123,53 @@ queries.3.invalidateOn=
 
 ### E-commerce Product Catalog
 
-```properties
-# Product listing (frequently queried, infrequently updated)
-ecommerce.ojp.cache.enabled=true
-ecommerce.ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE category = \?
-ecommerce.ojp.cache.queries.1.ttl=600s
-ecommerce.ojp.cache.queries.1.invalidateOn=products
+```java
+// Product listing (frequently queried, infrequently updated)
+String url = "jdbc:ojp://localhost:5053/ecommerce?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT .* FROM products WHERE category = \\?&" +
+             "ojp.cache.queries.1.ttl=600s&" +
+             "ojp.cache.queries.1.invalidateOn=products&" +
+             // Product details (very frequently queried)
+             "ojp.cache.queries.2.pattern=SELECT .* FROM products WHERE id = \\?&" +
+             "ojp.cache.queries.2.ttl=300s&" +
+             "ojp.cache.queries.2.invalidateOn=products,product_prices";
 
-# Product details (very frequently queried)
-ecommerce.ojp.cache.queries.2.pattern=SELECT .* FROM products WHERE id = \?
-ecommerce.ojp.cache.queries.2.ttl=300s
-ecommerce.ojp.cache.queries.2.invalidateOn=products,product_prices
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 ### User Profile Cache
 
-```properties
-# User profile lookups
-userdb.ojp.cache.enabled=true
-userdb.ojp.cache.queries.1.pattern=SELECT .* FROM users WHERE id = \?
-userdb.ojp.cache.queries.1.ttl=600s
-userdb.ojp.cache.queries.1.invalidateOn=users
+```java
+// User profile lookups
+String url = "jdbc:ojp://localhost:5053/userdb?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT .* FROM users WHERE id = \\?&" +
+             "ojp.cache.queries.1.ttl=600s&" +
+             "ojp.cache.queries.1.invalidateOn=users&" +
+             // User permissions (changes less frequently)
+             "ojp.cache.queries.2.pattern=SELECT .* FROM user_permissions WHERE user_id = \\?&" +
+             "ojp.cache.queries.2.ttl=1800s&" +
+             "ojp.cache.queries.2.invalidateOn=user_permissions,users";
 
-# User permissions (changes less frequently)
-userdb.ojp.cache.queries.2.pattern=SELECT .* FROM user_permissions WHERE user_id = \?
-userdb.ojp.cache.queries.2.ttl=1800s
-userdb.ojp.cache.queries.2.invalidateOn=user_permissions,users
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 ### Analytics/Reporting
 
-```properties
-# Dashboard queries (can tolerate slight staleness)
-analytics.ojp.cache.enabled=true
-analytics.ojp.cache.queries.1.pattern=SELECT COUNT\(\*\) FROM daily_stats WHERE.*
-analytics.ojp.cache.queries.1.ttl=300s
-analytics.ojp.cache.queries.1.invalidateOn=daily_stats
+```java
+// Dashboard queries (can tolerate slight staleness)
+String url = "jdbc:ojp://localhost:5053/analytics?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT COUNT\\(\\*\\) FROM daily_stats WHERE.*&" +
+             "ojp.cache.queries.1.ttl=300s&" +
+             "ojp.cache.queries.1.invalidateOn=daily_stats&" +
+             // Report aggregations (expensive queries, reference data)
+             "ojp.cache.queries.2.pattern=SELECT .* FROM country_codes WHERE.*&" +
+             "ojp.cache.queries.2.ttl=3600s&" +
+             "ojp.cache.queries.2.invalidateOn=country_codes";
 
-# Report aggregations (expensive queries, reference data)
-analytics.ojp.cache.queries.2.pattern=SELECT .* FROM country_codes WHERE.*
-analytics.ojp.cache.queries.2.ttl=3600s
-analytics.ojp.cache.queries.2.invalidateOn=country_codes
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 ## Monitoring
@@ -230,8 +238,8 @@ logging.level.org.openjproxy.grpc.server.action.transaction.ExecuteQueryAction=D
 
 1. **Caching not enabled**
    ```properties
-   # Check this is set to true
-   <datasource>.ojp.cache.enabled=true
+   # Check this is set to true in your JDBC connection string
+   ojp.cache.enabled=true
    ```
 
 2. **Pattern doesn't match**
@@ -241,8 +249,8 @@ logging.level.org.openjproxy.grpc.server.action.transaction.ExecuteQueryAction=D
 
 3. **Rule is disabled**
    ```properties
-   # Ensure enabled (or omit - defaults to true)
-   <datasource>.ojp.cache.queries.1.enabled=true
+   # Ensure enabled (or omit - defaults to true) in your JDBC connection string
+   ojp.cache.queries.1.enabled=true
    ```
 
 4. **Check validation errors in logs**
@@ -278,10 +286,9 @@ logging.level.org.openjproxy.grpc.server.action.transaction.ExecuteQueryAction=D
 
 **Solutions:**
 
-1. **Reduce cache size limits** (server-side configuration)
-2. **Lower TTL values** (entries expire sooner)
-3. **More selective patterns** (cache fewer queries)
-4. **Exclude large result sets** (queries returning many rows)
+1. **Lower TTL values** (entries expire sooner)
+2. **More selective patterns** (cache fewer queries)
+3. **Exclude large result sets** (queries returning many rows)
 
 ### Stale Data
 
@@ -295,8 +302,8 @@ logging.level.org.openjproxy.grpc.server.action.transaction.ExecuteQueryAction=D
 
 2. **Missing invalidation tables**
    ```properties
-   # Add all tables that affect this query
-   queries.1.invalidateOn=products,product_prices,product_inventory
+   # Add all tables that affect this query in your JDBC connection string
+   ojp.cache.queries.1.invalidateOn=products,product_prices,product_inventory
    ```
 
 3. **External updates**
@@ -330,21 +337,19 @@ OJP caching works seamlessly with ORMs that generate SQL dynamically. Patterns c
 
 **Pattern examples for ORMs:**
 
-```properties
-# Matches any Hibernate query on users table, regardless of selected columns
-orm_db.ojp.cache.queries.1.pattern=SELECT\\s+.*\\s+FROM\\s+users\\s+WHERE.*
-orm_db.ojp.cache.queries.1.ttl=300s
-orm_db.ojp.cache.queries.1.invalidateOn=users
+```java
+// Matches any Hibernate query on users table, regardless of selected columns
+String url = "jdbc:ojp://localhost:5053/orm_db?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT\\\\s+.*\\\\s+FROM\\\\s+users\\\\s+WHERE.*&" +
+             "ojp.cache.queries.1.ttl=300s&" +
+             "ojp.cache.queries.1.invalidateOn=users&" +
+             // Match Spring Data JPA repository queries
+             "ojp.cache.queries.2.pattern=SELECT\\\\s+.*\\\\s+FROM\\\\s+products\\\\s+WHERE\\\\s+category_id\\\\s*=.*&" +
+             "ojp.cache.queries.2.ttl=600s&" +
+             "ojp.cache.queries.2.invalidateOn=products";
 
-# Match Spring Data JPA repository queries  
-orm_db.ojp.cache.queries.2.pattern=SELECT\\s+.*\\s+FROM\\s+products\\s+WHERE\\s+category_id\\s*=.*
-orm_db.ojp.cache.queries.2.ttl=600s
-orm_db.ojp.cache.queries.2.invalidateOn=products
-
-# Match complex JOIN queries from JPA Criteria API
-orm_db.ojp.cache.queries.3.pattern=SELECT\\s+.*\\s+FROM\\s+orders.*JOIN.*customers.*
-orm_db.ojp.cache.queries.3.ttl=300s
-orm_db.ojp.cache.queries.3.invalidateOn=orders,customers
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 ### Important Considerations
@@ -376,12 +381,15 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 ```
 
 **Cache configuration:**
-```properties
-# Single pattern matches both repository methods
-myapp.ojp.cache.enabled=true
-myapp.ojp.cache.queries.1.pattern=SELECT\\s+.*\\s+FROM\\s+products\\s+WHERE.*
-myapp.ojp.cache.queries.1.ttl=300s
-myapp.ojp.cache.queries.1.invalidateOn=products
+```java
+// Single pattern matches both repository methods
+String url = "jdbc:ojp://localhost:5053/myapp?" +
+             "ojp.cache.enabled=true&" +
+             "ojp.cache.queries.1.pattern=SELECT\\\\s+.*\\\\s+FROM\\\\s+products\\\\s+WHERE.*&" +
+             "ojp.cache.queries.1.ttl=300s&" +
+             "ojp.cache.queries.1.invalidateOn=products";
+
+Connection conn = DriverManager.getConnection(url, user, password);
 ```
 
 ## Best Practices
@@ -466,16 +474,24 @@ SELECT * FROM products WHERE category = 'clothing';
 
 ### Multi-Tenant Configuration
 
-Separate cache configuration per tenant:
+Separate cache configuration per tenant datasource:
 
-```properties
-tenant1.ojp.cache.enabled=true
-tenant1.ojp.cache.queries.1.pattern=SELECT .* FROM products.*
-tenant1.ojp.cache.queries.1.ttl=600s
+```java
+// Tenant 1 connection
+String tenant1Url = "jdbc:ojp://localhost:5053/tenant1?" +
+                    "ojp.cache.enabled=true&" +
+                    "ojp.cache.queries.1.pattern=SELECT .* FROM products.*&" +
+                    "ojp.cache.queries.1.ttl=600s";
 
-tenant2.ojp.cache.enabled=true
-tenant2.ojp.cache.queries.1.pattern=SELECT .* FROM products.*
-tenant2.ojp.cache.queries.1.ttl=300s
+Connection tenant1Conn = DriverManager.getConnection(tenant1Url, user, password);
+
+// Tenant 2 connection with different TTL
+String tenant2Url = "jdbc:ojp://localhost:5053/tenant2?" +
+                    "ojp.cache.enabled=true&" +
+                    "ojp.cache.queries.1.pattern=SELECT .* FROM products.*&" +
+                    "ojp.cache.queries.1.ttl=300s";
+
+Connection tenant2Conn = DriverManager.getConnection(tenant2Url, user, password);
 ```
 
 ### Performance Tuning
