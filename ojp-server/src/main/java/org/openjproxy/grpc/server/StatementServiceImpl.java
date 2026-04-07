@@ -56,7 +56,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
 
     public StatementServiceImpl(SessionManager sessionManager, CircuitBreakerRegistry circuitBreakerRegistry,
-            ServerConfiguration serverConfiguration) {
+            ServerConfiguration serverConfiguration,
+            Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap) {
         // Server configuration for creating segregation managers
         this.sqlEnhancerEngine = new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
                 serverConfiguration.isSqlEnhancerEnabled());
@@ -81,6 +82,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         Map<String, DbName> dbNameMap = new ConcurrentHashMap<>();
         // Per-datasource slow query segregation managers
         Map<String, SlowQuerySegregationManager> slowQuerySegregationManagers = new ConcurrentHashMap<>();
+        // Per-datasource cache configurations (shared with SessionManager)
+        Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheCfgMap = 
+                cacheConfigurationMap != null ? cacheConfigurationMap : new ConcurrentHashMap<>();
+        
         this.actionContext = new org.openjproxy.grpc.server.action.ActionContext(
                 datasourceMap,
                 xaDataSourceMap,
@@ -88,6 +93,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 unpooledConnectionDetailsMap,
                 dbNameMap,
                 slowQuerySegregationManagers,
+                cacheCfgMap,
                 xaPoolProvider,
                 xaCoordinator,
                 clusterHealthTracker,

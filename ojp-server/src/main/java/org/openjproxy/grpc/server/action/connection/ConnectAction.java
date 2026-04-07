@@ -17,6 +17,7 @@ import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
 import org.openjproxy.grpc.server.pool.ConnectionPoolConfigurer;
 import org.openjproxy.grpc.server.pool.DataSourceConfigurationManager;
+import org.openjproxy.grpc.server.util.DatasourceNameExtractor;
 import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
 import org.openjproxy.grpc.server.utils.UrlParser;
 
@@ -238,6 +239,52 @@ public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
             }
         } finally {
             lock.unlock();
+        }
+        
+        // Parse and store cache configuration from properties
+        if (connectionDetails.getPropertiesCount() > 0) {
+            try {
+                org.openjproxy.grpc.server.cache.CacheConfiguration cacheConfig = 
+                    org.openjproxy.grpc.server.cache.QueryCacheHelper.parseCacheConfiguration(
+                        connectionDetails.getUrl(),
+                        connectionDetails.getPropertiesList(),
+                        connHash);
+                
+                // Validate cache configuration
+                if (cacheConfig != null && cacheConfig.isEnabled()) {
+                    org.openjproxy.grpc.server.cache.CacheConfigurationValidator.ValidationResult validation = 
+                        org.openjproxy.grpc.server.cache.CacheConfigurationValidator.validate(cacheConfig);
+                    
+                    // Log warnings
+                    for (String warning : validation.getWarnings()) {
+                        log.warn("Cache configuration warning for connHash '{}': {}", connHash, warning);
+                    }
+                    
+                    // Check for errors
+                    if (!validation.isValid()) {
+                        String errorMsg = "Invalid cache configuration: " + String.join("; ", validation.getErrors());
+                        log.error("Cache configuration rejected for connHash '{}': {}", connHash, errorMsg);
+                        // Disable caching but allow connection
+                        cacheConfig = new org.openjproxy.grpc.server.cache.CacheConfiguration(
+                            cacheConfig.getDatasourceName(), false, java.util.List.of());
+                    }
+                }
+                
+                context.getCacheConfigurationMap().put(connHash, cacheConfig);
+                
+                if (cacheConfig.isEnabled()) {
+                    log.info("Cache configuration stored for connHash '{}': {} rules", 
+                        connHash, cacheConfig.getRules().size());
+                } else {
+                    log.debug("Cache configuration disabled for connHash '{}'", connHash);
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse cache configuration for connHash '{}': {}", 
+                    connHash, e.getMessage());
+                // Continue without cache - caching will be disabled for this connection
+            }
+        } else {
+            log.debug("No properties provided for connHash '{}'", connHash);
         }
 
         // registerClientUUID is safe to call outside the lock: each client has a unique clientUUID,

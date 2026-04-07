@@ -64,16 +64,30 @@ public class GrpcServer {
 
             OjpHealthManager.setServiceStatus(OjpHealthManager.Services.OPENTELEMETRY_SERVICE,
                     HealthCheckResponse.ServingStatus.SERVING);
+            
+            // Initialize cache metrics with OpenTelemetry
+            io.opentelemetry.api.OpenTelemetry openTelemetry = ojpServerTelemetry.getOpenTelemetry();
+            if (openTelemetry != null && config.isTelemetryCacheMetricsEnabled()) {
+                org.openjproxy.grpc.server.cache.QueryCacheMetrics cacheMetrics = 
+                    new org.openjproxy.grpc.server.cache.OpenTelemetryQueryCacheMetrics(openTelemetry);
+                org.openjproxy.grpc.server.cache.QueryResultCacheRegistry.getInstance().setMetrics(cacheMetrics);
+                logger.info("Cache metrics initialized with OpenTelemetry");
+            }
         } else {
             grpcTelemetry = ojpServerTelemetry.createNoOpGrpcTelemetry();
         }
 
         // Build server with configuration
-        SessionManagerImpl sessionManager = new SessionManagerImpl();
+        // Create shared cache configuration map for session-level caching
+        java.util.Map<String, org.openjproxy.grpc.server.cache.CacheConfiguration> cacheConfigurationMap = 
+            new java.util.concurrent.ConcurrentHashMap<>();
+        
+        SessionManagerImpl sessionManager = new SessionManagerImpl(cacheConfigurationMap);
         final StatementServiceImpl statementService = new StatementServiceImpl(
                 sessionManager,
                 circuitBreakerRegistry,
-                config
+                config,
+                cacheConfigurationMap
         );
 
         NettyServerBuilder serverBuilder = NettyServerBuilder

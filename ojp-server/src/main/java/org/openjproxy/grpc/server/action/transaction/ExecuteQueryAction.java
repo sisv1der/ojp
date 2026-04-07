@@ -6,10 +6,14 @@ import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.openjproxy.grpc.ProtoConverter;
+import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
 import org.openjproxy.grpc.server.ConnectionSessionDTO;
+import org.openjproxy.grpc.server.Session;
 import org.openjproxy.grpc.server.action.Action;
 import org.openjproxy.grpc.server.action.ActionContext;
+import org.openjproxy.grpc.server.cache.CacheConfiguration;
+import org.openjproxy.grpc.server.cache.QueryCacheHelper;
 import org.openjproxy.grpc.server.statement.StatementFactory;
 
 import javax.sql.DataSource;
@@ -17,6 +21,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.openjproxy.grpc.server.action.session.ResultSetHelper.handleResultSet;
@@ -60,8 +65,38 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
 
         ConnectionSessionDTO dto = sessionConnection(actionContext, request.getSession(), true);
 
-        // Phase 2: SQL Enhancement with timing
+        // Phase 6: Cache Lookup (before query execution) - with graceful degradation
         String sql = request.getSql();
+        CacheConfiguration cacheConfig = QueryCacheHelper.getCacheConfiguration(actionContext, dto.getSession());
+        
+        if (cacheConfig != null && cacheConfig.isEnabled()) {
+            try {
+                String datasourceName = dto.getSession().getConnHash();
+                List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
+                
+                com.openjproxy.grpc.OpQueryResultProto cachedProto = QueryCacheHelper.getCachedResult(
+                        cacheConfig, sql, params, datasourceName);
+                
+                if (cachedProto != null) {
+                    // CACHE HIT - Return cached proto directly (no conversion needed)
+                    OpResult result = OpResult.newBuilder()
+                            .setQueryResult(cachedProto)
+                            .build();
+                    responseObserver.onNext(result);
+                    responseObserver.onCompleted();
+                    return;  // Skip database execution
+                }
+            } catch (Exception e) {
+                // Graceful degradation - cache failure doesn't block query execution
+                log.error("Cache lookup failed, falling back to database: datasource={}, sql={}, error={}", 
+                        dto.getSession().getConnHash(), 
+                        sql.substring(0, Math.min(sql.length(), 50)),
+                        e.getMessage());
+                // Continue to database execution
+            }
+        }
+
+        // Phase 2: SQL Enhancement with timing
         long enhancementStartTime = System.currentTimeMillis();
 
         var sqlEnhancerEngine = actionContext.getSqlEnhancerEngine();
@@ -114,15 +149,20 @@ public class ExecuteQueryAction implements Action<StatementRequest, OpResult> {
         }
 
         List<Parameter> params = ProtoConverter.fromProtoList(request.getParametersList());
+        
+        // Phase 7: Wrap response observer for cache storage (if caching enabled)
+        StreamObserver<OpResult> finalObserver = QueryCacheHelper.wrapWithCaching(
+                responseObserver, cacheConfig, sql, params, dto.getSession().getConnHash());
+        
         if (CollectionUtils.isNotEmpty(params)) {
             PreparedStatement ps = StatementFactory.createPreparedStatement(sessionManager, dto, sql, params, request);
             String resultSetUUID = sessionManager.registerResultSet(dto.getSession(), ps.executeQuery());
-            handleResultSet(actionContext, dto.getSession(), resultSetUUID, responseObserver);
+            handleResultSet(actionContext, dto.getSession(), resultSetUUID, finalObserver);
         } else {
             Statement stmt = StatementFactory.createStatement(sessionManager, dto.getConnection(), request);
             String resultSetUUID = sessionManager.registerResultSet(dto.getSession(),
                     stmt.executeQuery(sql));
-            handleResultSet(actionContext, dto.getSession(), resultSetUUID, responseObserver);
+            handleResultSet(actionContext, dto.getSession(), resultSetUUID, finalObserver);
         }
     }
 }

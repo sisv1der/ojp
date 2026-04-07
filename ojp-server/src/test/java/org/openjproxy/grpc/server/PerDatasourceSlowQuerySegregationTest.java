@@ -39,7 +39,7 @@ class PerDatasourceSlowQuerySegregationTest {
                 serverConfiguration.getCircuitBreakerThreshold()
         );
 
-        statementService = new StatementServiceImpl(sessionManager, circuitBreakerRegistry, serverConfiguration);
+        statementService = new StatementServiceImpl(sessionManager, circuitBreakerRegistry, serverConfiguration, new java.util.concurrent.ConcurrentHashMap<>());
     }
 
     @org.junit.jupiter.api.AfterEach

@@ -136,7 +136,12 @@ public class ExecuteUpdateAction implements Action<StatementRequest, OpResult> {
                 updated = stmt.executeUpdate(request.getSql());
             }
 
-            return buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
+            OpResult result = buildOpResult(request, opResultBuilder, returnSessionInfo, psUUID, updated);
+            
+            // Phase 9: Cache Invalidation (after successful update)
+            org.openjproxy.grpc.server.cache.QueryCacheHelper.invalidateCacheIfEnabled(actionContext, dto.getSession(), request.getSql());
+            
+            return result;
         } finally {
             closeStatementAndConnectionIfNoSession(dto, stmt);
         }
