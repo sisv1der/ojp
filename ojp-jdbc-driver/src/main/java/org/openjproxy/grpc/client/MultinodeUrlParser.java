@@ -76,12 +76,19 @@ public class MultinodeUrlParser {
                     MultinodeUrlParser.formatServerList(endpoints));
             MultinodeConnectionManager connectionManager = new MultinodeConnectionManager(endpoints);
 
-            // Wire in XAConnectionRedistributor for XA connection rebalancing
-            HealthCheckConfig healthConfig = connectionManager.getHealthCheckConfig();
-            if (healthConfig != null) {
-                XAConnectionRedistributor redistributor = new XAConnectionRedistributor(connectionManager, healthConfig);
-                connectionManager.setXaConnectionRedistributor(redistributor);
-                log.info("XAConnectionRedistributor wired into MultinodeConnectionManager");
+            // Wire in XAConnectionRedistributor only for multi-node configurations.
+            // For single-node, XA redistribution has no target to rebalance to, and the
+            // proactive heartbeat health check it enables can incorrectly mark the only server
+            // as unhealthy when the OJP proxy rejects empty-credential heartbeat connections.
+            if (endpoints.size() > 1) {
+                HealthCheckConfig healthConfig = connectionManager.getHealthCheckConfig();
+                if (healthConfig != null) {
+                    XAConnectionRedistributor redistributor = new XAConnectionRedistributor(connectionManager, healthConfig);
+                    connectionManager.setXaConnectionRedistributor(redistributor);
+                    log.info("XAConnectionRedistributor wired into MultinodeConnectionManager ({} endpoints)", endpoints.size());
+                }
+            } else {
+                log.debug("Skipping XAConnectionRedistributor for single-node configuration");
             }
 
             return new MultinodeStatementService(connectionManager, url);
