@@ -256,7 +256,7 @@ jobs:
       - name: Commit release pom changes and create tag
         if: ${{ inputs.dry_run == false }}
         run: |
-          git add -A
+          git add -A -- ':!**/target/'
           git commit -m "chore(release): prepare release ${{ steps.versions.outputs.release }}"
           git tag -a "v${{ steps.versions.outputs.release }}" \
               -m "Release ${{ steps.versions.outputs.release }}"
@@ -275,7 +275,7 @@ jobs:
       - name: Commit next development version
         if: ${{ inputs.dry_run == false }}
         run: |
-          git add -A
+          git add -A -- ':!**/target/'
           git commit -m "chore(release): prepare next development iteration ${{ steps.versions.outputs.next }}"
 
       # -----------------------------------------------------------------------
