@@ -171,7 +171,7 @@ bash ojp-server/download-drivers.sh ./ojp-libs
 
 # Start baseline server (port 1059)
 java -Dojp.libs.path=./ojp-libs \
-  -jar ojp-server/target/ojp-server-0.4.1-beta-shaded.jar &
+  -jar ojp-server/target/ojp-server-0.4.2-beta-shaded.jar &
 
 # Start enhanced server (port 10593) with DEBUG logging
 java -Dojp.libs.path=./ojp-libs \
