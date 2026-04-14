@@ -499,10 +499,54 @@ public class MultinodeStatementService implements StatementService {
     
     @Override
     public LobReference createLob(Connection connection, Iterator<LobDataBlock> lobDataBlock) throws SQLException {
-        SessionInfo sessionInfo = connection.getSession();
-        return executeWithSessionStickiness(sessionInfo, client -> 
-            client.createLob(connection, lobDataBlock)
-        );
+        SessionInfo requestSessionInfo = connection.getSession();
+        SessionInfo enhancedSessionInfo = withClusterHealth(requestSessionInfo);
+        String sessionKey = (enhancedSessionInfo != null && enhancedSessionInfo.getSessionUUID() != null
+                && !enhancedSessionInfo.getSessionUUID().isEmpty())
+                ? enhancedSessionInfo.getSessionUUID() : null;
+        ServerEndpoint server = connectionManager.affinityServer(sessionKey);
+
+        try {
+            MultinodeConnectionManager.ChannelAndStub channelAndStub = connectionManager.getChannelAndStub(server);
+            if (channelAndStub == null) {
+                throw new SQLException("Unable to get channel for server: " + server.getAddress());
+            }
+
+            StatementServiceGrpcClient client = getClient(server);
+            LobReference result = client.createLob(connection, lobDataBlock);
+
+            // Bind any new session UUID returned in the LobReference.
+            // This handles lazy session creation: when the server creates a session during LOB
+            // upload and returns a new sessionUUID, we must bind it so subsequent operations
+            // (e.g. executeUpdate) are routed to the same server.
+            if (result != null && result.hasSession()) {
+                checkAndBindSession(requestSessionInfo, result.getSession(), server);
+            }
+
+            return result;
+
+        } catch (StatusRuntimeException e) {
+            SQLException sqlEx;
+            try {
+                throw GrpcExceptionHandler.handle(e);
+            } catch (SQLException ex) {
+                sqlEx = ex;
+            }
+
+            if (connectionManager.isConnectionLevelError(e)) {
+                log.warn("Connection-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
+                connectionManager.handleServerFailure(server, e);
+            } else {
+                log.debug("Database-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
+            }
+
+            throw sqlEx;
+        } catch (SQLException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SQLException("Unexpected error creating LOB on server " +
+                    server.getAddress() + ": " + e.getMessage(), e);
+        }
     }
     
     @Override
