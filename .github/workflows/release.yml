@@ -7,17 +7,20 @@
 # This workflow automates the full release cycle for all OJP modules:
 #
 #   1. Validates required secrets are configured
-#   2. Computes the release version (e.g. 0.4.1-SNAPSHOT → 0.4.1-beta)
+#   2. Validates Docker Hub credentials (fast-fail before any version changes)
+#   3. Checks out the repository
+#   4. Sets up JDK and Maven settings
+#   5. Computes the release version (e.g. 0.4.1-SNAPSHOT → 0.4.1-beta)
 #      and the next development version (e.g. 0.4.1-beta → 0.4.2-SNAPSHOT)
-#   3. Bumps all pom.xml versions to the release version
-#   4. Builds all Maven modules (no tests)
-#   5. Deploys all library modules to Maven Central via Sonatype Central
-#   6. Builds and pushes the OJP Server Docker image to Docker Hub
-#   7. Updates all documentation to reference the new release version
-#   8. Creates a signed Git tag on the release commit
-#   9. Bumps all pom.xml versions to the next development version
-#  10. Commits and pushes all changes back to main
-#  11. Creates a GitHub Release with auto-generated release notes
+#   6. Bumps all pom.xml versions to the release version
+#   7. Builds all Maven modules (no tests)
+#   8. Deploys all library modules to Maven Central via Sonatype Central
+#   9. Builds and pushes the OJP Server Docker image to Docker Hub
+#  10. Updates all documentation to reference the new release version
+#  11. Creates a signed Git tag on the release commit
+#  12. Bumps all pom.xml versions to the next development version
+#  13. Commits and pushes all changes back to main
+#  14. Creates a GitHub Release with auto-generated release notes
 #      (based on merged PRs since the previous tag, categorised by label
 #       as defined in .github/release.yml)
 #
@@ -91,7 +94,19 @@ jobs:
           echo "All required secrets are present."
 
       # -----------------------------------------------------------------------
-      # 2. Checkout
+      # 2. Validate Docker Hub credentials (fast-fail before any version changes)
+      # -----------------------------------------------------------------------
+      - name: Validate Docker Hub credentials
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login \
+            --username "${{ secrets.DOCKERHUB_USER }}" \
+            --password-stdin
+          docker logout
+          echo "Docker Hub credentials verified successfully."
+
+      # -----------------------------------------------------------------------
+      # 3. Checkout
       # -----------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,7 +118,7 @@ jobs:
           fetch-depth: 0
 
       # -----------------------------------------------------------------------
-      # 3. Java + Maven settings (server credentials + GPG key import)
+      # 4. Java + Maven settings (server credentials + GPG key import)
       # -----------------------------------------------------------------------
       - name: Set up JDK 22
         uses: actions/setup-java@v4
@@ -125,7 +140,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       # -----------------------------------------------------------------------
-      # 4. Compute release and next-development versions
+      # 5. Compute release and next-development versions
       # -----------------------------------------------------------------------
       - name: Compute versions
         id: versions
@@ -160,7 +175,7 @@ jobs:
           echo "next=${NEXT}"        >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 5. Set release version in all pom.xml files
+      # 6. Set release version in all pom.xml files
       # -----------------------------------------------------------------------
       - name: Set release version (${{ steps.versions.outputs.release }})
         run: |
@@ -171,7 +186,7 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 6. Build all modules (no tests) to validate the release
+      # 7. Build all modules (no tests) to validate the release
       # -----------------------------------------------------------------------
       - name: Build all modules (no tests)
         run: |
@@ -181,7 +196,7 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 7. Deploy all modules to Maven Central (libraries + ojp-server executable JAR)
+      # 8. Deploy all modules to Maven Central (libraries + ojp-server executable JAR)
       # -----------------------------------------------------------------------
       - name: Deploy to Maven Central
         if: ${{ inputs.dry_run == false }}
@@ -196,7 +211,7 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 8. Build and push Docker image for ojp-server
+      # 9. Build and push Docker image for ojp-server
       #    Image tag is ${project.version} (e.g. rrobetti/ojp:0.4.1-beta)
       # -----------------------------------------------------------------------
       - name: Create ojp-libs directory for Jib
@@ -214,7 +229,7 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 9. Update version references in all documentation (*.md files)
+      # 10. Update version references in all documentation (*.md files)
       #    Replaces:  rrobetti/ojp:<old>   →  rrobetti/ojp:<new>
       #               ojp-server-<old>     →  ojp-server-<new>  (filenames + URLs)
       #               /ojp-server/<old>/   →  /ojp-server/<new>/  (Maven Central URL path)
@@ -236,7 +251,7 @@ jobs:
           git diff --name-only
 
       # -----------------------------------------------------------------------
-      # 10. Commit release (pom changes + docs update) and create tag
+      # 11. Commit release (pom changes + docs update) and create tag
       # -----------------------------------------------------------------------
       - name: Commit release pom changes and create tag
         if: ${{ inputs.dry_run == false }}
@@ -247,7 +262,7 @@ jobs:
               -m "Release ${{ steps.versions.outputs.release }}"
 
       # -----------------------------------------------------------------------
-      # 11. Set next development (SNAPSHOT) version
+      # 12. Set next development (SNAPSHOT) version
       # -----------------------------------------------------------------------
       - name: Set next development version (${{ steps.versions.outputs.next }})
         run: |
@@ -264,7 +279,7 @@ jobs:
           git commit -m "chore(release): prepare next development iteration ${{ steps.versions.outputs.next }}"
 
       # -----------------------------------------------------------------------
-      # 12. Push commits and release tag to main
+      # 13. Push commits and release tag to main
       # -----------------------------------------------------------------------
       - name: Push commits and tag
         if: ${{ inputs.dry_run == false }}
@@ -273,7 +288,7 @@ jobs:
           git push origin "v${{ steps.versions.outputs.release }}"
 
       # -----------------------------------------------------------------------
-      # 13. Create GitHub Release from the new tag
+      # 14. Create GitHub Release from the new tag
       #     Release notes are generated automatically from merged pull requests
       #     since the previous release, categorised by label as defined in
       #     .github/release.yml.  A fixed "Artifacts" footer is appended.
