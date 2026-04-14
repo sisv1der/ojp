@@ -555,13 +555,21 @@ public class MultinodeConnectionManager {
                 }
                 
             } catch (StatusRuntimeException e) {
+                boolean isSqlError = false;
                 try {
                     GrpcExceptionHandler.handle(e);
                     lastException = new SQLException("gRPC call failed: " + e.getMessage(), e);
                 } catch (SQLException sqlEx) {
                     lastException = sqlEx;
+                    isSqlError = true; // SQL metadata present: upstream DB error, not OJP proxy failure
                 }
-                handleServerFailure(server, e);
+                if (!isSqlError) {
+                    // Only mark server unhealthy for genuine connectivity failures (no SQL metadata)
+                    handleServerFailure(server, e);
+                } else {
+                    log.debug("Not marking server {} unhealthy: database-level error during connect ({})",
+                            server.getAddress(), lastException.getMessage());
+                }
                 
                 log.warn("Connection failed to server {}: {}", 
                         server.getAddress(), lastException.getMessage());

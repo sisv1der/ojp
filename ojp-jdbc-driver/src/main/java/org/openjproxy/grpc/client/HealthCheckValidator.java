@@ -2,7 +2,6 @@ package org.openjproxy.grpc.client;
 
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.SessionInfo;
-import io.grpc.ConnectivityState;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,49 +108,22 @@ public class HealthCheckValidator {
     }
     
     /**
-     * Validates if a server is healthy using the gRPC channel connectivity state.
-     * This avoids making application-level RPC calls with empty credentials that
-     * the server correctly rejects, which would falsely mark it as unhealthy.
-     * READY / IDLE / CONNECTING all mean the transport can reach the server.
-     * Only TRANSIENT_FAILURE or SHUTDOWN indicate a genuine connectivity problem.
+     * Validates if a server is healthy using a lightweight heartbeat connection.
+     * Sends a CONNECT request with empty credentials; the server responds with an
+     * empty SessionInfo without creating a real session.  A successful response
+     * means the gRPC transport is reachable; an exception means it is not.
      *
      * @param endpoint The server endpoint to validate
-     * @return true if the gRPC channel is reachable, false otherwise
+     * @return true if the server is reachable, false otherwise
      */
     public boolean validateServer(ServerEndpoint endpoint) {
-        if (endpoint == null) {
-            return false;
-        }
-
-        try {
-            MultinodeConnectionManager.ChannelAndStub channelAndStub =
-                    connectionManager.getChannelAndStub(endpoint);
-
-            if (channelAndStub == null) {
-                log.debug("No channel available for {}, attempting to create", endpoint.getAddress());
-                channelAndStub = connectionManager.createChannelAndStubForEndpoint(endpoint);
-            }
-
-            if (channelAndStub == null) {
-                log.debug("Server {} channel state check FAILED: could not obtain channel", endpoint.getAddress());
-                return false;
-            }
-
-            // Request a connection attempt if the channel is IDLE so gRPC starts connecting.
-            ConnectivityState state = channelAndStub.channel.getState(true);
-            boolean healthy = state != ConnectivityState.TRANSIENT_FAILURE
-                    && state != ConnectivityState.SHUTDOWN;
-
-            if (healthy) {
-                log.debug("Server {} channel state check PASSED (state={})", endpoint.getAddress(), state);
-            } else {
-                log.debug("Server {} channel state check FAILED (state={})", endpoint.getAddress(), state);
-            }
-            return healthy;
-
-        } catch (Exception e) {
-            log.debug("Server {} channel state check FAILED: {}", endpoint.getAddress(), e.getMessage());
-            return false;
-        }
+        // Create minimal connection details for health check
+        ConnectionDetails connectionDetails = ConnectionDetails.newBuilder()
+            .setUrl("") // Empty URL for health check
+            .setUser("")
+            .setPassword("")
+            .build();
+        
+        return validateServer(endpoint, connectionDetails);
     }
 }
