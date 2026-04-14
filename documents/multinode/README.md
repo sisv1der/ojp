@@ -47,18 +47,10 @@ Connection conn = DriverManager.getConnection(url, "user", "password");
 
 ### Jakarta EE / GlassFish — XML-escape commas in `glassfish-resources.xml`
 
-GlassFish (and Payara) treat unescaped commas inside a `<property value="..."/>` attribute as
-**property-value list separators**, which silently truncates a multinode URL after the first
-comma. XML-escape every comma with `&#44;` when specifying the URL in `glassfish-resources.xml`:
-
-```xml
-<property name="url"
-          value="jdbc:ojp[host1:1059&#44;host2:1059&#44;host3:1059]_postgresql://localhost/mydb"/>
-```
-
-GlassFish passes the fully unescaped string to the OJP driver, which parses it correctly. This
-escaping is not required for other Jakarta EE servers (WildFly, Open Liberty, TomEE) or for any
-non-XML configuration mechanism (Java code, `application.properties`, `ojp.properties`, etc.).
+GlassFish (and Payara) treat unescaped commas in `<property value="..."/>` attributes as
+property-value list separators, silently truncating multinode URLs. See
+[Multinode URL in `glassfish-resources.xml`](../java-frameworks/jakarta-ee/README.md#multinode-url-in-glassfish-resourcesxml)
+in the Jakarta EE guide for the full explanation and example.
 
 ## Configuration
 

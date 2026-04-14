@@ -479,26 +479,11 @@ The datasource is configured at the server level. On GlassFish this is done via 
 
 #### Multinode URL in `glassfish-resources.xml`
 
-When using OJP in **multinode mode** (multiple OJP servers for high availability), the JDBC URL
-contains commas to separate server addresses, for example:
-
-```
-jdbc:ojp[host1:1059,host2:1059,host3:1059]_postgresql://localhost/mydb
-```
-
-GlassFish's XML parser treats unescaped commas inside a `<property value="..."/>` attribute as
-**property-value list separators**, which silently truncates the URL after the first comma. To
-prevent this, XML-escape every comma with `&#44;`:
-
-```xml
-<property name="url"
-          value="jdbc:ojp[host1:1059&#44;host2:1059&#44;host3:1059]_postgresql://localhost/mydb"/>
-```
-
-GlassFish passes the fully unescaped string to the OJP driver, which parses it correctly. Your
-Java application code requires no changes. This escaping is specific to GlassFish and Payara; other
-Jakarta EE servers (WildFly, Open Liberty, TomEE) use different deployment descriptor formats and
-do not share this restriction.
+When using OJP in **multinode mode**, GlassFish's XML parser treats unescaped commas inside a
+`<property value="..."/>` attribute as property-value list separators, silently truncating the
+URL. XML-escape each comma with `&#44;`. See
+[Multinode URL in `glassfish-resources.xml`](../java-frameworks/jakarta-ee/README.md#multinode-url-in-glassfish-resourcesxml)
+in the Jakarta EE guide for the full explanation and example.
 
 ### Step 3 — Reference the JNDI datasource in `META-INF/persistence.xml`
 
