@@ -50,3 +50,5 @@ changelog:
       labels:
         - dependency-update
     - title: "Other Changes"
+      labels:
+        - "*"
