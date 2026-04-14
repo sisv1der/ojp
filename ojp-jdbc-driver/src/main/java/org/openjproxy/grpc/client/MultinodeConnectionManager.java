@@ -237,9 +237,14 @@ public class MultinodeConnectionManager {
     private void performHealthCheck() {
         log.debug("Performing health check on servers");
         
-        // XA Mode: Proactively check healthy servers to detect failures early
-        // This ensures sessions are invalidated even if no active operations are hitting the server
-        if (xaConnectionRedistributor != null) {
+        // XA Mode: Proactively check healthy servers to detect failures early.
+        // Only run when there are active sessions – the sole purpose of this check is to
+        // invalidate sessions bound to a server that has gone down.  When sessionToServerMap
+        // is empty (e.g. on the very first connect() call) there is nothing to invalidate,
+        // and running the check at that point can transiently mark a live server (e.g.
+        // server1061) as unhealthy before connectToAllServers() has had a chance to reach
+        // it, producing a spurious "No healthy servers available" error.
+        if (xaConnectionRedistributor != null && !sessionToServerMap.isEmpty()) {
             List<ServerEndpoint> healthyServers = serverEndpoints.stream()
                     .filter(ServerEndpoint::isHealthy)
                     .collect(Collectors.toList());
