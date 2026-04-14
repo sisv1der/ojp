@@ -154,7 +154,7 @@ public class MultinodeStatementService implements StatementService {
         
         String clusterHealth = connectionManager.generateClusterHealth();
         
-        log.info("[XA-REBALANCE-DEBUG] withClusterHealth called: connHash={}, isXA={}, original clusterHealth={}, new clusterHealth={}", 
+        log.debug("[XA-REBALANCE] withClusterHealth called: connHash={}, isXA={}, original clusterHealth={}, new clusterHealth={}", 
                 sessionInfo.getConnHash(), sessionInfo.getIsXA(), sessionInfo.getClusterHealth(), clusterHealth);
         
         SessionInfo enhanced = SessionInfo.newBuilder(sessionInfo)
@@ -400,7 +400,7 @@ public class MultinodeStatementService implements StatementService {
                 ? requestSessionInfo.getSessionUUID() : null;
         ServerEndpoint server = connectionManager.affinityServer(sessionKey);
         
-        log.info("executeWithSessionStickinessAndBinding: session={}, server={}", 
+        log.debug("executeWithSessionStickinessAndBinding: session={}, server={}", 
             requestSessionInfo != null ? requestSessionInfo.getSessionUUID() : "null", 
             server != null ? server.getAddress() : "null");
         
@@ -838,7 +838,7 @@ public class MultinodeStatementService implements StatementService {
                 ? sessionInfo.getSessionUUID() : null;
         ServerEndpoint server = connectionManager.affinityServer(sessionKey);
         
-        log.info("executeWithSessionStickiness: session={}, server={}", 
+        log.debug("executeWithSessionStickiness: session={}, server={}", 
             sessionInfo != null ? sessionInfo.getSessionUUID() : "null", 
             server != null ? server.getAddress() : "null");
         
@@ -851,7 +851,7 @@ public class MultinodeStatementService implements StatementService {
                 throw new SQLException("Unable to get channel for server: " + server.getAddress());
             }
             
-            log.info("Got channelAndStub for server {}: blockingStub={}, asyncStub={}", 
+            log.debug("Got channelAndStub for server {}: blockingStub={}, asyncStub={}", 
                 server.getAddress(),
                 System.identityHashCode(channelAndStub.blockingStub),
                 System.identityHashCode(channelAndStub.asyncStub));
@@ -859,7 +859,7 @@ public class MultinodeStatementService implements StatementService {
             // Get or create the client for this endpoint
             StatementServiceGrpcClient client = getClient(server);
             
-            log.info("Using client for server {}, about to execute operation", server.getAddress());
+            log.debug("Using client for server {}, about to execute operation", server.getAddress());
             
             // Execute the operation
             return operation.apply(client);

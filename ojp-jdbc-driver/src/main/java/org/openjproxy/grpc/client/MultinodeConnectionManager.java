@@ -627,7 +627,7 @@ public class MultinodeConnectionManager {
     public ServerEndpoint affinityServer(String sessionKey) throws SQLException {
         if (sessionKey == null || sessionKey.isEmpty()) {
             // No session identifier, use round-robin
-            log.warn("DIAGNOSTIC: affinityServer called with NULL or EMPTY sessionKey - routing via round-robin. " +
+            log.debug("DIAGNOSTIC: affinityServer called with NULL or EMPTY sessionKey - routing via round-robin. " +
                     "This may cause 'Connection not found' errors if queries reach wrong server. " +
                     "SessionKey value: '{}', isEmpty: {}, isNull: {}", 
                     sessionKey, 
@@ -636,10 +636,10 @@ public class MultinodeConnectionManager {
             return selectHealthyServer();
         }
         
-        log.info("Looking up server for session: {}", sessionKey);
+        log.debug("Looking up server for session: {}", sessionKey);
         ServerEndpoint sessionServer = sessionToServerMap.get(sessionKey);
         
-        log.info("=== affinityServer lookup: sessionKey={}, found server={}, total sessions in map={} ===", 
+        log.debug("=== affinityServer lookup: sessionKey={}, found server={}, total sessions in map={} ===", 
                 sessionKey, 
                 sessionServer != null ? sessionServer.getAddress() : "NOT_FOUND",
                 sessionToServerMap.size());
@@ -662,7 +662,7 @@ public class MultinodeConnectionManager {
                     "Available bound sessions: " + sessionToServerMap.keySet());
         }
         
-        log.info("Session {} is bound to server {}", sessionKey, sessionServer.getAddress());
+        log.debug("Session {} is bound to server {}", sessionKey, sessionServer.getAddress());
         
         if (!sessionServer.isHealthy()) {
             // Remove from map and throw exception - do NOT fall back to round-robin
