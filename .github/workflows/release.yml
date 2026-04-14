@@ -226,6 +226,7 @@ jobs:
               -pl ojp-server \
               -Djib.to.auth.username="${{ secrets.DOCKERHUB_USER }}" \
               -Djib.to.auth.password="${{ secrets.DOCKERHUB_TOKEN }}" \
+              -Djib.to.tags=latest \
               -DskipTests \
               --no-transfer-progress
 
