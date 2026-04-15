@@ -2,12 +2,14 @@ package org.openjproxy.grpc.client;
 
 import lombok.Getter;
 import org.openjproxy.constants.CommonConstants;
+import org.openjproxy.jdbc.DatasourcePropertiesLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -74,11 +76,12 @@ public class MultinodeUrlParser {
         StatementService service = statementServiceCache.computeIfAbsent(cacheKey, k -> {
             log.debug("Creating MultinodeStatementService for endpoints: {}",
                     MultinodeUrlParser.formatServerList(endpoints));
-            MultinodeConnectionManager connectionManager = new MultinodeConnectionManager(endpoints);
-
-            // Always wire in XAConnectionRedistributor so it is ready for dynamic server
-            // addition/removal regardless of the initial endpoint count.
-            HealthCheckConfig healthConfig = connectionManager.getHealthCheckConfig();
+            Properties rawProperties = DatasourcePropertiesLoader.loadOjpProperties();
+            HealthCheckConfig healthConfig = HealthCheckConfig.loadFromProperties(rawProperties);
+            MultinodeConnectionManager connectionManager = new MultinodeConnectionManager(endpoints,
+                    CommonConstants.DEFAULT_MULTINODE_RETRY_ATTEMPTS,
+                    CommonConstants.DEFAULT_MULTINODE_RETRY_DELAY_MS,
+                    healthConfig);
             if (healthConfig != null) {
                 XAConnectionRedistributor redistributor = new XAConnectionRedistributor(connectionManager, healthConfig);
                 connectionManager.setXaConnectionRedistributor(redistributor);

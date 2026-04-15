@@ -102,7 +102,7 @@ public class HealthCheckConfig {
             return defaultValue;
         }
         try {
-            long longValue = Long.parseLong(value.trim());
+            long longValue = parseDurationMs(value.trim());
             if (longValue < 0) {
                 log.warn("Invalid negative value for {}: {}, using default: {}", key, value, defaultValue);
                 return defaultValue;
@@ -120,15 +120,41 @@ public class HealthCheckConfig {
             return defaultValue;
         }
         try {
-            int intValue = Integer.parseInt(value.trim());
-            if (intValue < 0) {
-                log.warn("Invalid negative value for {}: {}, using default: {}", key, value, defaultValue);
+            long longValue = parseDurationMs(value.trim());
+            if (longValue < 0 || longValue > Integer.MAX_VALUE) {
+                log.warn("Invalid value for {}: {}, using default: {}", key, value, defaultValue);
                 return defaultValue;
             }
-            return intValue;
+            return (int) longValue;
         } catch (NumberFormatException e) {
             log.warn("Invalid value for {}: {}, using default: {}", key, value, defaultValue);
             return defaultValue;
+        }
+    }
+
+    /**
+     * Parses a duration string into milliseconds.
+     * Supported formats:
+     * <ul>
+     *   <li>Plain integer — treated as milliseconds (e.g. {@code 5000})</li>
+     *   <li>{@code <n>ms} — milliseconds (e.g. {@code 500ms})</li>
+     *   <li>{@code <n>s}  — seconds (e.g. {@code 10s})</li>
+     *   <li>{@code <n>m}  — minutes (e.g. {@code 2m})</li>
+     * </ul>
+     *
+     * @param value trimmed property value string
+     * @return duration in milliseconds
+     * @throws NumberFormatException if the value cannot be parsed
+     */
+    static long parseDurationMs(String value) {
+        if (value.endsWith("ms")) {
+            return Long.parseLong(value.substring(0, value.length() - 2).trim());
+        } else if (value.endsWith("m")) {
+            return Long.parseLong(value.substring(0, value.length() - 1).trim()) * 60_000L;
+        } else if (value.endsWith("s")) {
+            return Long.parseLong(value.substring(0, value.length() - 1).trim()) * 1_000L;
+        } else {
+            return Long.parseLong(value);
         }
     }
     
