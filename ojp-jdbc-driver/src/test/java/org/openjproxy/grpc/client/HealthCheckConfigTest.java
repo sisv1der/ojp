@@ -1,5 +1,6 @@
 package org.openjproxy.grpc.client;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
@@ -10,9 +11,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link HealthCheckConfig} including duration string parsing and properties loading.
+ * Tests for {@link HealthCheckConfig} including duration string parsing,
+ * properties file loading, and system-property override priority.
  */
 class HealthCheckConfigTest {
+
+    @AfterEach
+    void cleanup() {
+        System.clearProperty("ojp.health.check.interval");
+        System.clearProperty("ojp.health.check.threshold");
+        System.clearProperty("ojp.health.check.timeout");
+        System.clearProperty("ojp.redistribution.enabled");
+        System.clearProperty("ojp.redistribution.idleRebalanceFraction");
+        System.clearProperty("ojp.redistribution.maxClosePerRecovery");
+        System.clearProperty("ojp.loadaware.selection.enabled");
+    }
 
     // -------------------------------------------------------------------------
     // parseDurationMs
@@ -50,7 +63,7 @@ class HealthCheckConfigTest {
     }
 
     // -------------------------------------------------------------------------
-    // loadFromProperties with duration-string values
+    // loadFromProperties with duration-string values (file properties)
     // -------------------------------------------------------------------------
 
     @Test
@@ -114,15 +127,15 @@ class HealthCheckConfigTest {
     }
 
     @Test
-    void testLoadFromProperties_nullProps() {
+    void testLoadFromProperties_nullProps_usesDefaults() {
         HealthCheckConfig config = HealthCheckConfig.loadFromProperties(null);
         HealthCheckConfig defaults = HealthCheckConfig.createDefault();
 
-        assertEquals(defaults.getHealthCheckIntervalMs(),   config.getHealthCheckIntervalMs());
-        assertEquals(defaults.getHealthCheckThresholdMs(),  config.getHealthCheckThresholdMs());
-        assertEquals(defaults.getHealthCheckTimeoutMs(),    config.getHealthCheckTimeoutMs());
-        assertEquals(defaults.getIdleRebalanceFraction(),   config.getIdleRebalanceFraction(), 0.0001);
-        assertEquals(defaults.getMaxClosePerRecovery(),     config.getMaxClosePerRecovery());
+        assertEquals(defaults.getHealthCheckIntervalMs(),    config.getHealthCheckIntervalMs());
+        assertEquals(defaults.getHealthCheckThresholdMs(),   config.getHealthCheckThresholdMs());
+        assertEquals(defaults.getHealthCheckTimeoutMs(),     config.getHealthCheckTimeoutMs());
+        assertEquals(defaults.getIdleRebalanceFraction(),    config.getIdleRebalanceFraction(), 0.0001);
+        assertEquals(defaults.getMaxClosePerRecovery(),      config.getMaxClosePerRecovery());
         assertEquals(defaults.isLoadAwareSelectionEnabled(), config.isLoadAwareSelectionEnabled());
     }
 
@@ -133,5 +146,70 @@ class HealthCheckConfigTest {
 
         HealthCheckConfig config = HealthCheckConfig.loadFromProperties(props);
         assertFalse(config.isLoadAwareSelectionEnabled());
+    }
+
+    // -------------------------------------------------------------------------
+    // System-property override (simulates -D flags and Spring Boot application.yml
+    // forwarded by OjpSystemPropertiesBridge)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testSystemPropertyOverridesFileProperty() {
+        Properties fileProps = new Properties();
+        fileProps.setProperty("ojp.health.check.interval", "30s"); // would be 30 000 ms
+
+        // System property wins
+        System.setProperty("ojp.health.check.interval", "10s");
+
+        HealthCheckConfig config = HealthCheckConfig.loadFromProperties(fileProps);
+
+        assertEquals(10_000L, config.getHealthCheckIntervalMs(),
+                "System property should override file property");
+    }
+
+    @Test
+    void testSystemPropertyUsedWhenFilePropertyAbsent() {
+        System.setProperty("ojp.health.check.threshold", "20s");
+
+        HealthCheckConfig config = HealthCheckConfig.loadFromProperties(null);
+
+        assertEquals(20_000L, config.getHealthCheckThresholdMs(),
+                "System property should be read when no file properties are provided");
+    }
+
+    @Test
+    void testSystemPropertyDurationStrings() {
+        System.setProperty("ojp.health.check.interval",  "2m");
+        System.setProperty("ojp.health.check.timeout",   "500ms");
+        System.setProperty("ojp.loadaware.selection.enabled", "false");
+        System.setProperty("ojp.redistribution.maxClosePerRecovery", "50");
+
+        HealthCheckConfig config = HealthCheckConfig.loadFromProperties(null);
+
+        assertEquals(120_000L, config.getHealthCheckIntervalMs());
+        assertEquals(500,      config.getHealthCheckTimeoutMs());
+        assertFalse(config.isLoadAwareSelectionEnabled());
+        assertEquals(50, config.getMaxClosePerRecovery());
+    }
+
+    @Test
+    void testAllPropertiesViaSystemProperties() {
+        System.setProperty("ojp.health.check.interval",                  "10s");
+        System.setProperty("ojp.health.check.threshold",                 "10s");
+        System.setProperty("ojp.health.check.timeout",                   "2s");
+        System.setProperty("ojp.redistribution.enabled",                 "true");
+        System.setProperty("ojp.redistribution.idleRebalanceFraction",   "1.0");
+        System.setProperty("ojp.redistribution.maxClosePerRecovery",     "99");
+        System.setProperty("ojp.loadaware.selection.enabled",            "true");
+
+        HealthCheckConfig config = HealthCheckConfig.loadFromProperties(null);
+
+        assertEquals(10_000L, config.getHealthCheckIntervalMs());
+        assertEquals(10_000L, config.getHealthCheckThresholdMs());
+        assertEquals(2_000,   config.getHealthCheckTimeoutMs());
+        assertTrue(config.isRedistributionEnabled());
+        assertEquals(1.0, config.getIdleRebalanceFraction(), 0.0001);
+        assertEquals(99, config.getMaxClosePerRecovery());
+        assertTrue(config.isLoadAwareSelectionEnabled());
     }
 }
