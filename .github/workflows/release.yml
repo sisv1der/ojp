@@ -62,6 +62,10 @@ jobs:
   release:
     name: Release OJP
     runs-on: ubuntu-latest
+    # Requires manual approval by rrobetti before the job starts.
+    # Configure the "release" environment in repository Settings → Environments
+    # with rrobetti as a required reviewer.
+    environment: release
     # Minimal required permissions for this workflow
     permissions:
       contents: write   # push commits, create tags, create GitHub releases
