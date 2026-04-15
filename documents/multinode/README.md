@@ -66,14 +66,22 @@ ojp.connection.pool.idleTimeout=300000
 ojp.connection.pool.maxLifetime=900000
 ojp.connection.pool.connectionTimeout=15000
 
-# Multinode configuration (configurable via properties)
-ojp.multinode.retryAttempts=-1        # -1 for infinite retry, or positive number
-ojp.multinode.retryDelayMs=5000       # milliseconds between retry attempts
+# Failover retry configuration
+ojp.multinode.retryAttempts=-1    # -1 for infinite retry, or a positive integer
+ojp.multinode.retryDelayMs=5000   # milliseconds between retry attempts
 
 # Load-aware server selection
-ojp.loadaware.selection.enabled=true  # Enable load-aware selection (default: true)
-                                       # When enabled, new connections go to the server with fewest active connections
-                                       # When disabled, uses legacy round-robin distribution
+ojp.loadaware.selection.enabled=true  # routes new connections to the least-loaded server (default: true)
+                                       # set to false to use round-robin instead
+
+# Health check and server recovery
+# Duration values accept: plain integer (ms), or suffixed string — 500ms, 10s, 2m
+ojp.health.check.interval=5s          # how often to probe a failed server for recovery (default: 5s)
+ojp.health.check.threshold=5s         # how long a server must stay healthy before being marked recovered (default: 5s)
+ojp.health.check.timeout=5s           # gRPC deadline for each individual health-probe call (default: 5s)
+ojp.redistribution.enabled=true       # enable connection redistribution on server recovery (default: true)
+ojp.redistribution.idleRebalanceFraction=1.0  # fraction of idle connections to rebalance per cycle (0.0–1.0)
+ojp.redistribution.maxClosePerRecovery=100    # max connections to close per recovery cycle
 ```
 
 **For environment-specific configuration** (development, staging, production), see:
