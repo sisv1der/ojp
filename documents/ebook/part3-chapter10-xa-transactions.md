@@ -14,7 +14,7 @@ Before diving into how OJP implements XA, let's understand what XA transactions 
 
 #### Why XA Connections Must Be Checked More Aggressively Than Regular Connections
 
-Before diving into the technical details, it helps to understand intuitively why XA connections demand far more proactive health management than ordinary JDBC connections. The following analogy and code example illustrate this clearly.
+Before diving into the technical details, it helps to understand intuitively why XA connections demand far more proactive health management than ordinary JDBC connections.
 
 **The Two-Store Analogy**
 
@@ -26,47 +26,6 @@ Now imagine Store A catches fire and burns down while you're walking between the
 - **With XA (distributed transaction):** Store A is holding your cake, Store B is holding your candles. The moment Store A burns down, **Store B is stuck in limbo** — it's holding those candles indefinitely, refusing to sell them to anyone else, waiting for a final decision that can never come.
 
 This is why XA connections must be checked aggressively: OJP needs to immediately tell Store B *"the deal is off, release the candles"* the moment Store A goes down, instead of waiting for the next customer to discover the mess.
-
-**What Happens in Code**
-
-```java
-// NON-XA: lazy, reactive — failure is discovered when you use the connection
-Connection conn = pool.getConnection(); // might be stale, but we'll find out on first use
-conn.executeQuery("SELECT ...");        // fails here — harmless, just retry
-
-// XA: aggressive, proactive — failure must be surfaced BEFORE the transaction manager
-//     tries to commit or roll back a ghost resource
-XAConnection xaConn = xaPool.getXAConnection();
-XAResource xaResource = xaConn.getXAResource();
-
-txManager.enlist(xaResource);          // TX manager now OWNS this resource
-xaResource.start(xid, TMNOFLAGS);
-xaResource.end(xid, TMSUCCESS);
-
-// ... server goes down here ...
-
-txManager.commit();                    // calls xaResource.commit(xid, false)
-                                       // HANGS or throws XAException
-                                       // 😱 the database row may or may not be committed
-```
-
-Without aggressive connection checking:
-```
-TX Manager: "Did you commit?"
-Dead XAResource: .....  (no answer)
-TX Manager: "I'll wait..."  ← hangs forever, or marks the TX as IN-DOUBT
-```
-
-With OJP's proactive health management:
-```
-Server goes down →
-  OJP detects it →
-    invalidateSessionsAndConnectionsForFailedServer() →
-      xaConn.forceInvalid = true →
-        TX Manager gets a clean XAException immediately →
-          TX Manager triggers XA Recovery →
-            Surviving node resolves the in-doubt TX ✅
-```
 
 > **One-line summary:** Regular connections fail *loudly and locally* when you use them. XA connections fail *silently and globally* — infecting the transaction manager and other participants — so they must be killed proactively the moment a server goes down.
 
