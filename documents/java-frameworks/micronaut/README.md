@@ -89,9 +89,12 @@ jpa.default.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect
 The example above is for `h2` but it is similar to any other database, you just need to add the `ojp[host:port]_` pattern immediately after `jdbc:`. `[host:port]` indicates the host and port you have your OJP proxy server running.
 Note that `jpa.default.properties.hibernate.dialect` has to be present.
 
-> **Note:** For Micronaut projects, all OJP configuration (connection pool settings, health check
-> settings, etc.) can be placed directly in your `application.properties` or `application.yml`.
-> A separate `ojp.properties` file is not required — Micronaut reads OJP properties from its
-> standard configuration sources. Use whichever property naming style is most readable for your
-> team; kebab-case (e.g. `retry-attempts`) and camelCase (e.g. `retryAttempts`) are both accepted
-> by the OJP driver.
+> **Note:** The Micronaut datasource URL and driver class are configured in `application.properties`
+> or `application.yml` as shown above. However, OJP driver-specific settings (connection pool
+> sizes, health check intervals, multinode retry configuration, etc.) must still be provided in an
+> `ojp.properties` file (or an environment-specific variant such as `ojp-dev.properties`). Unlike
+> Spring Boot, there is no Micronaut starter that automatically bridges framework configuration to
+> OJP's system properties.
+>
+> See [OJP JDBC Configuration](../../configuration/ojp-jdbc-configuration.md) for the full list of
+> `ojp.properties` settings.
