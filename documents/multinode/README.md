@@ -80,8 +80,65 @@ ojp.health.check.interval=5s          # how often to probe a failed server for r
 ojp.health.check.threshold=5s         # how long a server must stay healthy before being marked recovered (default: 5s)
 ojp.health.check.timeout=5s           # gRPC deadline for each individual health-probe call (default: 5s)
 ojp.redistribution.enabled=true       # enable connection redistribution on server recovery (default: true)
+                                       # set to false to disable the periodic health checker entirely
 ojp.redistribution.idleRebalanceFraction=1.0  # fraction of idle connections to rebalance per cycle (0.0–1.0)
 ojp.redistribution.maxClosePerRecovery=100    # max connections to close per recovery cycle
+```
+
+#### Enabling and Disabling the Health Check
+
+The periodic health checker is **enabled by default** (`ojp.redistribution.enabled=true`). It runs on a background thread named `ojp-health-checker` and periodically probes unhealthy servers so they can rejoin the cluster automatically.
+
+To **disable** the health checker entirely (e.g., for simpler single-datacenter setups where you manage failover externally), set:
+
+```properties
+ojp.redistribution.enabled=false
+```
+
+When the health checker is disabled:
+- No background thread is started.
+- Failed servers are never automatically recovered — they remain marked as `DOWN` for the lifetime of the connection manager.
+- Connection redistribution on server recovery does not occur.
+
+> **Note:** Disabling the health checker does not affect failover for non-session requests. The driver still routes new requests around unhealthy servers; it simply will not automatically restore a failed server back to the pool.
+
+#### Getting Logs from the Health Checker
+
+Health check activity is logged by the OJP JDBC driver using SLF4J under the `org.openjproxy.grpc.client` package. To enable health check logging, configure your logging framework to set the appropriate log level for this package.
+
+**Spring Boot (`application.yml` / `application.properties`):**
+
+```yaml
+logging:
+  level:
+    org.openjproxy.grpc.client: DEBUG
+```
+
+or in `application.properties`:
+
+```properties
+logging.level.org.openjproxy.grpc.client=DEBUG
+```
+
+**Logback (`logback.xml` / `logback-spring.xml`):**
+
+```xml
+<logger name="org.openjproxy.grpc.client" level="DEBUG"/>
+```
+
+**Via JVM system property (any framework):**
+
+```shell
+-Dorg.slf4j.simpleLogger.log.org.openjproxy.grpc.client=debug
+```
+
+At `INFO` level you will see server recovery and redistribution events. At `DEBUG` level you will also see individual probe results for each health check cycle. Example log output:
+
+```
+[INFO]  MultinodeConnectionManager - Performing health check on servers
+[DEBUG] HealthCheckValidator - Server proxy1.example.com:1059 heartbeat health check PASSED
+[DEBUG] HealthCheckValidator - Server proxy2.example.com:1059 heartbeat health check FAILED: UNAVAILABLE
+[INFO]  MultinodeConnectionManager - Successfully recovered server proxy2.example.com:1059
 ```
 
 **For environment-specific configuration** (development, staging, production), see:
