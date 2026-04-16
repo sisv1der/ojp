@@ -69,6 +69,7 @@ jobs:
     # Minimal required permissions for this workflow
     permissions:
       contents: write   # push commits, create tags, create GitHub releases
+      workflows: write  # update workflow files (main.yml docker image version)
     # Prevent concurrent releases that could corrupt the version state
     concurrency:
       group: release
