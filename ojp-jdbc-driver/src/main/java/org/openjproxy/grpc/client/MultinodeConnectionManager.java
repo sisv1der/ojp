@@ -196,39 +196,11 @@ public class MultinodeConnectionManager {
         
         log.info("=== connect() called: isXA={} (unified mode always enabled) ===", isXA);
         
-        // Try to trigger health check (time-based, non-blocking)
-        if (healthCheckConfig.isRedistributionEnabled()) {
-            tryTriggerHealthCheck();
-        }
-        
         // UNIFIED MODE: Both XA and non-XA connect to all servers
         log.debug("Connecting to all servers for {} connection", isXA ? "XA" : "non-XA");
         return connectToAllServers(connectionDetails);
     }
     
-    /**
-     * Attempts to trigger a health check if enough time has elapsed since the last check.
-     * Uses compareAndSet to ensure only one thread executes the health check.
-     * Non-blocking - if another thread is already doing a health check, this returns immediately.
-     */
-    private void tryTriggerHealthCheck() {
-        long now = System.currentTimeMillis();
-        long lastCheck = lastHealthCheckTimestamp.get();
-        long elapsed = now - lastCheck;
-        
-        // Only check if interval has passed
-        if (elapsed >= healthCheckConfig.getHealthCheckIntervalMs()) {
-            // Atomic update - only one thread succeeds
-            if (lastHealthCheckTimestamp.compareAndSet(lastCheck, now)) {
-                try {
-                    performHealthCheck();
-                } catch (Exception e) {
-                    log.warn("Health check failed: {}", e.getMessage());
-                    // Don't fail the connection attempt - health check is best effort
-                }
-            }
-        }
-    }
     
     /**
      * Performs health check on all servers.
