@@ -12,6 +12,25 @@ Before diving into how OJP implements XA, let's understand what XA transactions 
 
 > "When you need to update a customer's account and their audit log simultaneously, and both live in different databases, you need more than hope. You need XA."
 
+#### Why XA Connections Must Be Checked More Aggressively Than Regular Connections
+
+Before diving into the technical details, it helps to understand intuitively why XA connections demand far more proactive health management than ordinary JDBC connections.
+
+**The Two-Store Analogy**
+
+Imagine you're buying a birthday gift that requires two items from two different stores — a cake from **Store A** and candles from **Store B**. You tell both stores: *"Hold these for me, I'll pay for both together or neither."* That's an XA transaction.
+
+Now imagine Store A catches fire and burns down while you're walking between them.
+
+- **Without XA (regular connection):** You were only buying from one store. You go in, get your item, pay, leave. If the store burns down *after* you paid, that's the store's problem. If it burns down *before*, you just go somewhere else. Simple.
+- **With XA (distributed transaction):** Store A is holding your cake, Store B is holding your candles. The moment Store A burns down, **Store B is stuck in limbo** — it's holding those candles indefinitely, refusing to sell them to anyone else, waiting for a final decision that can never come.
+
+This is why XA connections must be checked aggressively: OJP needs to immediately tell Store B *"the deal is off, release the candles"* the moment Store A goes down, instead of waiting for the next customer to discover the mess.
+
+> **One-line summary:** Regular connections fail *loudly and locally* when you use them. XA connections fail *silently and globally* — infecting the transaction manager and other participants — so they must be killed proactively the moment a server goes down.
+
+---
+
 Consider a banking application that needs to transfer money between accounts. In a traditional setup with a single database, this is straightforward—start a transaction, debit one account, credit the other, and commit. The database ensures atomicity automatically. But what if these accounts live in different database instances? Perhaps you've sharded your data for scalability, or maybe you're running a microservices architecture where different services own different databases.
 
 This is where XA transactions shine. XA (eXtended Architecture) is a standard protocol developed by The Open Group that coordinates transactions across multiple resources. It implements what's called Two-Phase Commit (2PC), a protocol that ensures all participants in a distributed transaction either commit their changes together or roll back together—no exceptions.
