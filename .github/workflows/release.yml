@@ -17,7 +17,6 @@
 #   8. Deploys all library modules to Maven Central via Sonatype Central
 #   9. Builds and pushes the OJP Server Docker image to Docker Hub
 #  10. Updates all documentation to reference the new release version
-#      and updates the docker image version in .github/workflows/main.yml
 #  11. Creates a signed Git tag on the release commit
 #  12. Bumps all pom.xml versions to the next development version
 #  13. Commits and pushes all changes back to main
@@ -68,7 +67,7 @@ jobs:
     environment: release
     # Minimal required permissions for this workflow
     permissions:
-      contents: write   # push commits, create tags, create GitHub releases and update workflow files
+      contents: write   # push commits, create tags and create GitHub releases
     # Prevent concurrent releases that could corrupt the version state
     concurrency:
       group: release
@@ -235,12 +234,12 @@ jobs:
               --no-transfer-progress
 
       # -----------------------------------------------------------------------
-      # 10. Update version references in all documentation (*.md files)
-      #     and in the main CI workflow (main.yml).
+      # 10. Update version references in all documentation (*.md files).
       #    Replaces:  rrobetti/ojp:<old>   →  rrobetti/ojp:<new>
       #               ojp-server-<old>     →  ojp-server-<new>  (filenames + URLs)
       #               /ojp-server/<old>/   →  /ojp-server/<new>/  (Maven Central URL path)
       #               <version><old></version>  →  <version><new></version>
+      # Note: main.yml always uses rrobetti/ojp:latest so no update is needed there.
       # -----------------------------------------------------------------------
       - name: Update documentation to ${{ steps.versions.outputs.release }}
         run: |
@@ -253,13 +252,6 @@ jobs:
             -e "s|ojp-server-[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta|ojp-server-${NEW}|g" \
             -e "s|/ojp-server/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta/|/ojp-server/${NEW}/|g" \
             -e "s|<version>[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta</version>|<version>${NEW}</version>|g"
-
-          # Update the docker image version in the main CI workflow:
-          # replace both SNAPSHOT and previous beta references with the release version
-          sed -i \
-            -e "s|rrobetti/ojp:[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-SNAPSHOT|rrobetti/ojp:${NEW}|g" \
-            -e "s|rrobetti/ojp:[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta|rrobetti/ojp:${NEW}|g" \
-            .github/workflows/main.yml
 
           echo "Files updated:"
           git diff --name-only
@@ -285,19 +277,6 @@ jobs:
               -DprocessAllModules=true \
               -DgenerateBackupPoms=false \
               --no-transfer-progress
-
-      # -----------------------------------------------------------------------
-      # 12b. Update main.yml docker image to the next development version
-      # -----------------------------------------------------------------------
-      - name: Update main.yml docker image to next development version (${{ steps.versions.outputs.next }})
-        run: |
-          NEXT="${{ steps.versions.outputs.next }}"
-          echo "Updating main.yml docker image references to ${NEXT}"
-          sed -i \
-            -e "s|rrobetti/ojp:[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta|rrobetti/ojp:${NEXT}|g" \
-            .github/workflows/main.yml
-          echo "Files updated:"
-          git diff --name-only
 
       - name: Commit next development version
         if: ${{ inputs.dry_run == false }}
