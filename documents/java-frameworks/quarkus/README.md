@@ -30,11 +30,10 @@ quarkus.datasource.jdbc.driver=org.openjproxy.jdbc.Driver
 The example above is for `h2` but it is similar to any other database, you just need to add the `ojp[host:port]_` pattern immediately after `jdbc:`. `[host:port]` indicates the host and port you have your OJP proxy server running.
 
 > **Note:** The Quarkus connection URL (`quarkus.datasource.jdbc.url`) and driver class are
-> configured in `application.properties` or `application.yml` as shown above. However, OJP
-> driver-specific settings (connection pool sizes, health check intervals, multinode retry
-> configuration, etc.) must still be provided in an `ojp.properties` file (or an
-> environment-specific variant such as `ojp-dev.properties`). Unlike Spring Boot, there is no
-> Quarkus starter that automatically bridges framework configuration to OJP's system properties.
+> configured in `application.properties` or `application.yml` as shown above. OJP driver-specific
+> settings (connection pool sizes, health check intervals, multinode retry configuration, etc.)
+> must be provided separately in an `ojp.properties` file (or an environment-specific variant such
+> as `ojp-dev.properties`).
 >
 > See [OJP JDBC Configuration](../../configuration/ojp-jdbc-configuration.md) for the full list of
 > `ojp.properties` settings.
