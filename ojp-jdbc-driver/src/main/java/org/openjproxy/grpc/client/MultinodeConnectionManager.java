@@ -117,6 +117,7 @@ public class MultinodeConnectionManager {
             this.healthCheckScheduler.scheduleAtFixedRate(
                 () -> {
                     try {
+                        lastHealthCheckTimestamp.set(System.currentTimeMillis());
                         performHealthCheck();
                     } catch (Exception e) {
                         log.warn("Periodic health check failed: {}", e.getMessage());
