@@ -79,7 +79,7 @@ ojp.loadaware.selection.enabled=true  # routes new connections to the least-load
 ojp.health.check.interval=5s          # how often to probe a failed server for recovery (default: 5s)
 ojp.health.check.threshold=5s         # how long a server must stay healthy before being marked recovered (default: 5s)
 ojp.health.check.timeout=5s           # gRPC deadline for each individual health-probe call (default: 5s)
-ojp.redistribution.enabled=true       # enable connection redistribution on server recovery (default: true)
+ojp.redistribution.enabled=true       # enable the periodic health checker and connection redistribution on server recovery (default: true)
                                        # set to false to disable the periodic health checker entirely
 ojp.redistribution.idleRebalanceFraction=1.0  # fraction of idle connections to rebalance per cycle (0.0–1.0)
 ojp.redistribution.maxClosePerRecovery=100    # max connections to close per recovery cycle

@@ -94,14 +94,17 @@ ojp.grpc.max-inbound-message-size=16777216
 Spring Boot (and the OJP starter) normalises property names, so **kebab-case and camelCase spellings are identical** — use whichever style your team finds most readable:
 
 ```yaml
-# These two entries are exactly equivalent:
-ojp:
-  multinode:
-    retry-attempts: -1   # kebab-case (Spring Boot relaxed binding)
+# These two spellings are exactly equivalent — choose whichever your team prefers:
 
+# kebab-case (Spring Boot convention, recommended for application.yml)
 ojp:
   multinode:
-    retryAttempts: -1    # camelCase
+    retry-attempts: -1
+
+# camelCase (matches the underlying OJP property names)
+# ojp:
+#   multinode:
+#     retryAttempts: -1
 ```
 
 ```properties
