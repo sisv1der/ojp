@@ -92,14 +92,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -197,7 +197,7 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       # Start first OJP server without SQL enhancer (default configuration)
       # Tests will run against this server via postgres_connection.csv (port 1059)
@@ -206,7 +206,7 @@ jobs:
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       # Start second OJP server WITH SQL enhancer enabled in OPTIMIZE mode
       # Tests will run against this server via postgres_connection.csv (port 10593)
@@ -218,7 +218,7 @@ jobs:
           docker run -d --name ojp-server-enhancer \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10593 -Dojp.prometheus.port=9163 -Dojp.server.slowQuerySegregation.enabled=true -Dojp.sql.enhancer.enabled=true -Dojp.sql.enhancer.mode=OPTIMIZE -Dojp.sql.enhancer.dialect=POSTGRESQL" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -335,14 +335,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -431,14 +431,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -518,14 +518,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -686,14 +686,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container with DB2 driver from ojp-server/ojp-libs
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -787,7 +787,7 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       # Start first OJP server instance on port 10591
       - name: Start OJP Server 1 on port 10591
@@ -795,7 +795,7 @@ jobs:
           docker run -d --name ojp-server-1 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10591 -Dojp.prometheus.port=9159 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "Started OJP Server 1 container on gRPC port 10591, Prometheus port 9159"
 
       # Start second OJP server instance on port 10592
@@ -804,7 +804,7 @@ jobs:
           docker run -d --name ojp-server-2 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10592 -Dojp.prometheus.port=9160 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "Started OJP Server 2 container on gRPC port 10592, Prometheus port 9160"
 
       - name: Wait for OJP servers to start
@@ -913,7 +913,7 @@ jobs:
           docker run -d --name ojp-server-1 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10591 -Dojp.prometheus.port=9159 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "OJP Server 1 container restarted"
           sleep 10
 
@@ -998,7 +998,7 @@ jobs:
           docker run -d --name ojp-server-2 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10592 -Dojp.prometheus.port=9160 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "OJP Server 2 container restarted"
           sleep 10
 
@@ -1180,7 +1180,7 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       # Start first OJP server instance on port 10591 with DEBUG logging
       - name: Start OJP Server 1 on port 10591
@@ -1189,7 +1189,7 @@ jobs:
           docker run -d --name ojp-server-xa-1 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10591 -Dojp.prometheus.port=9161 -Dojp.server.slowQuerySegregation.enabled=true -Dorg.slf4j.simpleLogger.log.org.openjproxy.xa.pool=DEBUG" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "Started OJP Server 1 container on gRPC port 10591, Prometheus port 9161 with DEBUG logging"
 
       # Start second OJP server instance on port 10592 with DEBUG logging
@@ -1199,7 +1199,7 @@ jobs:
           docker run -d --name ojp-server-xa-2 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10592 -Dojp.prometheus.port=9162 -Dojp.server.slowQuerySegregation.enabled=true -Dorg.slf4j.simpleLogger.log.org.openjproxy.xa.pool=DEBUG" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "Started OJP Server 2 container on gRPC port 10592, Prometheus port 9162 with DEBUG logging"
 
       - name: Wait for OJP servers to start
@@ -1319,7 +1319,7 @@ jobs:
           docker run -d --name ojp-server-xa-1 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10591 -Dojp.prometheus.port=9161 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "OJP Server 1 container restarted"
           
           # Wait for server to fully start
@@ -1422,7 +1422,7 @@ jobs:
           docker run -d --name ojp-server-xa-2 \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.port=10592 -Dojp.prometheus.port=9162 -Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
           echo "OJP Server 2 container restarted"
           
           # Wait for server to fully start
@@ -1682,14 +1682,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container with Oracle driver from ojp-server/ojp-libs
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
@@ -1785,14 +1785,14 @@ jobs:
         run: mvn clean install -pl ojp-server -am -DskipTests -Dgpg.skip=true
 
       - name: Build OJP Server Docker image
-        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true -Djib.to.image=rrobetti/ojp:latest
+        run: mvn jib:dockerBuild -pl ojp-server -Dgpg.skip=true
 
       - name: Start OJP Server container with SQL Server driver from ojp-server/ojp-libs
         run: |
           docker run -d --name ojp-server \
             --network host \
             -e JAVA_TOOL_OPTIONS="-Dojp.server.slowQuerySegregation.enabled=true" \
-            rrobetti/ojp:latest
+            rrobetti/ojp:0.4.5-SNAPSHOT
 
       - name: Wait for ojp-server to start
         run: sleep 10
