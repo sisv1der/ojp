@@ -196,39 +196,11 @@ public class MultinodeConnectionManager {
         
         log.info("=== connect() called: isXA={} (unified mode always enabled) ===", isXA);
         
-        // Try to trigger health check (time-based, non-blocking)
-        if (healthCheckConfig.isRedistributionEnabled()) {
-            tryTriggerHealthCheck();
-        }
-        
         // UNIFIED MODE: Both XA and non-XA connect to all servers
         log.debug("Connecting to all servers for {} connection", isXA ? "XA" : "non-XA");
         return connectToAllServers(connectionDetails);
     }
     
-    /**
-     * Attempts to trigger a health check if enough time has elapsed since the last check.
-     * Uses compareAndSet to ensure only one thread executes the health check.
-     * Non-blocking - if another thread is already doing a health check, this returns immediately.
-     */
-    private void tryTriggerHealthCheck() {
-        long now = System.currentTimeMillis();
-        long lastCheck = lastHealthCheckTimestamp.get();
-        long elapsed = now - lastCheck;
-        
-        // Only check if interval has passed
-        if (elapsed >= healthCheckConfig.getHealthCheckIntervalMs()) {
-            // Atomic update - only one thread succeeds
-            if (lastHealthCheckTimestamp.compareAndSet(lastCheck, now)) {
-                try {
-                    performHealthCheck();
-                } catch (Exception e) {
-                    log.warn("Health check failed: {}", e.getMessage());
-                    // Don't fail the connection attempt - health check is best effort
-                }
-            }
-        }
-    }
     
     /**
      * Performs health check on all servers.
@@ -236,7 +208,7 @@ public class MultinodeConnectionManager {
      * - For all modes: Checks unhealthy servers to see if they've recovered
      */
     private void performHealthCheck() {
-        log.debug("Performing health check on servers");
+        log.info("Performing health check on servers");
         
         // XA Mode: Proactively check healthy servers to detect failures early.
         // Only run when there are active sessions – the sole purpose of this check is to
@@ -273,7 +245,7 @@ public class MultinodeConnectionManager {
                 .collect(Collectors.toList());
         
         if (unhealthyServers.isEmpty()) {
-            log.debug("No unhealthy servers to check");
+            log.info("No unhealthy servers to check");
             return;
         }
         
@@ -296,7 +268,7 @@ public class MultinodeConnectionManager {
                 } else {
                     // Still unhealthy, update timestamp
                     endpoint.setLastFailureTime(System.currentTimeMillis());
-                    log.debug("Server {} still unhealthy", endpoint.getAddress());
+                    log.info("Server {} still unhealthy", endpoint.getAddress());
                 }
             }
         }
@@ -318,40 +290,6 @@ public class MultinodeConnectionManager {
                         e.getMessage(), e);
             }
         }
-    }
-
-    /**
-     * Invalidates a specified number of connections for a server.
-     * 
-     * @param server The server whose connections should be invalidated
-     * @param connections The list of connections for this server
-     * @param count The number of connections to invalidate
-     * @return The actual number of connections invalidated
-     */
-    private int invalidateConnectionsForServer(ServerEndpoint server, List<java.sql.Connection> connections, int count) {
-        int invalidated = 0;
-        int toInvalidate = Math.min(count, connections.size());
-        
-        for (int i = 0; i < toInvalidate; i++) {
-            java.sql.Connection conn = connections.get(i);
-            if (conn instanceof org.openjproxy.jdbc.Connection) {
-                org.openjproxy.jdbc.Connection ojpConn = (org.openjproxy.jdbc.Connection) conn;
-                ojpConn.markForceInvalid();
-                try {
-                    conn.close();
-                    invalidated++;
-                    log.debug("Invalidated and closed connection {} for server {} during rebalancing", 
-                            System.identityHashCode(conn), server.getAddress());
-                } catch (Exception e) {
-                    log.warn("Failed to close connection {} for server {} during rebalancing: {}", 
-                            System.identityHashCode(conn), server.getAddress(), e.getMessage());
-                }
-            }
-        }
-        
-        log.info("Invalidated {} of {} connections for server {} during rebalancing", 
-                invalidated, toInvalidate, server.getAddress());
-        return invalidated;
     }
     
     /**
