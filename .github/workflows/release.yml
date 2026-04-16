@@ -68,7 +68,8 @@ jobs:
     environment: release
     # Minimal required permissions for this workflow
     permissions:
-      contents: write   # push commits, create tags, create GitHub releases and update workflow files
+      contents: write   # push commits, create tags and create GitHub releases
+      # Note: updating .github/workflows/main.yml requires RELEASE_TOKEN (PAT with 'workflow' scope)
     # Prevent concurrent releases that could corrupt the version state
     concurrency:
       group: release
@@ -116,9 +117,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # A PAT with 'repo' scope is required so the workflow can push the
-          # version-bump commit back to main (GITHUB_TOKEN cannot push to
-          # protected branches by default).
+          # A PAT with 'repo' AND 'workflow' scope is required: 'repo' to push
+          # version-bump commits back to main, and 'workflow' because the release
+          # process updates the docker image tag in .github/workflows/main.yml.
+          # GITHUB_TOKEN cannot push workflow file changes.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
@@ -236,7 +238,7 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 10. Update version references in all documentation (*.md files)
-      #     and in the main CI workflow (main.yml).
+      #     and the docker image version in the main CI workflow (main.yml).
       #    Replaces:  rrobetti/ojp:<old>   →  rrobetti/ojp:<new>
       #               ojp-server-<old>     →  ojp-server-<new>  (filenames + URLs)
       #               /ojp-server/<old>/   →  /ojp-server/<new>/  (Maven Central URL path)
