@@ -88,18 +88,29 @@ public class OjpSystemPropertiesBridge {
         Set<String> processed = new HashSet<>();
         for (PropertySource<?> source : configurableEnvironment.getPropertySources()) {
             if (source instanceof EnumerablePropertySource<?> enumerable) {
-                for (String name : enumerable.getPropertyNames()) {
-                    if (processed.add(name)) {
-                        String sysKey = toSystemPropertyKey(name);
-                        if (sysKey != null) {
-                            String value = configurableEnvironment.getProperty(name);
-                            if (value != null) {
-                                setSystemPropertyIfAbsent(sysKey, value);
-                            }
-                        }
-                    }
-                }
+                processEnumerableSource(enumerable, processed, configurableEnvironment);
             }
+        }
+    }
+
+    private static void processEnumerableSource(EnumerablePropertySource<?> source,
+                                                Set<String> processed,
+                                                ConfigurableEnvironment env) {
+        for (String name : source.getPropertyNames()) {
+            if (processed.add(name)) {
+                forwardOjpProperty(name, env);
+            }
+        }
+    }
+
+    private static void forwardOjpProperty(String name, ConfigurableEnvironment env) {
+        String sysKey = toSystemPropertyKey(name);
+        if (sysKey == null) {
+            return;
+        }
+        String value = env.getProperty(name);
+        if (value != null) {
+            setSystemPropertyIfAbsent(sysKey, value);
         }
     }
 
