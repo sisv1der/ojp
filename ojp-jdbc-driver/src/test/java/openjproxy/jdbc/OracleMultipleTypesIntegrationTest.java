@@ -539,7 +539,7 @@ public class OracleMultipleTypesIntegrationTest {
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/oracle_connections.csv")
-    void testOracle23aiJsonType(String driverClass, String url, String user, String pwd) throws SQLException {
+    void testOracleNativeJsonType(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "Oracle tests are disabled");
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
@@ -585,7 +585,7 @@ public class OracleMultipleTypesIntegrationTest {
 
         assertTrue(resultSet.next());
 
-        // JSON column: Oracle 23ai may canonicalise (reformat) the JSON text,
+        // JSON column: Oracle 21c may canonicalize (reformat) the JSON text,
         // so check for the presence of the expected keys and values rather than exact equality.
         String retrievedJson = resultSet.getString("json_col");
         assertNotNull(retrievedJson, "JSON column should not be null");
