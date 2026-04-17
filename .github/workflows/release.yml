@@ -171,8 +171,8 @@ jobs:
             RELEASE="${{ inputs.release_version }}"
             echo "Using provided release version: ${RELEASE}"
 
-            # Validate format: must be X.Y.Z followed by a hyphen and a non-empty suffix
-            if ! echo "${RELEASE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-.+$'; then
+            # Validate format: must be X.Y.Z followed by a hyphen and an alphanumeric suffix
+            if ! echo "${RELEASE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9-]+$'; then
               echo "ERROR: release_version '${RELEASE}' is not in the expected format X.Y.Z-<suffix> (e.g. 0.5.0-beta)." >&2
               exit 1
             fi
@@ -183,7 +183,7 @@ jobs:
             # Auto-derive release version from the current SNAPSHOT pom version
             if [[ "${CURRENT}" != *"-SNAPSHOT" ]]; then
               echo "ERROR: Current version '${CURRENT}' does not end in -SNAPSHOT." >&2
-              echo "Only SNAPSHOT versions can be released, or supply a release_version override." >&2
+              echo "Only SNAPSHOT versions can be released, or provide a custom release version via the release_version parameter." >&2
               exit 1
             fi
             BASE="${CURRENT%-SNAPSHOT}"
