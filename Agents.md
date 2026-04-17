@@ -6,7 +6,7 @@ This file provides guidance for AI coding agents (GitHub Copilot, etc.) working 
 
 ## What OJP Is
 
-OJP is the **world's only open-source JDBC Type 3 driver**. It consists of two main deployable artefacts:
+OJP is the **world's first open-source JDBC Type 3 driver**. It consists of two main deployable artefacts:
 
 1. **ojp-server** – a standalone gRPC server that owns and controls the real database connection pools (HikariCP). Applications never connect directly to the database.
 2. **ojp-jdbc-driver** – a JDBC 4.2-compliant driver that clients drop in. Instead of opening real connections, it makes gRPC calls to ojp-server.
