@@ -254,6 +254,9 @@ public class OjpXAResource implements XAResource {
      * (timeout, server temporarily unavailable) rather than a permanent resource-manager error.
      * Walks the cause chain to find any gRPC StatusRuntimeException whose status code
      * indicates a transient failure.
+     *
+     * @param e the exception thrown by statementService.xaRecover()
+     * @return true if the error is transient and recovery should be retried later
      */
     private static boolean isTransientRecoverError(Exception e) {
         Throwable cause = e;
