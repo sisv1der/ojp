@@ -31,6 +31,9 @@
 #   0.4.1-SNAPSHOT  →  released as  0.4.1-beta  →  next dev  0.4.2-SNAPSHOT
 # After 1.0.0-GA the "-beta" suffix will be dropped.
 #
+# When a custom release version is provided (e.g. for a major bump):
+#   0.4.x-SNAPSHOT  +  release_version=0.5.0-beta  →  0.5.0-beta  →  next dev  0.5.1-SNAPSHOT
+#
 # REQUIRED GITHUB SECRETS
 # -----------------------
 #   SONATYPE_USERNAME   Sonatype Central user-token username  (NOT your account username)
@@ -44,6 +47,8 @@
 # --------------
 #   GitHub UI → Actions → "Release to Maven Central & Docker Hub" → Run workflow
 #   Check "Dry run" to validate the version calculation and build without publishing.
+#   Optionally provide "Release version" to override the computed release version,
+#   e.g. "0.5.0-beta" for a major version bump regardless of the current pom version.
 #
 # =============================================================================
 
@@ -57,6 +62,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      release_version:
+        description: 'Optional release version override (e.g. 0.5.0-beta). Leave blank to auto-derive from the current pom SNAPSHOT version.'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   release:
@@ -156,18 +166,32 @@ jobs:
           CURRENT=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "Current version: ${CURRENT}"
 
-          # Derive release version: strip -SNAPSHOT suffix, append -beta
-          # e.g. "0.4.1-SNAPSHOT" -> "0.4.1-beta"
-          if [[ "${CURRENT}" != *"-SNAPSHOT" ]]; then
-            echo "ERROR: Current version '${CURRENT}' does not end in -SNAPSHOT." >&2
-            echo "Only SNAPSHOT versions can be released." >&2
-            exit 1
+          if [[ -n "${{ inputs.release_version }}" ]]; then
+            # Use the caller-supplied release version (e.g. for a major version bump)
+            RELEASE="${{ inputs.release_version }}"
+            echo "Using provided release version: ${RELEASE}"
+
+            # Validate format: must be X.Y.Z followed by a hyphen and an alphanumeric suffix
+            if ! echo "${RELEASE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9-]+$'; then
+              echo "ERROR: release_version '${RELEASE}' is not in the expected format X.Y.Z-<suffix> (e.g. 0.5.0-beta)." >&2
+              exit 1
+            fi
+
+            # Extract the numeric base (X.Y.Z) by stripping the first '-' and everything after it
+            BASE="${RELEASE%%-*}"
+          else
+            # Auto-derive release version from the current SNAPSHOT pom version
+            if [[ "${CURRENT}" != *"-SNAPSHOT" ]]; then
+              echo "ERROR: Current version '${CURRENT}' does not end in -SNAPSHOT." >&2
+              echo "Only SNAPSHOT versions can be released, or provide a custom release version via the release_version parameter." >&2
+              exit 1
+            fi
+            BASE="${CURRENT%-SNAPSHOT}"
+            RELEASE="${BASE}-beta"
           fi
-          BASE="${CURRENT%-SNAPSHOT}"
-          RELEASE="${BASE}-beta"
 
           # Derive next development version by incrementing the patch segment
-          # e.g. "0.4.1" -> "0.4.2-SNAPSHOT"
+          # e.g. "0.4.1" -> "0.4.2-SNAPSHOT"  or  "0.5.0" -> "0.5.1-SNAPSHOT"
           MAJOR=$(echo "${BASE}" | cut -d. -f1)
           MINOR=$(echo "${BASE}" | cut -d. -f2)
           PATCH=$(echo "${BASE}" | cut -d. -f3)
