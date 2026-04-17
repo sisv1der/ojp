@@ -54,7 +54,7 @@ public class CommandExecutionHelper {
 
         // Get the appropriate slow query segregation manager for this datasource
         SlowQuerySegregationManager manager = getSlowQuerySegregationManagerForConnection(context, connHash);
-        long sqlStartMs = System.currentTimeMillis();
+        long sqlStartNs = System.nanoTime();
         try {
             circuitBreaker.preCheck(stmtHash);
 
@@ -97,7 +97,7 @@ public class CommandExecutionHelper {
             // manager state. This is the single authoritative place for SQL metrics.
             String sql = request.getSql();
             if (!sql.isEmpty()) {
-                long executionTimeMs = System.currentTimeMillis() - sqlStartMs;
+                long executionTimeMs = (System.nanoTime() - sqlStartNs) / 1_000_000L;
                 context.getSqlStatementMetrics().recordSqlExecution(
                         sql, executionTimeMs, manager.isSlowOperation(stmtHash));
             }

@@ -117,7 +117,7 @@ public class MultinodeConnectionManager {
             this.healthCheckScheduler.scheduleAtFixedRate(
                 () -> {
                     try {
-                        lastHealthCheckTimestamp.set(System.currentTimeMillis());
+                        lastHealthCheckTimestamp.set(System.nanoTime());
                         performHealthCheck();
                     } catch (Exception e) {
                         log.warn("Periodic health check failed: {}", e.getMessage());
@@ -146,7 +146,7 @@ public class MultinodeConnectionManager {
             } catch (Exception e) {
                 log.warn("Failed to initialize connection to {}: {}", endpoint.getAddress(), e.getMessage());
                 endpoint.markUnhealthy();
-                endpoint.setLastFailureTime(System.currentTimeMillis());
+                endpoint.setLastFailureTime(System.nanoTime());
             }
         }
     }
@@ -228,7 +228,7 @@ public class MultinodeConnectionManager {
                     
                     // Mark server unhealthy
                     endpoint.setHealthy(false);
-                    endpoint.setLastFailureTime(System.currentTimeMillis());
+                    endpoint.setLastFailureTime(System.nanoTime());
                     
                     // XA Mode: Immediately invalidate sessions and connections for the failed server
                     invalidateSessionsAndConnectionsForFailedServer(endpoint);
@@ -255,7 +255,7 @@ public class MultinodeConnectionManager {
         
         // Check each unhealthy server
         for (ServerEndpoint endpoint : unhealthyServers) {
-            long timeSinceFailure = System.currentTimeMillis() - endpoint.getLastFailureTime();
+            long timeSinceFailure = (System.nanoTime() - endpoint.getLastFailureTime()) / 1_000_000L;
             
             // Only check if enough time has passed since last failure
             if (timeSinceFailure >= healthCheckConfig.getHealthCheckThresholdMs()) {
@@ -267,7 +267,7 @@ public class MultinodeConnectionManager {
                     notifyServerRecovered(endpoint);
                 } else {
                     // Still unhealthy, update timestamp
-                    endpoint.setLastFailureTime(System.currentTimeMillis());
+                    endpoint.setLastFailureTime(System.nanoTime());
                     log.info("Server {} still unhealthy", endpoint.getAddress());
                 }
             }
@@ -430,8 +430,8 @@ public class MultinodeConnectionManager {
         for (ServerEndpoint server : serverEndpoints) {
             if (!server.isHealthy()) {
                 // Attempt to recover unhealthy servers if enough time has passed
-                long currentTime = System.currentTimeMillis();
-                if ((currentTime - server.getLastFailureTime()) > retryDelayMs) {
+                long currentTime = System.nanoTime();
+                if ((currentTime - server.getLastFailureTime()) / 1_000_000L > retryDelayMs) {
                     log.info("Attempting to recover unhealthy server {} during connect()", server.getAddress());
                     try {
                         createChannelAndStub(server);
@@ -768,7 +768,7 @@ public class MultinodeConnectionManager {
         }
         
         endpoint.setHealthy(false);
-        endpoint.setLastFailureTime(System.currentTimeMillis());
+        endpoint.setLastFailureTime(System.nanoTime());
         
         log.warn("Marked server {} as unhealthy due to connection-level error: {}", 
                 endpoint.getAddress(), exception.getMessage());
@@ -813,11 +813,11 @@ public class MultinodeConnectionManager {
     }
     
     private void attemptServerRecovery() {
-        long currentTime = System.currentTimeMillis();
+        long currentTime = System.nanoTime();
         
         for (ServerEndpoint endpoint : serverEndpoints) {
             if (!endpoint.isHealthy() && 
-                (currentTime - endpoint.getLastFailureTime()) > retryDelayMs) {
+                (currentTime - endpoint.getLastFailureTime()) / 1_000_000L > retryDelayMs) {
                 
                 try {
                     log.debug("Attempting to recover server {}", endpoint.getAddress());
