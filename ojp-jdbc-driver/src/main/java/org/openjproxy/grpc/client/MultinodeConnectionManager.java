@@ -53,6 +53,14 @@ public class MultinodeConnectionManager {
     private final long retryDelayMs;
     private final List<ServerHealthListener> healthListeners; // Phase 2: Listeners for server health changes
     
+    // connHash cache for the connect()-RPC-skip optimisation (non-XA only).
+    // Key  : connectionKey  = url + "|" + user + "|" + password + "|" + dataSourceName
+    // Value: connHash string returned by the server on the first successful connect()
+    private final Map<String, String> connHashByConnectionKey;
+    // Stores the full ConnectionDetails per connHash so that we can re-issue a real
+    // connect() call when the server signals NOT_FOUND (pool lost on server restart).
+    private final Map<String, ConnectionDetails> connectionDetailsByConnHash;
+    
     // Health check and redistribution support
     private final HealthCheckConfig healthCheckConfig;
     private final AtomicLong lastHealthCheckTimestamp;
@@ -91,6 +99,8 @@ public class MultinodeConnectionManager {
         this.channelMap = new ConcurrentHashMap<>();
         this.sessionToServerMap = new ConcurrentHashMap<>();
         this.connHashToServersMap = new ConcurrentHashMap<>();
+        this.connHashByConnectionKey = new ConcurrentHashMap<>();
+        this.connectionDetailsByConnHash = new ConcurrentHashMap<>();
         this.roundRobinCounter = new AtomicInteger(0);
         this.retryAttempts = retryAttempts;
         this.retryDelayMs = retryDelayMs;
@@ -182,23 +192,238 @@ public class MultinodeConnectionManager {
     
     /**
      * Establishes a connection by calling connect() on servers.
-     * 
-     * UNIFIED MODE (always enabled):
-     * - Both XA and non-XA connections connect to ALL servers
-     * - Ensures all servers have datasource configuration for improved failover
-     * - Sessions tracked via SessionTracker for accurate load balancing
-     * - Each session bound directly to the ServerEndpoint it was created on
-     * 
-     * Returns the SessionInfo from the successful connection.
+     *
+     * <p><b>XA connections</b> are sent to a <em>single</em> selected healthy server
+     * (chosen by the same load-aware / round-robin strategy used for all SQL operations).
+     * Connecting to all servers would waste resources by creating unnecessary XA pools
+     * on every node for what is a single-server transaction.</p>
+     *
+     * <p><b>Non-XA connections</b> use a cached connHash after the first successful
+     * connect, so subsequent JDBC {@code Connection} objects are created without any
+     * gRPC round-trip.  If the server later returns {@code NOT_FOUND} (pool lost after
+     * restart), the cache is invalidated and a real connect() is re-issued transparently.</p>
+     *
+     * @return the SessionInfo from the successful connection
      */
     public SessionInfo connect(ConnectionDetails connectionDetails) throws SQLException {
         boolean isXA = connectionDetails.getIsXA();
-        
-        log.info("=== connect() called: isXA={} (unified mode always enabled) ===", isXA);
-        
-        // UNIFIED MODE: Both XA and non-XA connect to all servers
-        log.debug("Connecting to all servers for {} connection", isXA ? "XA" : "non-XA");
-        return connectToAllServers(connectionDetails);
+
+        log.info("=== connect() called: isXA={} ===", isXA);
+
+        if (isXA) {
+            // XA: connect to exactly one server (load-balanced / round-robin selection).
+            log.debug("XA connection: connecting to single selected server");
+            return connectToSingleServer(connectionDetails);
+        }
+
+        // Non-XA: attempt to use the cached connHash to avoid the round-trip.
+        String connectionKey = computeConnectionKey(connectionDetails);
+        String cachedConnHash = connHashByConnectionKey.get(connectionKey);
+
+        if (cachedConnHash != null) {
+            // Fast path: build SessionInfo locally without contacting the server.
+            log.debug("Non-XA connect() skipping RPC – using cached connHash for key ending in '...{}'",
+                    connectionKey.substring(Math.max(0, connectionKey.length() - 20)));
+            return buildLocalSessionInfo(cachedConnHash, connectionDetails.getClientUUID());
+        }
+
+        // First time (or after cache invalidation): do the real connect().
+        log.debug("Non-XA connect(): no cached connHash, performing real connect() RPC");
+        SessionInfo sessionInfo = connectToAllServers(connectionDetails);
+
+        // Cache the connHash so future connect() calls can skip the RPC.
+        if (sessionInfo.getConnHash() != null && !sessionInfo.getConnHash().isEmpty()) {
+            connHashByConnectionKey.put(connectionKey, sessionInfo.getConnHash());
+            connectionDetailsByConnHash.put(sessionInfo.getConnHash(), connectionDetails);
+            log.info("Non-XA connHash cached for fast subsequent connects (connHash={})", sessionInfo.getConnHash());
+        }
+
+        return sessionInfo;
+    }
+
+    /**
+     * Calls {@code connect()} on a single server selected by the configured strategy
+     * (least-connections, falling back to round-robin when loads are equal).
+     * Used exclusively for XA connections.
+     *
+     * <p>Each new XA connection binds to exactly one server.  The least-connections
+     * strategy ensures that successive XA connections are distributed evenly across
+     * the cluster: the first connection goes to an arbitrary server (all counts 0,
+     * so round-robin applies); each subsequent one goes to whichever server currently
+     * has the lowest XA session count, balancing the load automatically.</p>
+     *
+     * <p>If the chosen server fails with a connection-level error it is marked
+     * unhealthy and the next-best server is tried, until one succeeds or all
+     * candidates are exhausted.  Only ONE server ends up with a pool created for
+     * this connection.</p>
+     */
+    private SessionInfo connectToSingleServer(ConnectionDetails connectionDetails) throws SQLException {
+        List<ServerEndpoint> attempted = new ArrayList<>();
+        SQLException lastException = null;
+
+        while (true) {
+            // Re-evaluate the best server on every attempt so we skip newly-marked-unhealthy ones.
+            List<ServerEndpoint> healthyServers = serverEndpoints.stream()
+                    .filter(ep -> ep.isHealthy() && !attempted.contains(ep))
+                    .collect(Collectors.toList());
+
+            if (healthyServers.isEmpty()) {
+                String msg = "No healthy servers available for XA connection"
+                        + (lastException != null ? ". Last error: " + lastException.getMessage() : "");
+                throw new SQLException(msg);
+            }
+
+            // Pick the least-loaded server among the remaining candidates.
+            ServerEndpoint server = healthCheckConfig.isLoadAwareSelectionEnabled()
+                    ? selectByLeastConnections(healthyServers)
+                    : selectByRoundRobin(healthyServers);
+
+            if (server == null) {
+                throw new SQLException("No server could be selected for XA connection");
+            }
+
+            attempted.add(server);
+
+            try {
+                ChannelAndStub channelAndStub = channelMap.get(server);
+                if (channelAndStub == null) {
+                    channelAndStub = createChannelAndStub(server);
+                }
+
+                log.info("XA connect: trying server {} ({} attempted so far)", server.getAddress(), attempted.size());
+                SessionInfo sessionInfo = channelAndStub.blockingStub.connect(connectionDetails);
+
+                // Mark server healthy on success
+                server.setHealthy(true);
+                server.setLastFailureTime(0);
+
+                // Bind the XA session to the server that created it
+                if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
+                    sessionToServerMap.put(sessionInfo.getSessionUUID(), server);
+                    sessionTracker.registerSession(sessionInfo.getSessionUUID(), server);
+                    log.info("XA session {} bound to server {}", sessionInfo.getSessionUUID(), server.getAddress());
+                }
+
+                // Track which server received connect() for this connHash (for terminateSession cleanup)
+                if (sessionInfo.getConnHash() != null && !sessionInfo.getConnHash().isEmpty()) {
+                    connHashToServersMap.put(sessionInfo.getConnHash(), List.of(server));
+                    log.info("Tracked server {} for XA connHash {}", server.getAddress(), sessionInfo.getConnHash());
+                }
+
+                log.info("XA connect succeeded on server {}", server.getAddress());
+                return sessionInfo;
+
+            } catch (StatusRuntimeException e) {
+                boolean isSqlError = false;
+                try {
+                    GrpcExceptionHandler.handle(e);
+                    lastException = new SQLException("gRPC call failed: " + e.getMessage(), e);
+                } catch (SQLException sqlEx) {
+                    lastException = sqlEx;
+                    isSqlError = true;
+                }
+
+                if (!isSqlError) {
+                    // Connection-level failure: mark server unhealthy and try the next candidate.
+                    handleServerFailure(server, e);
+                    log.warn("XA connect failed on server {} with connection-level error, trying next: {}",
+                            server.getAddress(), lastException.getMessage());
+                } else {
+                    // Database-level failure (auth, config, etc.): no point trying other servers.
+                    log.warn("XA connect failed on server {} with database-level error, not retrying: {}",
+                            server.getAddress(), lastException.getMessage());
+                    throw lastException;
+                }
+            }
+        }
+    }
+    
+    /**
+     * Computes a stable cache key from the connection parameters that the server
+     * uses to compute its own {@code connHash}.  The key is intentionally kept as
+     * a plain string (not hashed) because it is only used as an in-process map key.
+     */
+    private String computeConnectionKey(ConnectionDetails connectionDetails) {
+        String dataSourceName = extractDataSourceName(connectionDetails);
+        return connectionDetails.getUrl() + "|" + connectionDetails.getUser()
+                + "|" + connectionDetails.getPassword() + "|" + dataSourceName;
+    }
+    
+    /**
+     * Extracts the {@code ojp.datasource.name} property from ConnectionDetails,
+     * returning {@code "default"} when absent.
+     */
+    private String extractDataSourceName(ConnectionDetails connectionDetails) {
+        for (com.openjproxy.grpc.PropertyEntry entry : connectionDetails.getPropertiesList()) {
+            if ("ojp.datasource.name".equals(entry.getKey())) {
+                return entry.getStringValue();
+            }
+        }
+        return "default";
+    }
+    
+    /**
+     * Builds a non-XA SessionInfo locally from a cached connHash.
+     * This mirrors what the server returns for a regular (non-XA) connect():
+     * connHash + clientUUID, no sessionUUID (lazy allocation).
+     */
+    private SessionInfo buildLocalSessionInfo(String connHash, String clientUUID) {
+        return SessionInfo.newBuilder()
+                .setConnHash(connHash)
+                .setClientUUID(clientUUID)
+                .setIsXA(false)
+                .build();
+    }
+    
+    /**
+     * Invalidates the cached connHash for a given connHash value.
+     *
+     * <p>Called by {@link MultinodeStatementService} when the server returns
+     * {@code Status.NOT_FOUND} to signal that the pool for this connHash no
+     * longer exists (e.g. after a server restart).  After invalidation the next
+     * {@link #connect} call will perform a real gRPC RPC to recreate the pool.</p>
+     *
+     * @param connHash the connHash whose cache entry should be removed
+     */
+    public void invalidateConnHash(String connHash) {
+        if (connHash == null || connHash.isEmpty()) {
+            return;
+        }
+        ConnectionDetails stored = connectionDetailsByConnHash.remove(connHash);
+        if (stored != null) {
+            String key = computeConnectionKey(stored);
+            connHashByConnectionKey.remove(key);
+            log.info("Invalidated cached connHash {} (pool lost on server)", connHash);
+        }
+    }
+    
+    /**
+     * Re-issues a real {@code connect()} RPC for the given connHash after the server
+     * has signalled that the pool no longer exists.
+     *
+     * <p>This is the reconnect leg of the NOT_FOUND retry loop in
+     * {@link MultinodeStatementService}.  The stored {@link ConnectionDetails} are
+     * used so the caller does not need to know the original credentials.</p>
+     *
+     * @param connHash the connHash for which to reconnect
+     * @return the new SessionInfo, or {@code null} if no stored ConnectionDetails exist
+     * @throws SQLException if the connect() RPC fails
+     */
+    public SessionInfo reconnectForConnHash(String connHash) throws SQLException {
+        ConnectionDetails stored = connectionDetailsByConnHash.get(connHash);
+        if (stored == null) {
+            log.warn("reconnectForConnHash: no stored ConnectionDetails for connHash {}", connHash);
+            return null;
+        }
+        log.info("Reconnecting after NOT_FOUND for connHash {}", connHash);
+        SessionInfo sessionInfo = connectToAllServers(stored);
+        if (sessionInfo.getConnHash() != null && !sessionInfo.getConnHash().isEmpty()) {
+            String key = computeConnectionKey(stored);
+            connHashByConnectionKey.put(key, sessionInfo.getConnHash());
+            connectionDetailsByConnHash.put(sessionInfo.getConnHash(), stored);
+            log.info("Re-cached connHash {} after reconnect", sessionInfo.getConnHash());
+        }
+        return sessionInfo;
     }
     
     

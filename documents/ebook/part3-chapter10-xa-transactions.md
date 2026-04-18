@@ -141,11 +141,23 @@ sequenceDiagram
 
 OJP implements XA support through a sophisticated architecture that combines client-side JDBC XA interfaces with server-side connection pooling. This design provides the best of both worlds: JDBC XA specification compliance on the client side and efficient connection reuse on the server side.
 
+> **connect() behaviour — XA vs non-XA at a glance**
+>
+> | Mode | connect() RPC | Servers contacted |
+> |------|--------------|-------------------|
+> | Non-XA (1st call) | Issued once, result cached | All servers |
+> | Non-XA (subsequent calls) | **Skipped** — built from cache | None |
+> | XA (every `getXAConnection()`) | Issued each time | **One** (least-loaded) |
+>
+> XA sessions must bind to a specific server for the lifetime of the `XAConnection`
+> (the 2PC protocol requires this), so each call needs a real `connect()` RPC.
+> The single-server model avoids creating wasteful backend pools on every cluster node.
+
 ### Client-Side Components
 
 On the client side, OJP provides three primary classes that implement the JDBC XA interfaces. These classes handle the translation between JDBC XA method calls and OJP's gRPC protocol.
 
-The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it establishes a gRPC connection to an OJP Server with the `isXA=true` flag. This flag tells the server to use XA-capable backend session pooling rather than the regular HikariCP pool or other regular connection pool provider used for non-XA connections.
+The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it selects a single healthy server using the **least-connections strategy** (round-robin when loads are equal) and sends one `connect()` gRPC RPC with the `isXA=true` flag to that server. Only that one server creates an XA-capable backend pool for this connection — no unnecessary pool creation on the other nodes. Successive `getXAConnection()` calls are automatically directed to whichever server currently carries the lightest XA session load, so the cluster stays balanced as your application opens more XA connections.
 
 The `OjpXAConnection` class wraps the server-side XA session and provides both the `XAResource` for transaction control and the `Connection` for SQL execution. It maintains the session information and routes all XA operations and SQL statements through the gRPC channel to the server.
 
@@ -274,7 +286,7 @@ ojp.xa.connection.pool.maxLifetime=1800000
 
 The `ojp.xa.connection.pool.enabled` property controls whether XA connections use server-side pooling. When set to `true` (the default), OJP maintains a pool of backend XA sessions using Apache Commons Pool 2, providing the performance benefits described earlier in this chapter. When set to `false`, OJP creates XA connections on demand without pooling—this can be useful for testing, debugging, or specialized scenarios where you need direct XA connection creation. In production environments, pooling should remain enabled for optimal performance.
 
-In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `ojp.xa.connection.pool.maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
+In a multinode deployment, each `getXAConnection()` call connects to exactly one server — the least-loaded one at that moment. Pool sizes are therefore divided by the cluster size: with two servers and `ojp.xa.connection.pool.maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
 
 For basic programmatic setup, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format follows the OJP standard, supporting both single-server and multinode configurations:
 

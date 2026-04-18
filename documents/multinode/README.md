@@ -167,9 +167,11 @@ This automatic coordination prevents exceeding database connection or transactio
 ### Connection Establishment
 
 1. **URL Parsing**: The JDBC driver parses the comma-separated list of server addresses
-2. **Initial Connection**: The driver attempts to connect to servers using load-aware selection
-3. **Health Tracking**: Each server's health status is monitored continuously
-4. **Load Balancing**: New connections are distributed across healthy servers based on their current load
+2. **Non-XA first connect**: Fans `connect()` RPC out to ALL servers so every node learns the datasource configuration; caches the returned `connHash` client-side
+3. **Non-XA subsequent connects**: Built locally from the cached `connHash` — **no gRPC round-trip**
+4. **XA connect**: Sends one `connect()` RPC to a **single** least-loaded server; that server becomes the exclusive owner of the XA session
+5. **Health Tracking**: Each server's health status is monitored continuously
+6. **Load Balancing**: New connections are distributed across healthy servers based on their current load
 
 ### Session Management
 
@@ -179,9 +181,11 @@ This automatic coordination prevents exceeding database connection or transactio
 
 ### Request Routing
 
-- **Non-Session Requests**: Routed using load-aware selection (default) or round-robin if disabled
+- **Non-Session Requests (non-XA)**: Second and subsequent `getConnection()` calls are served from a local `connHash` cache with zero gRPC overhead; only the very first call (or a post-restart reconnect) issues a real `connect()` RPC
+- **XA Connections**: Each `getXAConnection()` issues one `connect()` RPC to the single least-loaded server; subsequent `getXAConnection()` calls balance across the cluster automatically as session counts update
 - **Session-Bound Requests**: Always routed to the specific server associated with the session
 - **Transaction Requests**: Always routed to the session's server to maintain ACID properties
+- **Pool-Lost Recovery**: If the server returns `NOT_FOUND` (e.g. after restart), the driver invalidates its `connHash` cache, re-issues `connect()`, and retries the SQL call transparently
 
 ### Load-Aware Server Selection
 
