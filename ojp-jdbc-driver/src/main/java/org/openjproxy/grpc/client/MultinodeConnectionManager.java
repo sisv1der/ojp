@@ -564,15 +564,23 @@ public class MultinodeConnectionManager {
 
         log.info("Re-initializing pool(s) on recovered server {}", recoveredServer.getAddress());
 
+        // Resolve the channel once for this server (not per connection hash)
+        ChannelAndStub channelAndStub = channelMap.get(recoveredServer);
+        if (channelAndStub == null) {
+            try {
+                channelAndStub = createChannelAndStub(recoveredServer);
+            } catch (Exception e) {
+                log.warn("Failed to obtain channel to recovered server {}; skipping pool re-initialization: {}",
+                        recoveredServer.getAddress(), e.getMessage());
+                return;
+            }
+        }
+
         for (Map.Entry<String, ConnectionDetails> entry : connectionDetailsByConnHash.entrySet()) {
             String connHash = entry.getKey();
             ConnectionDetails connectionDetails = entry.getValue();
 
             try {
-                ChannelAndStub channelAndStub = channelMap.get(recoveredServer);
-                if (channelAndStub == null) {
-                    channelAndStub = createChannelAndStub(recoveredServer);
-                }
                 log.info("Calling connect() on recovered server {} for connHash {}",
                         recoveredServer.getAddress(), connHash);
                 channelAndStub.blockingStub.connect(connectionDetails);
