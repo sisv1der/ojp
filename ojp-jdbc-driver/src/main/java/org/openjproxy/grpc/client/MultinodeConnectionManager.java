@@ -1027,10 +1027,10 @@ public class MultinodeConnectionManager {
      * Connection-level errors include:
      * - UNAVAILABLE: Server not reachable
      * - DEADLINE_EXCEEDED: Request timeout
-     * - CANCELLED: Connection cancelled
      * - UNKNOWN: Connection-related unknown errors
-     * 
+     *
      * Database-level errors (e.g., table not found, syntax errors) do not mark servers unhealthy.
+     * SQL exceptions from the server are sent with {@code Status.INTERNAL} and are NOT connection-level errors.
      * Pool exhaustion errors do NOT mark servers unhealthy - they indicate resource limits, not connectivity issues.
      */
     public boolean isConnectionLevelError(Exception exception) {
