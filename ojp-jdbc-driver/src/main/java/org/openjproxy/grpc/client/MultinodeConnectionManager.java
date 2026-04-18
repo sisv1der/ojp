@@ -435,28 +435,30 @@ public class MultinodeConnectionManager {
     private void performHealthCheck() {
         log.info("Performing health check on servers");
         
-        // XA Mode: Proactively check healthy servers to detect failures early.
-        // Only run when there are active sessions – the sole purpose of this check is to
-        // invalidate sessions bound to a server that has gone down.  When sessionToServerMap
-        // is empty (e.g. on the very first connect() call) there is nothing to invalidate,
-        // and running the check at that point can transiently mark a live server (e.g.
-        // server1061) as unhealthy before connectToAllServers() has had a chance to reach
-        // it, producing a spurious "No healthy servers available" error.
-        if (xaConnectionRedistributor != null && !sessionToServerMap.isEmpty()) {
+        // Proactively check healthy servers to detect failures early.
+        // Run when there are active XA sessions OR cached non-XA connection details.
+        // This ensures both XA and non-XA pools adapt promptly when a server goes down.
+        // The guard prevents spurious "No healthy servers" errors on the very first
+        // connect() call before any server has been contacted.
+        boolean hasActiveSessions = !sessionToServerMap.isEmpty();
+        boolean hasNonXaConnections = !connectionDetailsByConnHash.isEmpty();
+        if (hasActiveSessions || hasNonXaConnections) {
             List<ServerEndpoint> healthyServers = serverEndpoints.stream()
                     .filter(ServerEndpoint::isHealthy)
                     .collect(Collectors.toList());
             
             for (ServerEndpoint endpoint : healthyServers) {
                 if (!validateServer(endpoint)) {
-                    log.info("XA Health check: Server {} has become unhealthy", endpoint.getAddress());
+                    log.info("Health check: Server {} has become unhealthy", endpoint.getAddress());
                     
                     // Mark server unhealthy
                     endpoint.setHealthy(false);
                     endpoint.setLastFailureTime(System.nanoTime());
                     
                     // XA Mode: Immediately invalidate sessions and connections for the failed server
-                    invalidateSessionsAndConnectionsForFailedServer(endpoint);
+                    if (hasActiveSessions) {
+                        invalidateSessionsAndConnectionsForFailedServer(endpoint);
+                    }
                     
                     // Notify listeners
                     notifyServerUnhealthy(endpoint, new Exception("Health check failed"));
@@ -498,7 +500,7 @@ public class MultinodeConnectionManager {
             }
         }
         
-        // For non-XA mode: proactively re-initialize pools on recovered servers.
+        // For non-XA connections: proactively re-initialize pools on recovered servers.
         // Non-XA connect() calls are cached after the first successful connect(), so the
         // recovered server never receives a connect() RPC from subsequent JDBC connections.
         // Without this step, the recovered server has no pool until a NOT_FOUND response
@@ -507,14 +509,14 @@ public class MultinodeConnectionManager {
         // the total connection count drops below the expected minimum.
         // Calling connect() here, before the updated clusterHealth propagates via SQL
         // operations, ensures the recovered server is ready to accept connections.
-        if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null) {
+        if (!recoveredServers.isEmpty() && !connectionDetailsByConnHash.isEmpty()) {
             for (ServerEndpoint recovered : recoveredServers) {
                 reinitializePoolOnRecoveredServer(recovered);
             }
         }
 
-        // For non-XA mode: trigger connection redistribution when servers recover
-        // XA mode handles redistribution differently (through invalidation), so skip it
+        // For non-XA mode: trigger connection redistribution when servers recover.
+        // XA mode handles redistribution via notifyServerRecovered() → XAConnectionRedistributor.
         if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null && healthCheckConfig.isRedistributionEnabled()) {
             log.info("Triggering connection redistribution for {} recovered server(s)", 
                     recoveredServers.size());
