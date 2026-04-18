@@ -53,6 +53,14 @@ public class MultinodeConnectionManager {
     private final long retryDelayMs;
     private final List<ServerHealthListener> healthListeners; // Phase 2: Listeners for server health changes
     
+    // connHash cache for the connect()-RPC-skip optimisation (non-XA only).
+    // Key  : connectionKey  = url + "|" + user + "|" + password + "|" + dataSourceName
+    // Value: connHash string returned by the server on the first successful connect()
+    private final Map<String, String> connHashByConnectionKey;
+    // Stores the full ConnectionDetails per connHash so that we can re-issue a real
+    // connect() call when the server signals NOT_FOUND (pool lost on server restart).
+    private final Map<String, ConnectionDetails> connectionDetailsByConnHash;
+    
     // Health check and redistribution support
     private final HealthCheckConfig healthCheckConfig;
     private final AtomicLong lastHealthCheckTimestamp;
@@ -91,6 +99,8 @@ public class MultinodeConnectionManager {
         this.channelMap = new ConcurrentHashMap<>();
         this.sessionToServerMap = new ConcurrentHashMap<>();
         this.connHashToServersMap = new ConcurrentHashMap<>();
+        this.connHashByConnectionKey = new ConcurrentHashMap<>();
+        this.connectionDetailsByConnHash = new ConcurrentHashMap<>();
         this.roundRobinCounter = new AtomicInteger(0);
         this.retryAttempts = retryAttempts;
         this.retryDelayMs = retryDelayMs;
@@ -189,6 +199,13 @@ public class MultinodeConnectionManager {
      * - Sessions tracked via SessionTracker for accurate load balancing
      * - Each session bound directly to the ServerEndpoint it was created on
      * 
+     * NON-XA OPTIMISATION:
+     * After the first successful connect() for a given (url, user, password, dataSourceName)
+     * combination, the returned connHash is cached locally.  Subsequent connect() calls
+     * with the same credentials skip the gRPC RPC and build a SessionInfo directly from
+     * the cached connHash.  If the server later returns NOT_FOUND (e.g. after a restart),
+     * the cache is invalidated and a real connect() is issued transparently.
+     * 
      * Returns the SessionInfo from the successful connection.
      */
     public SessionInfo connect(ConnectionDetails connectionDetails) throws SQLException {
@@ -196,9 +213,123 @@ public class MultinodeConnectionManager {
         
         log.info("=== connect() called: isXA={} (unified mode always enabled) ===", isXA);
         
-        // UNIFIED MODE: Both XA and non-XA connect to all servers
-        log.debug("Connecting to all servers for {} connection", isXA ? "XA" : "non-XA");
-        return connectToAllServers(connectionDetails);
+        if (isXA) {
+            // XA always needs a real server-side connect (session UUID required for 2PC).
+            log.debug("XA connection: always performing real connect() RPC");
+            return connectToAllServers(connectionDetails);
+        }
+        
+        // Non-XA: attempt to use the cached connHash to avoid the round-trip.
+        String connectionKey = computeConnectionKey(connectionDetails);
+        String cachedConnHash = connHashByConnectionKey.get(connectionKey);
+        
+        if (cachedConnHash != null) {
+            // Fast path: build SessionInfo locally without contacting the server.
+            log.debug("Non-XA connect() skipping RPC – using cached connHash for key ending in '...{}'",
+                    connectionKey.substring(Math.max(0, connectionKey.length() - 20)));
+            return buildLocalSessionInfo(cachedConnHash, connectionDetails.getClientUUID());
+        }
+        
+        // First time (or after cache invalidation): do the real connect().
+        log.debug("Non-XA connect(): no cached connHash, performing real connect() RPC");
+        SessionInfo sessionInfo = connectToAllServers(connectionDetails);
+        
+        // Cache the connHash so future connect() calls can skip the RPC.
+        if (sessionInfo.getConnHash() != null && !sessionInfo.getConnHash().isEmpty()) {
+            connHashByConnectionKey.put(connectionKey, sessionInfo.getConnHash());
+            connectionDetailsByConnHash.put(sessionInfo.getConnHash(), connectionDetails);
+            log.info("Non-XA connHash cached for fast subsequent connects (connHash={})", sessionInfo.getConnHash());
+        }
+        
+        return sessionInfo;
+    }
+    
+    /**
+     * Computes a stable cache key from the connection parameters that the server
+     * uses to compute its own {@code connHash}.  The key is intentionally kept as
+     * a plain string (not hashed) because it is only used as an in-process map key.
+     */
+    private String computeConnectionKey(ConnectionDetails connectionDetails) {
+        String dataSourceName = extractDataSourceName(connectionDetails);
+        return connectionDetails.getUrl() + "|" + connectionDetails.getUser()
+                + "|" + connectionDetails.getPassword() + "|" + dataSourceName;
+    }
+    
+    /**
+     * Extracts the {@code ojp.datasource.name} property from ConnectionDetails,
+     * returning {@code "default"} when absent.
+     */
+    private String extractDataSourceName(ConnectionDetails connectionDetails) {
+        for (com.openjproxy.grpc.PropertyEntry entry : connectionDetails.getPropertiesList()) {
+            if ("ojp.datasource.name".equals(entry.getKey())) {
+                return entry.getStringValue();
+            }
+        }
+        return "default";
+    }
+    
+    /**
+     * Builds a non-XA SessionInfo locally from a cached connHash.
+     * This mirrors what the server returns for a regular (non-XA) connect():
+     * connHash + clientUUID, no sessionUUID (lazy allocation).
+     */
+    private SessionInfo buildLocalSessionInfo(String connHash, String clientUUID) {
+        return SessionInfo.newBuilder()
+                .setConnHash(connHash)
+                .setClientUUID(clientUUID)
+                .setIsXA(false)
+                .build();
+    }
+    
+    /**
+     * Invalidates the cached connHash for a given connHash value.
+     *
+     * <p>Called by {@link MultinodeStatementService} when the server returns
+     * {@code Status.NOT_FOUND} to signal that the pool for this connHash no
+     * longer exists (e.g. after a server restart).  After invalidation the next
+     * {@link #connect} call will perform a real gRPC RPC to recreate the pool.</p>
+     *
+     * @param connHash the connHash whose cache entry should be removed
+     */
+    public void invalidateConnHash(String connHash) {
+        if (connHash == null || connHash.isEmpty()) {
+            return;
+        }
+        ConnectionDetails stored = connectionDetailsByConnHash.remove(connHash);
+        if (stored != null) {
+            String key = computeConnectionKey(stored);
+            connHashByConnectionKey.remove(key);
+            log.info("Invalidated cached connHash {} (pool lost on server)", connHash);
+        }
+    }
+    
+    /**
+     * Re-issues a real {@code connect()} RPC for the given connHash after the server
+     * has signalled that the pool no longer exists.
+     *
+     * <p>This is the reconnect leg of the NOT_FOUND retry loop in
+     * {@link MultinodeStatementService}.  The stored {@link ConnectionDetails} are
+     * used so the caller does not need to know the original credentials.</p>
+     *
+     * @param connHash the connHash for which to reconnect
+     * @return the new SessionInfo, or {@code null} if no stored ConnectionDetails exist
+     * @throws SQLException if the connect() RPC fails
+     */
+    public SessionInfo reconnectForConnHash(String connHash) throws SQLException {
+        ConnectionDetails stored = connectionDetailsByConnHash.get(connHash);
+        if (stored == null) {
+            log.warn("reconnectForConnHash: no stored ConnectionDetails for connHash {}", connHash);
+            return null;
+        }
+        log.info("Reconnecting after NOT_FOUND for connHash {}", connHash);
+        SessionInfo sessionInfo = connectToAllServers(stored);
+        if (sessionInfo.getConnHash() != null && !sessionInfo.getConnHash().isEmpty()) {
+            String key = computeConnectionKey(stored);
+            connHashByConnectionKey.put(key, sessionInfo.getConnHash());
+            connectionDetailsByConnHash.put(sessionInfo.getConnHash(), stored);
+            log.info("Re-cached connHash {} after reconnect", sessionInfo.getConnHash());
+        }
+        return sessionInfo;
     }
     
     

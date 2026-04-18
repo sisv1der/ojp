@@ -34,6 +34,27 @@ public class GrpcExceptionHandler {
     }
     
     /**
+     * Determines if an exception signals that the server has no pool for the current
+     * connection hash and the client must reconnect.
+     *
+     * <p>The server emits {@code Status.NOT_FOUND} when {@code SessionConnectionHelper}
+     * throws {@link org.openjproxy.grpc.server.PoolNotFoundException}. This happens when
+     * the server restarts and loses its in-memory datasource map, or when a client
+     * sends SQL without having first called {@code connect()}.
+     *
+     * @param exception the exception to inspect
+     * @return {@code true} if the driver should invalidate its cached connHash,
+     *         issue a fresh {@code connect()} RPC, and retry the SQL call
+     */
+    public static boolean isPoolNotFoundException(Exception exception) {
+        if (exception instanceof StatusRuntimeException) {
+            StatusRuntimeException sre = (StatusRuntimeException) exception;
+            return sre.getStatus().getCode() == Status.Code.NOT_FOUND;
+        }
+        return false;
+    }
+
+    /**
      * Determines if an exception represents a session invalidation error.
      * Session invalidation occurs when the health checker removes session bindings
      * after detecting server failure. These sessions are permanently lost.
