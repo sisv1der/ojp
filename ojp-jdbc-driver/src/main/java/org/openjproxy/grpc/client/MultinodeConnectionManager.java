@@ -498,6 +498,21 @@ public class MultinodeConnectionManager {
             }
         }
         
+        // For non-XA mode: proactively re-initialize pools on recovered servers.
+        // Non-XA connect() calls are cached after the first successful connect(), so the
+        // recovered server never receives a connect() RPC from subsequent JDBC connections.
+        // Without this step, the recovered server has no pool until a NOT_FOUND response
+        // triggers the reconnect path - but by that point the clusterHealth signal has
+        // already caused other servers to reduce their pool sizes, creating a gap where
+        // the total connection count drops below the expected minimum.
+        // Calling connect() here, before the updated clusterHealth propagates via SQL
+        // operations, ensures the recovered server is ready to accept connections.
+        if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null) {
+            for (ServerEndpoint recovered : recoveredServers) {
+                reinitializePoolOnRecoveredServer(recovered);
+            }
+        }
+
         // For non-XA mode: trigger connection redistribution when servers recover
         // XA mode handles redistribution differently (through invalidation), so skip it
         if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null && healthCheckConfig.isRedistributionEnabled()) {
@@ -513,6 +528,59 @@ public class MultinodeConnectionManager {
             } catch (Exception e) {
                 log.error("Failed to redistribute connections after server recovery: {}", 
                         e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Re-initializes the connection pool on a recovered server for non-XA connections.
+     *
+     * <p>When a server restarts, it loses all in-memory pool state. The non-XA
+     * connect()-caching optimisation means that subsequent JDBC connections never
+     * call the server's {@code connect()} RPC, so the recovered server would not
+     * receive a pool until the NOT_FOUND retry path is triggered by the first SQL
+     * request routed to it.</p>
+     *
+     * <p>By proactively calling {@code connect()} here - before the updated
+     * {@code clusterHealth} value propagates to other servers via {@link SessionInfo}
+     * in SQL operations - we ensure:</p>
+     * <ol>
+     *   <li>The recovered server creates its HikariCP pool immediately (with the
+     *       correct divided pool size).</li>
+     *   <li>HikariCP starts pre-warming connections on the recovered server.</li>
+     *   <li>Other servers only reduce their pool sizes (via {@code clusterHealth}
+     *       in the next SQL call) after the recovered server is already accepting
+     *       connections, preventing a temporary drop in total connections.</li>
+     * </ol>
+     *
+     * @param recoveredServer the server endpoint that has just been marked healthy
+     */
+    private void reinitializePoolOnRecoveredServer(ServerEndpoint recoveredServer) {
+        if (connectionDetailsByConnHash.isEmpty()) {
+            log.debug("No stored connection details; skipping pool re-initialization on {}",
+                    recoveredServer.getAddress());
+            return;
+        }
+
+        log.info("Re-initializing pool(s) on recovered server {}", recoveredServer.getAddress());
+
+        for (Map.Entry<String, ConnectionDetails> entry : connectionDetailsByConnHash.entrySet()) {
+            String connHash = entry.getKey();
+            ConnectionDetails connectionDetails = entry.getValue();
+
+            try {
+                ChannelAndStub channelAndStub = channelMap.get(recoveredServer);
+                if (channelAndStub == null) {
+                    channelAndStub = createChannelAndStub(recoveredServer);
+                }
+                log.info("Calling connect() on recovered server {} for connHash {}",
+                        recoveredServer.getAddress(), connHash);
+                channelAndStub.blockingStub.connect(connectionDetails);
+                log.info("Pool re-initialized on recovered server {} for connHash {}",
+                        recoveredServer.getAddress(), connHash);
+            } catch (Exception e) {
+                log.warn("Failed to re-initialize pool on recovered server {} for connHash {}: {}",
+                        recoveredServer.getAddress(), connHash, e.getMessage());
             }
         }
     }
