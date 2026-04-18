@@ -435,28 +435,30 @@ public class MultinodeConnectionManager {
     private void performHealthCheck() {
         log.info("Performing health check on servers");
         
-        // XA Mode: Proactively check healthy servers to detect failures early.
-        // Only run when there are active sessions – the sole purpose of this check is to
-        // invalidate sessions bound to a server that has gone down.  When sessionToServerMap
-        // is empty (e.g. on the very first connect() call) there is nothing to invalidate,
-        // and running the check at that point can transiently mark a live server (e.g.
-        // server1061) as unhealthy before connectToAllServers() has had a chance to reach
-        // it, producing a spurious "No healthy servers available" error.
-        if (xaConnectionRedistributor != null && !sessionToServerMap.isEmpty()) {
+        // Proactively check healthy servers to detect failures early.
+        // Run when there are active XA sessions OR cached non-XA connection details.
+        // This ensures both XA and non-XA pools adapt promptly when a server goes down.
+        // The guard prevents spurious "No healthy servers" errors on the very first
+        // connect() call before any server has been contacted.
+        boolean hasActiveSessions = !sessionToServerMap.isEmpty();
+        boolean hasNonXaConnections = !connectionDetailsByConnHash.isEmpty();
+        if (hasActiveSessions || hasNonXaConnections) {
             List<ServerEndpoint> healthyServers = serverEndpoints.stream()
                     .filter(ServerEndpoint::isHealthy)
                     .collect(Collectors.toList());
             
             for (ServerEndpoint endpoint : healthyServers) {
                 if (!validateServer(endpoint)) {
-                    log.info("XA Health check: Server {} has become unhealthy", endpoint.getAddress());
+                    log.info("Health check: Server {} has become unhealthy", endpoint.getAddress());
                     
                     // Mark server unhealthy
                     endpoint.setHealthy(false);
                     endpoint.setLastFailureTime(System.nanoTime());
                     
                     // XA Mode: Immediately invalidate sessions and connections for the failed server
-                    invalidateSessionsAndConnectionsForFailedServer(endpoint);
+                    if (hasActiveSessions) {
+                        invalidateSessionsAndConnectionsForFailedServer(endpoint);
+                    }
                     
                     // Notify listeners
                     notifyServerUnhealthy(endpoint, new Exception("Health check failed"));
@@ -498,8 +500,23 @@ public class MultinodeConnectionManager {
             }
         }
         
-        // For non-XA mode: trigger connection redistribution when servers recover
-        // XA mode handles redistribution differently (through invalidation), so skip it
+        // For non-XA connections: proactively re-initialize pools on recovered servers.
+        // Non-XA connect() calls are cached after the first successful connect(), so the
+        // recovered server never receives a connect() RPC from subsequent JDBC connections.
+        // Without this step, the recovered server has no pool until a NOT_FOUND response
+        // triggers the reconnect path - but by that point the clusterHealth signal has
+        // already caused other servers to reduce their pool sizes, creating a gap where
+        // the total connection count drops below the expected minimum.
+        // Calling connect() here, before the updated clusterHealth propagates via SQL
+        // operations, ensures the recovered server is ready to accept connections.
+        if (!recoveredServers.isEmpty() && !connectionDetailsByConnHash.isEmpty()) {
+            for (ServerEndpoint recovered : recoveredServers) {
+                reinitializePoolOnRecoveredServer(recovered);
+            }
+        }
+
+        // For non-XA mode: trigger connection redistribution when servers recover.
+        // XA mode handles redistribution via notifyServerRecovered() → XAConnectionRedistributor.
         if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null && healthCheckConfig.isRedistributionEnabled()) {
             log.info("Triggering connection redistribution for {} recovered server(s)", 
                     recoveredServers.size());
@@ -513,6 +530,67 @@ public class MultinodeConnectionManager {
             } catch (Exception e) {
                 log.error("Failed to redistribute connections after server recovery: {}", 
                         e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Re-initializes the connection pool on a recovered server for non-XA connections.
+     *
+     * <p>When a server restarts, it loses all in-memory pool state. The non-XA
+     * connect()-caching optimisation means that subsequent JDBC connections never
+     * call the server's {@code connect()} RPC, so the recovered server would not
+     * receive a pool until the NOT_FOUND retry path is triggered by the first SQL
+     * request routed to it.</p>
+     *
+     * <p>By proactively calling {@code connect()} here - before the updated
+     * {@code clusterHealth} value propagates to other servers via {@link SessionInfo}
+     * in SQL operations - we ensure:</p>
+     * <ol>
+     *   <li>The recovered server creates its HikariCP pool immediately (with the
+     *       correct divided pool size).</li>
+     *   <li>HikariCP starts pre-warming connections on the recovered server.</li>
+     *   <li>Other servers only reduce their pool sizes (via {@code clusterHealth}
+     *       in the next SQL call) after the recovered server is already accepting
+     *       connections, preventing a temporary drop in total connections.</li>
+     * </ol>
+     *
+     * @param recoveredServer the server endpoint that has just been marked healthy
+     */
+    private void reinitializePoolOnRecoveredServer(ServerEndpoint recoveredServer) {
+        if (connectionDetailsByConnHash.isEmpty()) {
+            log.debug("No stored connection details; skipping pool re-initialization on {}",
+                    recoveredServer.getAddress());
+            return;
+        }
+
+        log.info("Re-initializing pool(s) on recovered server {}", recoveredServer.getAddress());
+
+        // Resolve the channel once for this server (not per connection hash)
+        ChannelAndStub channelAndStub = channelMap.get(recoveredServer);
+        if (channelAndStub == null) {
+            try {
+                channelAndStub = createChannelAndStub(recoveredServer);
+            } catch (Exception e) {
+                log.warn("Failed to obtain channel to recovered server {}; skipping pool re-initialization: {}",
+                        recoveredServer.getAddress(), e.getMessage());
+                return;
+            }
+        }
+
+        for (Map.Entry<String, ConnectionDetails> entry : connectionDetailsByConnHash.entrySet()) {
+            String connHash = entry.getKey();
+            ConnectionDetails connectionDetails = entry.getValue();
+
+            try {
+                log.info("Calling connect() on recovered server {} for connHash {}",
+                        recoveredServer.getAddress(), connHash);
+                channelAndStub.blockingStub.connect(connectionDetails);
+                log.info("Pool re-initialized on recovered server {} for connHash {}",
+                        recoveredServer.getAddress(), connHash);
+            } catch (Exception e) {
+                log.warn("Failed to re-initialize pool on recovered server {} for connHash {}: {}",
+                        recoveredServer.getAddress(), connHash, e.getMessage());
             }
         }
     }
