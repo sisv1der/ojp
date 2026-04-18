@@ -389,7 +389,11 @@ public class MultinodeConnectionManager {
         if (connHash == null || connHash.isEmpty()) {
             return;
         }
-        ConnectionDetails stored = connectionDetailsByConnHash.remove(connHash);
+        // Keep the connectionDetailsByConnHash entry so that reconnectForConnHash() can
+        // look up the original ConnectionDetails and re-issue connect(). Only the
+        // connection-key → connHash cache is cleared so the next getConnection() call
+        // performs a real connect() RPC instead of using the stale cached hash.
+        ConnectionDetails stored = connectionDetailsByConnHash.get(connHash);
         if (stored != null) {
             String key = computeConnectionKey(stored);
             connHashByConnectionKey.remove(key);
@@ -421,7 +425,12 @@ public class MultinodeConnectionManager {
             String key = computeConnectionKey(stored);
             connHashByConnectionKey.put(key, sessionInfo.getConnHash());
             connectionDetailsByConnHash.put(sessionInfo.getConnHash(), stored);
-            log.info("Re-cached connHash {} after reconnect", sessionInfo.getConnHash());
+            // Remove the old connHash entry now that it has been replaced by the new one.
+            // Skip the removal when the server returned the same hash (deterministic case).
+            if (!connHash.equals(sessionInfo.getConnHash())) {
+                connectionDetailsByConnHash.remove(connHash);
+            }
+            log.info("Re-cached connHash {} after reconnect (replaced {})", sessionInfo.getConnHash(), connHash);
         }
         return sessionInfo;
     }
@@ -487,8 +496,19 @@ public class MultinodeConnectionManager {
             // Only check if enough time has passed since last failure
             if (timeSinceFailure >= healthCheckConfig.getHealthCheckThresholdMs()) {
                 if (validateServer(endpoint)) {
+                    // For non-XA connections: proactively re-initialize pools BEFORE marking the
+                    // server healthy. Non-XA connect() calls are cached after the first successful
+                    // connect(), so the recovered server never receives a connect() RPC from
+                    // subsequent JDBC connections. Without this step, the server would be marked
+                    // healthy and begin receiving queries before its HikariCP pool exists, causing
+                    // NOT_FOUND errors for every thread that already holds a cached connHash.
+                    // Pre-creating the pool here closes that window entirely.
+                    if (!connectionDetailsByConnHash.isEmpty()) {
+                        reinitializePoolOnRecoveredServer(endpoint);
+                    }
+
                     log.info("Server {} has recovered", endpoint.getAddress());
-                    
+
                     endpoint.markHealthy();
                     recoveredServers.add(endpoint);
                     notifyServerRecovered(endpoint);
@@ -497,21 +517,6 @@ public class MultinodeConnectionManager {
                     endpoint.setLastFailureTime(System.nanoTime());
                     log.info("Server {} still unhealthy", endpoint.getAddress());
                 }
-            }
-        }
-        
-        // For non-XA connections: proactively re-initialize pools on recovered servers.
-        // Non-XA connect() calls are cached after the first successful connect(), so the
-        // recovered server never receives a connect() RPC from subsequent JDBC connections.
-        // Without this step, the recovered server has no pool until a NOT_FOUND response
-        // triggers the reconnect path - but by that point the clusterHealth signal has
-        // already caused other servers to reduce their pool sizes, creating a gap where
-        // the total connection count drops below the expected minimum.
-        // Calling connect() here, before the updated clusterHealth propagates via SQL
-        // operations, ensures the recovered server is ready to accept connections.
-        if (!recoveredServers.isEmpty() && !connectionDetailsByConnHash.isEmpty()) {
-            for (ServerEndpoint recovered : recoveredServers) {
-                reinitializePoolOnRecoveredServer(recovered);
             }
         }
 
