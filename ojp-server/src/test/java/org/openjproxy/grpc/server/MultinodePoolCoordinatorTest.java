@@ -141,8 +141,10 @@ class MultinodePoolCoordinatorTest {
         assertEquals(ONE, returned.getHealthyServers());
         assertEquals(TWENTY, returned.getCurrentMaxPoolSize()); // All load on 1 server
 
-        // Simulate the race: another thread calls calculatePoolSizes(), overwriting the map
-        // with a fresh allocation (healthyServers = totalServers = 2).
+        // Simulate the race: another thread calls calculatePoolSizes() (e.g. pool creation
+        // via ConnectAction arrives after the cluster-health update was already applied).
+        // The new allocation must PRESERVE the healthyServers count from the existing one so
+        // the pool is created at the correct expanded size immediately.
         coordinator.calculatePoolSizes("conn1", TWENTY, FOUR, servers);
 
         // The returned allocation from updateHealthyServers still reflects the correct (updated)
@@ -150,10 +152,10 @@ class MultinodePoolCoordinatorTest {
         assertEquals(ONE, returned.getHealthyServers());
         assertEquals(TWENTY, returned.getCurrentMaxPoolSize()); // Still correct!
 
-        // The map now has the fresh allocation with healthyServers = 2
+        // The map allocation also preserves healthyServers=1 so the pool is born at full size.
         MultinodePoolCoordinator.PoolAllocation mapAllocation = coordinator.getPoolAllocation("conn1");
-        assertEquals(TWO, mapAllocation.getHealthyServers());
-        assertEquals(TEN, mapAllocation.getCurrentMaxPoolSize());
+        assertEquals(ONE, mapAllocation.getHealthyServers());
+        assertEquals(TWENTY, mapAllocation.getCurrentMaxPoolSize());
     }
 
     @Test
