@@ -50,15 +50,7 @@ public class MultinodePoolCoordinator {
             if (healthyServers <= 0) {
                 return originalMinIdle; // Fallback to original if no healthy servers
             }
-            // In degraded mode (cluster has fewer healthy servers than configured),
-            // set minIdle equal to maxPoolSize so HikariCP proactively establishes all
-            // connections immediately. Without this, HikariCP keeps only the old
-            // minIdle connections open even after maxPoolSize is raised, causing the
-            // CI failover check to time out because the pool never reaches 20.
-            if (healthyServers < totalServers) {
-                return getCurrentMaxPoolSize();
-            }
-            // Normal operation: divide the total min idle among healthy servers, rounding up
+            // Divide the total min idle among healthy servers, rounding up
             return (int) Math.ceil((double) originalMinIdle / healthyServers);
         }
         
