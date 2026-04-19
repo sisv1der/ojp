@@ -471,6 +471,11 @@ public class MultinodeConnectionManager {
                     
                     // Notify listeners
                     notifyServerUnhealthy(endpoint, new Exception("Health check failed"));
+
+                    // Proactively push the updated cluster health to remaining healthy servers
+                    // so they resize their pools immediately, even when no SQL operations are
+                    // in flight to carry the update via SessionInfo.
+                    pushClusterHealthToAllHealthyServers();
                 }
             }
         }
@@ -511,6 +516,13 @@ public class MultinodeConnectionManager {
 
                     endpoint.markHealthy();
                     recoveredServers.add(endpoint);
+
+                    // Proactively push the updated cluster health to all now-healthy servers
+                    // (including the just-recovered one) so their pools resize immediately.
+                    // This also causes peer servers that were running at expanded capacity
+                    // to shrink back down without waiting for SQL operations to carry the update.
+                    pushClusterHealthToAllHealthyServers();
+
                     notifyServerRecovered(endpoint);
                 } else {
                     // Still unhealthy, update timestamp
@@ -1321,6 +1333,71 @@ public class MultinodeConnectionManager {
         return sessionToServerMap.containsKey(sessionUUID);
     }
     
+    /**
+     * Proactively pushes the current cluster health to all healthy servers via a lightweight
+     * {@code connect()} RPC that embeds the current {@code clusterHealth} in
+     * {@link ConnectionDetails}.
+     *
+     * <p>This is called whenever the health checker detects a server becoming unhealthy or
+     * recovering.  Without this push, pool resizing on healthy servers depends entirely on
+     * active SQL operations carrying the {@code clusterHealth} field in {@link SessionInfo}.
+     * If the application has no in-flight queries at the moment of the topology change (e.g.
+     * the integration-test threads have all finished), the surviving server(s) would never
+     * receive the signal and their pools would remain sized for the old cluster configuration
+     * indefinitely.</p>
+     *
+     * <p>The server-side {@code ConnectAction} handles a non-empty {@code clusterHealth} in
+     * {@code ConnectionDetails} even when the pool already exists, triggering
+     * {@code ProcessClusterHealthAction} so the pool resizes without requiring any SQL
+     * activity.</p>
+     */
+    private void pushClusterHealthToAllHealthyServers() {
+        if (connectionDetailsByConnHash.isEmpty()) {
+            log.debug("No stored connection details; skipping proactive cluster health push");
+            return;
+        }
+
+        String currentClusterHealth = generateClusterHealth();
+        List<ServerEndpoint> healthyServers = serverEndpoints.stream()
+                .filter(ServerEndpoint::isHealthy)
+                .collect(Collectors.toList());
+
+        if (healthyServers.isEmpty()) {
+            log.debug("No healthy servers to push cluster health to");
+            return;
+        }
+
+        log.info("Proactively pushing cluster health '{}' to {} healthy server(s)",
+                currentClusterHealth, healthyServers.size());
+
+        for (ServerEndpoint server : healthyServers) {
+            ChannelAndStub channelAndStub = channelMap.get(server);
+            if (channelAndStub == null) {
+                log.debug("No channel for server {}; skipping cluster health push", server.getAddress());
+                continue;
+            }
+
+            for (Map.Entry<String, ConnectionDetails> entry : connectionDetailsByConnHash.entrySet()) {
+                String connHash = entry.getKey();
+                ConnectionDetails storedDetails = entry.getValue();
+                ConnectionDetails updatedDetails = ConnectionDetails.newBuilder(storedDetails)
+                        .setClusterHealth(currentClusterHealth)
+                        .build();
+
+                try {
+                    channelAndStub.blockingStub
+                            .withDeadlineAfter(healthCheckConfig.getHealthCheckTimeoutMs(), TimeUnit.MILLISECONDS)
+                            .connect(updatedDetails);
+                    log.info("Pushed cluster health '{}' to server {} for connHash {}",
+                            currentClusterHealth, server.getAddress(), connHash);
+                } catch (Exception e) {
+                    log.warn("Failed to push cluster health to server {} for connHash {}: {}",
+                            server.getAddress(), connHash, e.getMessage());
+                }
+            }
+        }
+    }
+
     /**
      * Shuts down all connections.
      */
