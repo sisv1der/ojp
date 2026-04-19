@@ -1034,6 +1034,16 @@ jobs:
             exit 1
           fi
 
+      # Signal the keepalive phase in MultinodeIntegrationTest to exit.
+      # This runs even on failure so the background test process does not linger
+      # for its full 12-minute cap after a CI step has already failed.
+      - name: Signal MultinodeIntegrationTest keepalive to stop
+        if: always()
+        run: |
+          echo "Creating /tmp/multinode-ci-done to stop the keepalive loop..."
+          touch /tmp/multinode-ci-done
+          echo "Signal sent"
+
       # Wait for the test process to complete
       - name: Wait for MultinodeIntegrationTest to complete
         run: |
