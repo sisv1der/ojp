@@ -96,8 +96,21 @@ public class MultinodePoolCoordinator {
         
         int serverCount = serverEndpoints.size();
         
-        // Create allocation with divided pool sizes
+        // Create allocation with divided pool sizes.
+        // If an allocation already exists for this connHash (e.g. created by a prior
+        // calculatePoolSizes call), preserve its healthyServers count.  Cluster-health
+        // pushes may arrive and update healthyServers via updateHealthyServers() *before*
+        // the pool is actually created (because StartTransactionAction processes cluster
+        // health even when the datasource map is still empty).  Without this preservation,
+        // calculatePoolSizes() would reset healthyServers to totalServers and the pool
+        // would be born with the divided (too-small) size, ignoring the prior health update.
         PoolAllocation allocation = new PoolAllocation(requestedMaxPoolSize, requestedMinIdle, serverCount);
+        PoolAllocation existingAllocation = poolAllocations.get(connHash);
+        if (existingAllocation != null && existingAllocation.getHealthyServers() < serverCount) {
+            allocation.updateHealthyServerCount(existingAllocation.getHealthyServers());
+            log.info("Preserved healthyServers={} from prior allocation for {} when creating new pool",
+                    existingAllocation.getHealthyServers(), connHash);
+        }
         
         poolAllocations.put(connHash, allocation);
         
