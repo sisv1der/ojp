@@ -1087,6 +1087,8 @@ public class MultinodeConnectionManager {
             return;
         }
         
+        // Capture the previous health state so we can detect a healthy→unhealthy transition.
+        boolean wasHealthy = endpoint.isHealthy();
         endpoint.setHealthy(false);
         endpoint.setLastFailureTime(System.nanoTime());
         
@@ -1101,7 +1103,30 @@ public class MultinodeConnectionManager {
         
         // Phase 2: Notify listeners that server became unhealthy
         notifyServerUnhealthy(endpoint, exception);
-        
+
+        // Push the updated cluster health to surviving servers so they can expand their
+        // connection pools immediately.
+        //
+        // Without this, pushClusterHealthToAllHealthyServers() is only called by the
+        // periodic health checker when it *itself* detects a server going unhealthy.
+        // But when a query thread detects the failure first (via handleServerFailure),
+        // the server is already marked unhealthy before the health checker runs.
+        // The health checker's proactive loop skips already-unhealthy servers, so the
+        // push never happens and surviving servers never resize their pools.
+        //
+        // Only push on the genuine healthy→unhealthy transition to avoid redundant
+        // pushes when handleServerFailure is called multiple times for the same server.
+        // Submit to the background scheduler to avoid blocking the calling query thread.
+        if (wasHealthy && healthCheckScheduler != null) {
+            healthCheckScheduler.submit(() -> {
+                try {
+                    pushClusterHealthToAllHealthyServers();
+                } catch (Exception e) {
+                    log.warn("Failed to push cluster health after server failure detection: {}", e.getMessage());
+                }
+            });
+        }
+
         // Remove the failed channel from the map and shut it down gracefully
         // Using shutdown() instead of shutdownNow() allows in-flight operations to complete
         ChannelAndStub channelAndStub = channelMap.remove(endpoint);
