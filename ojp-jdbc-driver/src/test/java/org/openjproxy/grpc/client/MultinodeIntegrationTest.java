@@ -37,6 +37,7 @@ public class MultinodeIntegrationTest {
     // thread keeps running during the CI kill/restart verification cycle.
     // The CI can cut this short by creating /tmp/multinode-ci-done.
     private static final long KEEPALIVE_MAX_MS = TimeUnit.MINUTES.toMillis(12);
+    private static final long KEEPALIVE_POLL_INTERVAL_MS = 5_000L;
     
     // Retry configuration for connection-level failures
     private static final int MAX_RETRIES = 3;
@@ -222,7 +223,7 @@ public class MultinodeIntegrationTest {
             } catch (Exception ignored) {
                 // Expected during server kills/restarts
             }
-            Thread.sleep(5000);
+            Thread.sleep(KEEPALIVE_POLL_INTERVAL_MS);
         }
         System.out.println("=== KEEPALIVE PHASE complete ===");
     }
