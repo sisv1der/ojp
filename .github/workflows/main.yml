@@ -872,7 +872,7 @@ jobs:
           docker stop ojp-server-1 || true
           docker rm ojp-server-1 || true
           echo "OJP Server 1 container stopped and removed"
-          sleep 10
+          sleep 16
 
       # Verify failover: Connections should still be active on server 2
       - name: Check PostgreSQL connections after killing Server 1
@@ -957,7 +957,7 @@ jobs:
           docker stop ojp-server-2 || true
           docker rm ojp-server-2 || true
           echo "OJP Server 2 container stopped and removed"
-          sleep 10
+          sleep 16
 
       # Verify failover: Connections should migrate to server 1
       - name: Check PostgreSQL connections after killing Server 2
@@ -1272,7 +1272,7 @@ jobs:
           docker stop ojp-server-xa-1 || true
           docker rm ojp-server-xa-1 || true
           echo "OJP Server 1 container stopped and removed"
-          sleep 5
+          sleep 11
 
       # Verify XA failover: Connections should still be active on server 2
       # Expected range: 20-27 connections (XA pool only, non-XA pool disabled)
@@ -1375,7 +1375,7 @@ jobs:
           docker stop ojp-server-xa-2 || true
           docker rm ojp-server-xa-2 || true
           echo "OJP Server 2 container stopped and removed"
-          sleep 5
+          sleep 11
 
       # Verify XA failover: Connections should migrate to server 1
       # Expected range: 20-27 connections (XA pool only, non-XA pool disabled)
