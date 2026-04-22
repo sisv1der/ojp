@@ -144,6 +144,25 @@ spring.jpa.show-sql=false
 spring.jpa.properties.hibernate.format_sql=true
 ```
 
+#### Surfacing DDL errors eagerly
+
+When Hibernate is configured to create or update the schema (`ddl-auto=create`, `create-drop`, or
+`update`), any DDL failure—for example a table that could not be created—is **silently swallowed by
+default**. The error only surfaces later at runtime, when the affected table is first accessed, which
+makes debugging significantly harder.
+
+Add the following property to make Hibernate halt immediately and report the error as soon as a DDL
+operation fails:
+
+```properties
+spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true
+```
+
+> **Note:** This is standard **Hibernate behaviour**, not something specific to OJP. The flag works
+> regardless of which JDBC driver or connection proxy you are using. Enabling it during development
+> and in CI pipelines is strongly recommended: it turns a mysterious runtime `TableNotFoundException`
+> into an immediate, actionable error at startup.
+
 Your entity classes, repositories, and service layer remain unchanged. The only difference is in how connections are acquired behind the scenes:
 
 ```java
