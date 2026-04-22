@@ -58,7 +58,38 @@ That is all! The starter automatically sets:
 - `spring.datasource.driver-class-name=org.openjproxy.jdbc.Driver`
 - `spring.datasource.type=org.springframework.jdbc.datasource.SimpleDriverDataSource`
 
-### 3. Optional: Fine-tune the OJP server-side connection pool
+### 3. JPA / Hibernate DDL tip: surface schema errors eagerly
+
+When Hibernate is configured to create or update the schema (`spring.jpa.hibernate.ddl-auto=create`,
+`create-drop`, or `update`), any DDL failure (e.g. a table that could not be created) is **silently
+swallowed by default**. The error only surfaces later, at runtime, when the affected table is first
+accessed — which can make it very hard to diagnose.
+
+Set the following property to make Hibernate halt immediately and print the error as soon as a DDL
+operation fails:
+
+```properties
+spring.jpa.properties.hibernate.hbm2ddl.halt_on_error=true
+```
+
+Or in `application.yml`:
+
+```yaml
+spring:
+  jpa:
+    properties:
+      hibernate:
+        hbm2ddl:
+          halt_on_error: true
+```
+
+> **Note:** This is standard **Hibernate behaviour**, not something specific to OJP. It applies
+> regardless of which JDBC driver or connection proxy you are using. It is especially useful during
+> development and CI, where catching schema problems early prevents confusing runtime failures.
+
+---
+
+### 4. Optional: Fine-tune the OJP server-side connection pool
 
 OJP's connection pool lives on the proxy server. You can tune it directly from `application.yml`:
 
@@ -121,7 +152,7 @@ ojp.multinode.retryAttempts=-1
 > name directly in the JDBC URL using parentheses:
 > `spring.datasource.url=jdbc:ojp[localhost:1059(myApp)]_postgresql://...`
 
-### 4. Start the OJP Server
+### 5. Start the OJP Server
 
 The OJP proxy server must be running and reachable at the host/port in the JDBC URL.
 
