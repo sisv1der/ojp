@@ -1053,10 +1053,9 @@ Actions are organised into sub-packages by concern:
 | Package | Key Actions |
 |---|---|
 | `action.connection` | `ConnectAction`, `HandleXAConnectionWithPoolingAction`, `CreateSlowQuerySegregationManagerAction` |
-| `action.transaction` | `ExecuteUpdateAction`, `ExecuteQueryAction`, `FetchNextRowsAction`, `StartTransactionAction`, `CommitTransactionAction`, `RollbackTransactionAction` |
-| `action.xa` | `XaStartAction`, `XaEndAction`, `XaPrepareAction`, `XaCommitAction`, `XaRollbackAction`, `XaRecoverAction` |
-| `action.transaction` (XA helpers) | `XaForgetAction`, `XaIsSameRMAction`, `XaGetTransactionTimeoutAction`, `XaSetTransactionTimeoutAction` |
-| `action.streaming` | `CreateLobAction`, `ReadLobAction` |
+| `action.transaction` | `ExecuteUpdateAction`, `ExecuteQueryAction`, `FetchNextRowsAction`, `StartTransactionAction`, `CommitTransactionAction`, `RollbackTransactionAction`, and XA lifecycle helpers: `XaForgetAction`, `XaIsSameRMAction`, `XaGetTransactionTimeoutAction`, `XaSetTransactionTimeoutAction` |
+| `action.xa` | Core XA protocol operations: `XaStartAction`, `XaEndAction`, `XaPrepareAction`, `XaCommitAction`, `XaRollbackAction`, `XaRecoverAction` |
+| `action.streaming` | `CreateLobAction` (`StreamingAction`), `ReadLobAction` (`Action`) |
 | `action.session` | `TerminateSessionAction` |
 | `action.resource` | `CallResourceAction` |
 | `action.util` | `ProcessClusterHealthAction` |

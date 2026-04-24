@@ -554,8 +554,10 @@ org.openjproxy.grpc.server.action/
 │                 StartTransactionAction, CommitTransactionAction, RollbackTransactionAction,
 │                 XaForgetAction, XaIsSameRMAction, XaGetTransactionTimeoutAction,
 │                 XaSetTransactionTimeoutAction
+│                 (XA lifecycle helpers that complement standard transaction operations)
 ├── xa/           XaStartAction, XaEndAction, XaPrepareAction, XaCommitAction,
 │                 XaRollbackAction, XaRecoverAction
+│                 (core XA protocol operations: start/end/prepare/commit/rollback/recover)
 ├── streaming/    CreateLobAction (StreamingAction), ReadLobAction (Action)
 ├── session/      TerminateSessionAction
 ├── resource/     CallResourceAction
