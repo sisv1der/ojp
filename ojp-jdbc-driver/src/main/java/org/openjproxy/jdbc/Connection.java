@@ -588,24 +588,19 @@ public class Connection implements java.sql.Connection {
                         .addAllParams(ProtoConverter.objectListToParameterValues(params))
                         .build()
         );
-        try {
-            CallResourceResponse response = this.statementService.callResource(reqBuilder.build());
-            this.session = response.getSession();
-            this.setSession(response.getSession());
-            if (Void.class.equals(returnType)) {
-                return null;
-            }
-
-            List<ParameterValue> values = response.getValuesList();
-            if (values.isEmpty()) {
-                return null;
-            }
-
-            Object result = ProtoConverter.fromParameterValue(values.get(0));
-            return (T) result;
-        } catch (Exception e) {
-            e.printStackTrace();
+        CallResourceResponse response = this.statementService.callResource(reqBuilder.build());
+        this.session = response.getSession();
+        this.setSession(response.getSession());
+        if (Void.class.equals(returnType)) {
             return null;
         }
+
+        List<ParameterValue> values = response.getValuesList();
+        if (values.isEmpty()) {
+            return null;
+        }
+
+        Object result = ProtoConverter.fromParameterValue(values.get(0));
+        return (T) result;
     }
 }
