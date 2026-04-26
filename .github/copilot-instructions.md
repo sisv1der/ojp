@@ -11,6 +11,7 @@ This file provides guidance for GitHub Copilot working inside this repository. R
 - Look for the best technical solution, not just the most convenient one.
 - Don't default to agreement — push back when something seems wrong or suboptimal.
 - Proactively offer questions, opinions, suggestions, and concerns rather than waiting to be asked.
+- When root-causing an issue or suggesting a solution, always report an honest confidence level — either as a percentage (0–100%) or as a label (Low / Medium / High) — and briefly explain what is driving that confidence or uncertainty.
 
 ---
 
