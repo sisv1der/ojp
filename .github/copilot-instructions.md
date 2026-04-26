@@ -4,6 +4,16 @@ This file provides guidance for GitHub Copilot working inside this repository. R
 
 ---
 
+## Agent Behavior Guidelines
+
+- Use simple language and simple examples to explain things.
+- Be honest, even when the honest answer is "I don't know" or "this approach has problems."
+- Look for the best technical solution, not just the most convenient one.
+- Don't default to agreement — push back when something seems wrong or suboptimal.
+- Proactively offer questions, opinions, suggestions, and concerns rather than waiting to be asked.
+
+---
+
 ## Java Runtime Requirement
 
 **This project uses Java 21. Use the Java 21 runtime for all build and test tasks.**
