@@ -316,25 +316,32 @@ quarkus.datasource.jdbc.min-size=1
 ```yaml
 datasources:
   default:
-    url: jdbc:ojp://localhost:9059/mydb
+    url: jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
     username: dbuser
     password: dbpass
-    driverClassName: io.openjproxy.jdbc.Driver
 ```
 
-**Custom DataSource Factory:**
+**DataSource Factory:**
 ```java
+import io.micronaut.context.annotation.Factory;
+import io.micronaut.context.annotation.Value;
+import jakarta.inject.Named;
+import jakarta.inject.Singleton;
+import org.openjproxy.jdbc.OjpDataSource;
+
+import javax.sql.DataSource;
+
 @Factory
 public class DataSourceFactory {
-    @Bean
-    @Primary
-    public DataSource dataSource(@Named("default") DatasourceConfiguration config) {
-        SimpleDriverDataSource ds = new SimpleDriverDataSource();
-        ds.setDriverClass(io.openjproxy.jdbc.Driver.class);
-        ds.setUrl(config.getUrl());
-        ds.setUsername(config.getUsername());
-        ds.setPassword(config.getPassword());
-        return ds;
+
+    @Singleton
+    @Named("default")
+    public DataSource dataSource(
+        @Value("${datasources.default.url}") String url,
+        @Value("${datasources.default.username}") String user,
+        @Value("${datasources.default.password}") String password
+    ) {
+        return new OjpDataSource(url, user, password);
     }
 }
 ```
