@@ -144,13 +144,13 @@ public class Driver implements java.sql.Driver {
     @Override
     public int getMajorVersion() {
         log.debug("getMajorVersion called");
-        return 0;
+        return DriverVersion.getMajorVersion();
     }
 
     @Override
     public int getMinorVersion() {
         log.debug("getMinorVersion called");
-        return 0;
+        return DriverVersion.getMinorVersion();
     }
 
     @Override
