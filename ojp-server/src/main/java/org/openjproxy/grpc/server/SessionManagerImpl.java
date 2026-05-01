@@ -51,33 +51,33 @@ public class SessionManagerImpl implements SessionManager {
 
     @Override
     public SessionInfo createSession(String clientUUID, Connection connection) {
-        log.info("Create session for client uuid " + clientUUID);
+        log.info("Create session for client uuid {}", clientUUID);
         String connectionHash = connectionHashMap.get(clientUUID);
         CacheConfiguration cacheConfig = getCacheConfiguration(connectionHash);
         Session session = new Session(connection, connectionHash, clientUUID, false, null, cacheConfig);
-        log.info("Session " + session.getSessionUUID() + " created for client uuid " + clientUUID);
+        log.info("Session {} created for client uuid {}", session.getSessionUUID(), clientUUID);
         this.sessionMap.put(session.getSessionUUID(), session);
         return session.getSessionInfo();
     }
 
     @Override
     public SessionInfo createXASession(String clientUUID, Connection connection, XAConnection xaConnection) {
-        log.info("Create XA session for client uuid " + clientUUID);
+        log.info("Create XA session for client uuid {}", clientUUID);
         String connectionHash = connectionHashMap.get(clientUUID);
         CacheConfiguration cacheConfig = getCacheConfiguration(connectionHash);
         Session session = new Session(connection, connectionHash, clientUUID, true, xaConnection, cacheConfig);
-        log.info("XA Session " + session.getSessionUUID() + " created for client uuid " + clientUUID);
+        log.info("XA Session {} created for client uuid {}", session.getSessionUUID(), clientUUID);
         this.sessionMap.put(session.getSessionUUID(), session);
         return session.getSessionInfo();
     }
 
     @Override
     public SessionInfo createDeferredXASession(String clientUUID, String connectionHash) {
-        log.info("Create deferred XA session for client uuid " + clientUUID);
+        log.info("Create deferred XA session for client uuid {}", clientUUID);
         CacheConfiguration cacheConfig = getCacheConfiguration(connectionHash);
         // Create session without XAConnection - will be bound later via bindXAConnection()
         Session session = new Session(null, connectionHash, clientUUID, true, null, cacheConfig);
-        log.info("Deferred XA Session " + session.getSessionUUID() + " created for client uuid " + clientUUID);
+        log.info("Deferred XA Session {} created for client uuid {}", session.getSessionUUID(), clientUUID);
         this.sessionMap.put(session.getSessionUUID(), session);
         return session.getSessionInfo();
     }
@@ -188,7 +188,7 @@ public class SessionManagerImpl implements SessionManager {
 
     @Override
     public void terminateSession(SessionInfo sessionInfo) throws SQLException {
-        log.info("Terminating session -> " + sessionInfo.getSessionUUID());
+        log.info("Terminating session -> {}", sessionInfo.getSessionUUID());
         Session targetSession = this.sessionMap.remove(sessionInfo.getSessionUUID());
 
         // Handle case where session doesn't exist on this server (multinode scenario)
